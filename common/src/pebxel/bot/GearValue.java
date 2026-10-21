@@ -50,8 +50,8 @@ public final class GearValue {
 		c = W > 0 ? c / W : 0;
 		Fighter b = MobTable.fighter(MobTable.boss(d));
 		if (b != null && zap > 0) b.hp = Math.max(1, (int) Math.round(b.hp - 3 * zap));
-		if (b != null) c += 0.1 * FightModel.duelCost(me, b);   // (the boss: one fight in a region's ~30, but the one that ends runs)
-		if (a != null) { int enc = a.STRReq(al) - (h.STR() + strPlus); if (enc > 0) c *= Math.pow(1.2, enc); }
+		if (b != null) c += Tune.BOSSW * FightModel.duelCost(me, b);   // (the boss: one fight in a region's ~30, but the one that ends runs)
+		if (a != null) { int enc = a.STRReq(al) - (h.STR() + strPlus); if (enc > 0) c *= Math.pow(Tune.SLOW, enc); }
 		return c;
 	}
 
@@ -90,7 +90,7 @@ public final class GearValue {
 
 	/** The odds: levels 0/1/2, and (when it can be) a curse from its kind's list. */
 	static double expect(Hero h, Item i, boolean wpn, KindOfWeapon w0, Armor a0, Ench shown, double base, boolean mayCurse) {
-		double pc = !mayCurse ? 0 : i.cursedKnown && i.cursed ? 1 : wpn ? 0.3 / 0.9 : 0.3 / 0.85;
+		double pc = !mayCurse ? 0 : i.cursedKnown && i.cursed ? 1 : Tune.CURSE / (wpn ? 0.9 : 0.85);
 		if (shown.curse) pc = 1;
 		String[] curses = wpn ? Ench.WEAPON_CURSES : Ench.ARMOR_CURSES;
 		boolean lift = liftable(h);
@@ -100,18 +100,18 @@ public final class GearValue {
 			if (pc < 1) {
 				double c = one(h, i, wpn, w0, a0, LV[k], shown.curse ? Ench.NONE : shown);
 				c = Math.min(c, base);   // (not stuck: back to the old piece if it disappoints)
-				s += LP[k] * (1 - pc) * c * c; ws += LP[k] * (1 - pc);
+				s += LP[k] * (1 - pc) * Math.pow(c, Tune.RISK); ws += LP[k] * (1 - pc);
 			}
 			if (pc > 0) for (String cn : curses) {
 				Ench ce = shown.curse ? shown : Ench.byName(cn);
 				double c = one(h, i, wpn, w0, a0, LV[k], ce);
 				if (lift) c = Math.min(c, base * 1.02);   // (a scroll lifts it: some cost, a scroll's worth)
 				double p = LP[k] * pc / curses.length;
-				s += p * c * c; ws += p;
+				s += p * Math.pow(c, Tune.RISK); ws += p;
 				if (shown.curse) break;
 			}
 		}
-		return ws > 0 ? Math.sqrt(s / ws) : base;
+		return ws > 0 ? Math.pow(s / ws, 1 / Tune.RISK) : base;
 	}
 
 	static double one(Hero h, Item i, boolean wpn, KindOfWeapon w0, Armor a0, int l, Ench e) {

@@ -13,15 +13,15 @@ import pebxel.bot.FightModel;
  * FightModel's calibration against real games (env FIGHTCAL=1; only prints, changes nothing: the model rolls on its
  * own generators). A fight starts when a seen enemy is beside the hero or after it within 4 (the AI state is read
  * here, for the log only); its prediction is taken then; it ends when no enemy has been in it for 3 decisions, on a
- * new floor, or at death. One line each: "FIGHTCAL depth d hp0 h pdeath p loss l | real loss r died 0/1 healed 0/1
+ * new floor, or at death; one where no blow landed either way isn't counted (a mob only in sight). One line each: "FIGHTCAL depth d hp0 h pdeath p loss l | real loss r died 0/1 healed 0/1
  * mobs ...". sim/fightcal.py sums them up by predicted risk.
  */
 final class FightCal {
 	static final boolean ON = "1".equals(System.getenv("FIGHTCAL"));
 	static boolean active; static int hp0, minHp, quiet, depth, heals0; static FightModel.Result pred; static String names;
-	static Set<Integer> ids = new HashSet<>();
+	static Set<Integer> ids = new HashSet<>(); static Map<Integer, Integer> mobHp = new HashMap<>(); static boolean blows;
 
-	static void newGame() { active = false; ids.clear(); }
+	static void newGame() { active = false; ids.clear(); mobHp.clear(); }
 
 	static List<Mob> engaged(Hero h) {
 		List<Mob> out = new ArrayList<>();
@@ -43,13 +43,15 @@ final class FightCal {
 		List<Mob> ms = engaged(h);
 		if (!active) {
 			if (ms.isEmpty()) return;
-			active = true; hp0 = h.HP; minHp = h.HP; quiet = 0; depth = Dungeon.depth; heals0 = heals(h); ids.clear();
+			active = true; hp0 = h.HP; minHp = h.HP; quiet = 0; depth = Dungeon.depth; heals0 = heals(h); ids.clear(); mobHp.clear(); blows = false;
 			pred = FightModel.evaluate(h, ms);
-			StringBuilder sb = new StringBuilder(); for (Mob m : ms) { sb.append(m.getClass().getSimpleName()).append(m.state == m.SLEEPING ? "(z)" : "").append(','); ids.add(m.id()); }
+			StringBuilder sb = new StringBuilder(); for (Mob m : ms) { sb.append(m.getClass().getSimpleName()).append(m.state == m.SLEEPING ? "(z)" : "").append(','); ids.add(m.id()); mobHp.put(m.id(), m.HP); }
 			names = sb.toString();
 			return;
 		}
 		minHp = Math.min(minHp, h.HP);
+		if (h.HP < hp0) blows = true;
+		for (Integer id : mobHp.keySet()) { com.shatteredpixel.shatteredpixeldungeon.actors.Actor a = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findById(id); if (!(a instanceof Mob) || !((Mob) a).isAlive() || ((Mob) a).HP < mobHp.get(id)) blows = true; }
 		for (Mob m : ms) if (ids.add(m.id())) names += "+" + m.getClass().getSimpleName() + ",";
 		if (ms.isEmpty()) { if (++quiet >= 3) end(false); } else quiet = 0;
 	}
@@ -58,6 +60,7 @@ final class FightCal {
 	static void end(boolean died) {
 		if (!ON || !active) return;
 		active = false;
+		if (!died && !blows) return;   // (no blow either way: no fight, it was only in sight)
 		Hero h = Dungeon.hero;
 		int min = died ? 0 : Math.min(minHp, h == null ? 0 : h.HP);
 		System.out.printf(Locale.ROOT, "FIGHTCAL depth %d hp0 %d pdeath %.3f loss %.1f p90 %.0f | real loss %d died %d healed %d mobs %s%n",

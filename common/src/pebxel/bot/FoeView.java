@@ -61,6 +61,10 @@ public final class FoeView {
 			case "Slime": case "CausticSlime": f.slimeCap = true; break;
 			case "Skeleton": f.deathDmg = Dist.normal(6, 12); break;   // (its bones burst for 6-12 beside it, less armour rolled twice)
 			case "Bat": f.leech = 1; break;            // (it heals what it bites)
+			case "DM100": f.zapDmg = Dist.normal(3, 10); break;   // (DM100.zap, Shaman.zap, Warlock.zap, Eye.deathGaze)
+			case "BlueShaman": case "RedShaman": case "PurpleShaman": case "Shaman": f.zapDmg = Dist.normal(6, 15); break;
+			case "Warlock": f.zapDmg = Dist.normal(12, 18); break;
+			case "Eye": f.zapDmg = Dist.normal(30, 50); break;
 			case "Brute": case "ArmoredBrute": f.rageHp = ht / 2 + 4; f.rageDmg = Dist.normal(15, 40); break;   // (BruteRage: it fights on, shielded, at 15-40)
 		}
 	}

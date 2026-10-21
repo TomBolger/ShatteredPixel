@@ -33,9 +33,8 @@ public final class UpgradePlan {
 	private UpgradePlan() { }
 
 	public static String last = "";
-	/** AS_OTOE=1: choose by RunProjection (the bot's batches; the watch has no environment). */
-	static final boolean TOE = env("AS_OTOE");
-	static boolean env(String n) { try { return "1".equals(System.getenv(n)); } catch (Throwable e) { return false; } }
+	/** Choose by RunProjection (on by default; AS_OTOE=0: by the two-point score alone). */
+	static final boolean TOE = Tune.TOE;
 
 	/** The scrolls in hand (known), at least 1 (the one being read). */
 	static int inHand(Hero h) {
@@ -65,7 +64,7 @@ public final class UpgradePlan {
 		MagesStaff st = w0 instanceof MagesStaff ? (MagesStaff) w0 : null;
 		double z0 = st != null ? zap(st, wl0) : 0;
 		// the Mage: the staff first, to +3 (the guide; H's STAFFUP)
-		if (st != null && h.heroClass == HeroClass.MAGE && wl0 < 3) { last = "staff first (+" + wl0 + ")"; return st; }
+		if (st != null && h.heroClass == HeroClass.MAGE && wl0 < Tune.STAFF) { last = "staff first (+" + wl0 + ")"; return st; }
 		double base = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, 0, 0, d, z0);
 		double baseLate = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, (int) Math.round(Sg), dl, boss, z0);
 		List<Item> cands = new ArrayList<>();
@@ -90,7 +89,7 @@ public final class UpgradePlan {
 			Ench e = Ench.of(c);
 			if (e != Ench.NONE && !e.curse && l + n >= 4) { double pl = Math.min(1, 0.1 * Math.pow(2, l + n - 4)); now = now * (1 - pl) + pl * now / Math.max(0.5, 1 / e.taken / e.dmg); }
 			if (!c.isEquipped(h)) { now = Math.min(now, base); }   // (not worn yet: the old piece stays on till this one is better)
-			double sc = 0.4 * Math.min(now, base) + 0.6 * Math.min(late, baseLate);
+			double sc = Tune.UPNOW * Math.min(now, base) + (1 - Tune.UPNOW) * Math.min(late, baseLate);
 			why.append(String.format(Locale.ROOT, " %s+%d: now %.2f late %.2f score %.2f;", c.getClass().getSimpleName(), l, now, late, sc));
 			if (sc < bs) { bs = sc; best = c; bNow = now; }
 		}
@@ -99,14 +98,14 @@ public final class UpgradePlan {
 			Item tb = null; double ts = -1;
 			for (Item c : cands) {
 				boolean arm = c instanceof Armor; int l = HeroView.visLevel(c) + n;
-				double sv = arm ? RunProjection.survival(h, w0, wl0, (Armor) c, l, c, 6) : RunProjection.survival(h, (KindOfWeapon) c, l, a0, al0, c, 6);
+				double sv = arm ? RunProjection.survival(h, w0, wl0, (Armor) c, l, c, Tune.TOEN) : RunProjection.survival(h, (KindOfWeapon) c, l, a0, al0, c, Tune.TOEN);
 				last += String.format(Locale.ROOT, " toe %s %.3f;", c.getClass().getSimpleName(), sv);
 				if (sv > ts) { ts = sv; tb = c; }
 			}
 			return tb;
 		}
 		if (best == null) return null;
-		if (bNow >= base * 0.99 && dl > 1 && Dungeon.depth % 5 != 4) { last = "hold: " + last; return null; }
+		if (bNow >= base * (1 - Tune.UPHOLD) && dl > 1 && Dungeon.depth % 5 != 4) { last = "hold: " + last; return null; }
 		return best;
 	}
 

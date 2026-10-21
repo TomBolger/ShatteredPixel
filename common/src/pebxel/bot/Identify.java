@@ -94,7 +94,7 @@ public final class Identify {
 	/** Keep this unknown potion for an emergency rather than drink-test it now (likely Healing, health good). */
 	public static boolean keep(Hero h, Item i) {
 		observe(h);
-		return i instanceof Potion && !((Potion) i).isKnown() && pHeal(i) >= 0.3 && h.HP * 2 > h.HT;
+		return i instanceof Potion && !((Potion) i).isKnown() && pHeal(i) >= Tune.KEEP && h.HP * 2 > h.HT;
 	}
 
 	/** A cell to drink-test on: in water or beside it, nothing that burns on or beside it. */

@@ -16,7 +16,7 @@ import com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff;
  * boss on its floor. A floor's "load" is the sum of its fights' (cost / health)^2 (big fights weigh more) and its survival
  * exp(-(0.05 + 0.55 load)): OG's calibration for PD 1.9.1 (cal1, 384 games), not yet refitted for Shattered.
  *
- * {@link #survival}: the odds of living through the next n floors with a build; UpgradePlan uses it (AS_OTOE) to choose
+ * {@link #survival}: the odds of living through the next n floors with a build; UpgradePlan uses it (on by default, AS_OTOE=0 off) to choose
  * the piece whose build lives longest, not just the one that helps most now.
  */
 public final class RunProjection {

@@ -37,10 +37,10 @@ public final class Trade {
 	/** A ware's worth in points (0: not wanted). */
 	public static double worth(Hero h, Item i) {
 		int d = Dungeon.depth;
-		if (i instanceof Ankh) return h.belongings.getItem(Ankh.class) == null ? 120 : 10;
+		if (i instanceof Ankh) return h.belongings.getItem(Ankh.class) == null ? Tune.ANKH : 10;
 		if (i instanceof PotionOfHealing && ((Potion) i).isKnown()) return 0.8 * h.HT + 14;
 		if (i instanceof Potion && !((Potion) i).isKnown()) return Identify.pHeal(i) * (0.8 * h.HT + 14) + 6;
-		if (i instanceof Food && !(i instanceof Blandfruit)) { int f = foodCount(h); return f <= 1 ? 70 : f <= 3 ? 35 : f <= 5 ? 10 : 0; }
+		if (i instanceof Food && !(i instanceof Blandfruit)) { int f = foodCount(h); return f <= 1 ? Tune.FOOD : f <= 3 ? Tune.FOOD / 2 : f <= 5 ? Tune.FOOD / 7 : 0; }
 		if (i instanceof Bag && !(i instanceof MagicalHolster)) { for (Bag b : h.belongings.getBags()) if (b.getClass() == i.getClass()) return 0; return 45; }
 		if (i instanceof Armor || i instanceof MeleeWeapon) {
 			double base = GearValue.now(h), g = base - GearValue.costWith(h, i, base);
@@ -57,7 +57,7 @@ public final class Trade {
 	/** The wares worth buying, in the order to buy them: by worth for the price, the gold spent as it goes. */
 	public static List<Heap> plan(Hero h, Collection<Heap> wares) {
 		List<Heap> ws = new ArrayList<>();
-		for (Heap w : wares) if (w.type == Heap.Type.FOR_SALE && w.seen && !w.isEmpty() && worth(h, w.peek()) >= 8) ws.add(w);
+		for (Heap w : wares) if (w.type == Heap.Type.FOR_SALE && w.seen && !w.isEmpty() && worth(h, w.peek()) >= Tune.MINW) ws.add(w);
 		ws.sort(Comparator.comparingDouble((Heap w) -> -worth(h, w.peek()) / Math.max(1, Math.sqrt(Shopkeeper.sellPrice(w.peek())))));
 		List<Heap> out = new ArrayList<>(); int gold = Dungeon.gold;
 		for (Heap w : ws) { int pr = Shopkeeper.sellPrice(w.peek()); if (pr <= gold) { out.add(w); gold -= pr; } }

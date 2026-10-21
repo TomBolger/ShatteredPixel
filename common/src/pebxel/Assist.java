@@ -184,18 +184,18 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
-	// agent O's models (pebxel.bot), each off by default: AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid)
-	static final boolean OFIGHT = opt("OFIGHT", false);
-	static final int ODEATH = optInt("ODEATH", 10), OESC = optInt("OESC", 30), OUP = optInt("OUP", 25), OAVOID = optInt("OAVOID", 25);
+	// agent O's models (pebxel.bot), each on by default (AS_Oxxx=0 turns one off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid)
+	static final boolean OFIGHT = opt("OFIGHT", true);
+	static final double ODEATH = Tune.DEATH, OESC = Tune.ESC, OUP = Tune.UP, OAVOID = Tune.AVOID;   // (percent: pebxel.bot.Tune, env AS_ODEATH...)
 	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
 	private static FightModel.Result oFight() {
 		List<Mob> fs = new ArrayList<>();
-		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)))) fs.add(m);
+		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && distance(m.pos, hp) <= 8 && line(m.pos, hp)))) fs.add(m);   // (a shooter needn't come nearer)
 		return FightModel.engaged(H, fs);
 	}
 	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
-	static final boolean OGEAR = opt("OGEAR", false), OUPG = opt("OUPG", false), OSHOP = opt("OSHOP", false), OIDENT = opt("OIDENT", false);
-	private static boolean oLosing(int pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
+	static final boolean OGEAR = opt("OGEAR", true), OUPG = opt("OUPG", true), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", true);
+	private static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
 	// the API
@@ -1389,7 +1389,7 @@ public final class Assist {
 		}
 		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
-		if (OFIGHT ? pot && H.HP * 10 < H.HT * 7 && oLosing(ODEATH) : seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
+		if (OFIGHT ? pot && H.HP * 100 < H.HT * Tune.HEALMAX && oLosing(ODEATH) : seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
 		Waterskin ws = bag(Waterskin.class);
 		if (adj && H.HP * 4 < H.HT && !pot && ws != null && ws.actions(H).contains("DRINK")) return use(ws, "DRINK", -1, "low: waterskin");
 		if (adj && !pot && (OFIGHT ? oLosing(OESC) : H.HP * 4 < H.HT)) {   // dying beside one: a known way out first
@@ -1456,7 +1456,7 @@ public final class Assist {
 			if (lf.isKnown() || ((water(hp) || !scr) && !burn))
 				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i))) return use(i, Potion.AC_DRINK, -1, "drink to learn");
 		}
-		if (OGEAR) { Item g = GearValue.bestEquip(H, 0.05); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
+		if (OGEAR) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
 		else for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
 			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff) continue;
 			Item cur = i instanceof Armor ? H.belongings.armor() : H.belongings.weapon();

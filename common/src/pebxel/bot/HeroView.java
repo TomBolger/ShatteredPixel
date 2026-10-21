@@ -58,6 +58,7 @@ public final class HeroView {
 		f.name = "hero";
 		f.hp = h.HP; f.ht = h.HT; f.shield = h.shielding();
 		if (lvlPlus > 0) { f.ht += 5 * lvlPlus; f.hp = f.ht; f.shield = 0; }
+		else f.hp = Math.max(1, f.hp - (int) Math.round(dot(h)));   // (poison, bleeding, fire still to come: shown as buffs)
 		double acc = baseAcc(h) + lvlPlus, eva = baseEva(h) + lvlPlus;
 		if (h.heroClass != HeroClass.DUELIST && h.hasTalent(Talent.PRECISE_ASSAULT)) acc *= 1 + 0.1 * h.pointsInTalent(Talent.PRECISE_ASSAULT);
 		double acc0 = acc;   // (thrown and shot: their own accuracy factors)
@@ -120,6 +121,19 @@ public final class HeroView {
 		PotionOfHealing heal = h.belongings.getItem(PotionOfHealing.class);
 		if (heal != null && heal.isKnown()) { f.heals = heal.quantity(); f.healAmount = Math.round(0.8f * f.ht + 14); }
 		return f;
+	}
+
+	/** The damage still to come from the hero's poison (Poison.act: left / 3 + 1 a turn), bleeding (each turn its level,
+	 *  then 0.5-1 of it) and fire (Burning: 1 .. 3 + depth / 4 a turn for its turns left). */
+	public static double dot(Hero h) {
+		double d = 0;
+		for (com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff b : h.buffs()) {
+			String n = b.getClass().getSimpleName();
+			if (n.equals("Poison")) { Object l = field(b, "left"); if (l instanceof Float) { double L = (Float) l; d += L * L / 6 + L; } }
+			else if (n.equals("Bleeding")) { Object l = field(b, "level"); if (l instanceof Float) d += 4 * (Float) l; }
+			else if (n.equals("Burning")) { Object l = field(b, "left"); if (l instanceof Float) d += (Float) l * (4 + com.shatteredpixel.shatteredpixeldungeon.Dungeon.depth / 4.0) / 2; }
+		}
+		return d;
 	}
 
 	static double augDmg(Weapon w) { return w.augment == Weapon.Augment.SPEED ? 0.7 : w.augment == Weapon.Augment.DAMAGE ? 1.5 : 1; }

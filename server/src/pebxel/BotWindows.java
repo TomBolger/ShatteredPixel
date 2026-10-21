@@ -175,7 +175,7 @@ public final class BotWindows {
 	static Item spare() {
 		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero;
 		if (h == null) return null;
-		if ("1".equals(System.getenv("AS_OSHOP"))) return pebxel.bot.Trade.sellPick(h);   // (agent O: by worth)
+		if (!"0".equals(System.getenv("AS_OSHOP"))) return pebxel.bot.Trade.sellPick(h);   // (agent O: by worth)
 		for (Item i : h.belongings.backpack.items)
 			if ((i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor)
 					&& !i.isEquipped(h) && com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Shopkeeper.canSell(i)) return i;

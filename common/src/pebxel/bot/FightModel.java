@@ -72,7 +72,7 @@ public final class FightModel {
 		int n = foes0.size();
 		// per foe: hit odds both ways, blow distributions (fixed for the fight)
 		double[] pH = new double[n], pF = new double[n], pR = new double[n];
-		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n];
+		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
 			pH[i] = Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
@@ -80,18 +80,21 @@ public final class FightModel {
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me0);
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
+			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me0.eva); }
 			if (me0.rangedDmg != null) { pR[i] = me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
 		}
 		double[] losses = new double[runs];
 		int deaths = 0, wins = 0; double tsum = 0, left = 0;
-		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
+		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		for (int run = 0; run < runs; run++) {
 			int myHp = me0.hp, sh = me0.shield, heals = me0.heals, shots = me0.rangedShots;
 			for (int i = 0; i < n; i++) {
 				Fighter f = foes0.get(i);
 				hp[i] = f.hp + f.shield; rage[i] = false; awake[i] = !f.asleep;
-				arr[i] = f.ranged || f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.speed);
-				next[i] = awake[i] ? arr[i] + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
+				// arr: when it's beside the hero (a shooter stays put: the hero walks up to it); atk: when its blows start
+				arr[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : f.ranged ? (f.dist - 1) / Math.max(0.1, me0.speed) : (f.dist - 1) / Math.max(0.1, f.speed);
+				atk[i] = f.ranged && !f.asleep ? 0 : arr[i];
+				next[i] = awake[i] ? atk[i] + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
 			}
 			double t = 0, tH = 0; boolean dead = false; int alive = n;
 			for (int guard = 0; guard < 600 && alive > 0 && !dead; guard++) {
@@ -106,7 +109,7 @@ public final class FightModel {
 					if (tg >= 0) {
 						Fighter f = foes0.get(tg);
 						if (!awake[tg] || rnd.nextDouble() < (bLow[tg] != null && hp[tg] <= f.lowAt ? pHLow[tg] : pH[tg])) hp[tg] -= bH[tg].draw(rnd.nextDouble());   // (a sleeper: a surprise blow, sure)
-						if (!awake[tg]) { awake[tg] = true; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
+						if (!awake[tg]) { awake[tg] = true; atk[tg] = t; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
 						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; }
 						if (hp[tg] <= 0) {
 							alive--;
@@ -131,9 +134,9 @@ public final class FightModel {
 					else tH = t + 1;
 				} else {
 					Fighter f = foes0.get(fi); t = ft;
-					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt;
-					if (t >= arr[fi] - 1e-9 && rnd.nextDouble() < (lo ? pLow[fi] : pF[fi])) {
-						int d = (rage[fi] && bRage[fi] != null ? bRage[fi] : lo ? bLow[fi] : bF[fi]).draw(rnd.nextDouble());
+					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && t < arr[fi] - 1e-9;
+					if (t >= atk[fi] - 1e-9 && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
+						int d = (zap ? bZ[fi] : rage[fi] && bRage[fi] != null ? bRage[fi] : lo ? bLow[fi] : bF[fi]).draw(rnd.nextDouble());
 						if (me0.taken != 1) d = (int) Math.round(d * me0.taken);
 						myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d);
 						if (f.leech > 0) hp[fi] = Math.min(f.ht, hp[fi] + d);
@@ -176,7 +179,7 @@ public final class FightModel {
 		Fighter me = HeroView.of(h); me.heals = 0; me.rangedShots = 0;
 		double worst = 0;
 		for (String k : MobTable.kinds(Dungeon.depth)) { Fighter f = MobTable.fighter(k); if (f != null) worst = Math.max(worst, duelCost(me, f)); }
-		int need = (int) Math.ceil(worst * 1.3) + 2, lo = h.HT / 4, hi = h.HT * 7 / 10;
+		int need = (int) Math.ceil(worst * Tune.RESTK) + 2, lo = (int) (h.HT * Tune.RESTLO), hi = (int) (h.HT * Tune.RESTHI);
 		return Math.max(lo, Math.min(hi, need));
 	}
 }
