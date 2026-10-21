@@ -33,6 +33,9 @@ public final class UpgradePlan {
 	private UpgradePlan() { }
 
 	public static String last = "";
+	/** AS_OTOE=1: choose by RunProjection (the bot's batches; the watch has no environment). */
+	static final boolean TOE = env("AS_OTOE");
+	static boolean env(String n) { try { return "1".equals(System.getenv(n)); } catch (Throwable e) { return false; } }
 
 	/** The scrolls in hand (known), at least 1 (the one being read). */
 	static int inHand(Hero h) {
@@ -92,6 +95,16 @@ public final class UpgradePlan {
 			if (sc < bs) { bs = sc; best = c; bNow = now; }
 		}
 		last = String.format(Locale.ROOT, "base %.2f late %.2f F %.1f S %.1f |%s", base, baseLate, F, Sg, why);
+		if (TOE) {   // the run projection instead: the build that lives longest over the next 6 floors
+			Item tb = null; double ts = -1;
+			for (Item c : cands) {
+				boolean arm = c instanceof Armor; int l = HeroView.visLevel(c) + n;
+				double sv = arm ? RunProjection.survival(h, w0, wl0, (Armor) c, l, c, 6) : RunProjection.survival(h, (KindOfWeapon) c, l, a0, al0, c, 6);
+				last += String.format(Locale.ROOT, " toe %s %.3f;", c.getClass().getSimpleName(), sv);
+				if (sv > ts) { ts = sv; tb = c; }
+			}
+			return tb;
+		}
 		if (best == null) return null;
 		if (bNow >= base * 0.99 && dl > 1 && Dungeon.depth % 5 != 4) { last = "hold: " + last; return null; }
 		return best;
