@@ -100,6 +100,7 @@ public final class UpgradePlan {
 			for (Item c : cands) {
 				boolean arm = c instanceof Armor; int l = HeroView.visLevel(c) + n;
 				double sv = arm ? RunProjection.survival(h, w0, wl0, (Armor) c, l, c, Tune.TOEN) : RunProjection.survival(h, (KindOfWeapon) c, l, a0, al0, c, Tune.TOEN);
+				if (arm) sv = 1 - (1 - sv) * (1 - Tune.ARMB);   // (armour's edge: its death odds cut by that share)
 				last += String.format(Locale.ROOT, " toe %s %.3f;", c.getClass().getSimpleName(), sv);
 				if (sv > ts) { ts = sv; tb = c; }
 			}
