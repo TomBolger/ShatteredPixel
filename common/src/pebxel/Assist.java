@@ -41,6 +41,7 @@ import com.shatteredpixel.shatteredpixeldungeon.ui.Window;
 import com.shatteredpixel.shatteredpixeldungeon.windows.WndBag;
 import java.util.*;
 import java.util.function.IntPredicate;
+import pebxel.bot.*;
 
 /**
  * Pebble PD's Assistant (watch/src/ovl/tgt/tgt.c: tgt plan A, tgt2 plans B, C..., tgt3 the hands, tgt4 escape and
@@ -183,6 +184,16 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
+	// agent O's models (pebxel.bot), each off by default: AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid)
+	static final boolean OFIGHT = opt("OFIGHT", false);
+	static final int ODEATH = optInt("ODEATH", 10), OESC = optInt("OESC", 30), OUP = optInt("OUP", 25), OAVOID = optInt("OAVOID", 25);
+	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
+	private static FightModel.Result oFight() {
+		List<Mob> fs = new ArrayList<>();
+		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)))) fs.add(m);
+		return FightModel.engaged(H, fs);
+	}
+	private static boolean oLosing(int pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
 	// the API
@@ -907,6 +918,7 @@ public final class Assist {
 			if (!adj && walk(m.pos) > 2 * distance(m.pos, hp) + 4) continue;
 			if (!adj && !hunting(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;
 			if (m.state == m.SLEEPING && !adj && !boss(m) && distance(m.pos, hp) > 2 && floorLeft()) continue;
+			if (OFIGHT && !adj && !hunting(m) && !boss(m) && FightModel.evaluate(H, Collections.singletonList(m)).pDeath * 100 >= OAVOID) continue;   // (O: a fight it would likely lose: not started)
 			int k = adj ? (boss(m) ? 0 : 1 + m.HP) : walk(m.pos) < INF ? 1000 + walk(m.pos) * 64 + m.HP : INF;
 			if (k < bk) { bk = k; best = m.pos; bm = m; }
 		}
@@ -1262,7 +1274,7 @@ public final class Assist {
 	/** Low, an enemy after the hero, no known Healing: the way up is a sure escape (enemies stay behind; strategy-reference 2.3).
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
 	private static Target upstairs() {
-		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || H.HP * 100 >= H.HT * 35) return null;
+		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || (OFIGHT ? !oLosing(OUP) : H.HP * 100 >= H.HT * 35)) return null;
 		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
 		int near = INF; boolean hunted = false;
@@ -1371,10 +1383,10 @@ public final class Assist {
 		}
 		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
-		if (seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
+		if (OFIGHT ? pot && H.HP * 10 < H.HT * 7 && oLosing(ODEATH) : seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
 		Waterskin ws = bag(Waterskin.class);
 		if (adj && H.HP * 4 < H.HT && !pot && ws != null && ws.actions(H).contains("DRINK")) return use(ws, "DRINK", -1, "low: waterskin");
-		if (adj && H.HP * 4 < H.HT && !pot) {   // dying beside one: a known way out first
+		if (adj && !pot && (OFIGHT ? oLosing(OESC) : H.HP * 4 < H.HT)) {   // dying beside one: a known way out first
 			Class<?>[] esc = { ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
@@ -1449,7 +1461,7 @@ public final class Assist {
 		boolean bossHere = bossSeen >= 0 && Actor.now() - bossSeen < 100;   // (a boss seen on this floor lately)
 		if (Dungeon.bossLevel() && bossHere && H.HP * 20 < H.HT * 19 && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "rest before the boss"); t.action = REST_ACT; t.obj = -1; return t; }
 		if (DEWREST && H.HP * 100 < H.HT * RESTPCT && ws != null && field(ws, "volume") instanceof Integer && (Integer) field(ws, "volume") > 5 && !declined(Waterskin.class, "DRINK")) return use(ws, "DRINK", -1, "hurt: dew, not food");   // (resting costs 10 turns of food a point)
-		if (H.HP * 100 < H.HT * RESTPCT && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "hurt: rest"); t.action = REST_ACT; t.obj = -1; return t; }
+		if ((OFIGHT ? H.HP < FightModel.restNeed(H) : H.HP * 100 < H.HT * RESTPCT) && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "hurt: rest"); t.action = REST_ACT; t.obj = -1; return t; }
 		return null;
 	}
 	private static boolean declinedAny(String a) { for (String s : declined) if (s.endsWith(":" + a)) return true; return false; }

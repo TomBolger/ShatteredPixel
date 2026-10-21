@@ -165,7 +165,7 @@ public class AssistBot {
 		WatchSettings.assist(Integer.parseInt(System.getenv().getOrDefault("MODE", "1")));
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
-		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame();
+		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); FightCal.newGame();
 		Random talentR = new Random(seed * 13 + 5);
 
 		GamesInProgress.selectedClass = cls; GamesInProgress.curSlot = 1;
@@ -208,7 +208,7 @@ public class AssistBot {
 				fk[1]++; continue;
 			}
 			if (Dungeon.hero == null) continue;
-			if (!Dungeon.hero.isAlive() && Ui.topWindow() == null) { end = "died"; break; }   // (a window over a dead hero: an Ankh's, answered below)
+			if (!Dungeon.hero.isAlive() && Ui.topWindow() == null) { end = "died"; FightCal.end(true); break; }   // (a window over a dead hero: an Ankh's, answered below)
 			if (Dungeon.depth != depth || Dungeon.branch != branch) {
 				if (depth > 0) System.out.printf("  floor %d done in %.0f turns, %d decisions%s%n", depth, Statistics.duration - floorStart, floorDecisions, watch == null ? "" : String.format(", %d watch frames, %d presses", watch.frames - floorWatchFrames, watch.presses - floorPresses));
 				if (watch != null) { floorWatchFrames = watch.frames; floorPresses = watch.presses; }
@@ -292,7 +292,7 @@ public class AssistBot {
 				break;
 			}
 			lastPos = Dungeon.hero.pos; lastKey = key;
-			BotStats.decision(t);
+			BotStats.decision(t); FightCal.decision();
 			whys.merge(t.why, 1, Integer::sum);
 			if (v && System.getenv("VMOBS") != null) { StringBuilder sb = new StringBuilder("    mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.HP); sb.append(" f").append(Lockstep.frames); System.out.println(sb); }
 			String line = "  t" + Math.round(Statistics.duration) + "/" + Math.round(Actor.now()) + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + "/" + Dungeon.hero.HT + ": " + t + (plan.size() > 1 ? "   | B: " + plan.get(1) : "");   // (not String.format: 4% of a game)

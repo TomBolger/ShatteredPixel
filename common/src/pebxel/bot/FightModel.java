@@ -152,4 +152,30 @@ public final class FightModel {
 		return r;
 	}
 
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// for the assistant's hooks (Assist, behind AS_OFIGHT)
+	// ---------------------------------------------------------------------------------------------------------------
+	private static Result cache; private static float cacheT = -1; private static int cachePos = -1, cacheKey = -1; private static Hero cacheH;
+
+	/** The fight with these mobs, worked out once per turn and place (the plan asks several times). */
+	public static Result engaged(Hero h, List<Mob> mobs) {
+		if (mobs.isEmpty()) return null;
+		int key = 0; for (Mob m : mobs) key = key * 31 + m.pos * 7 + m.HP;
+		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		if (cacheH == h && cacheT == now && cachePos == h.pos && cacheKey == key) return cache;
+		cacheH = h; cacheT = now; cachePos = h.pos; cacheKey = key;
+		return cache = evaluate(h, mobs);
+	}
+
+	/** The health to rest up to before going on (OG thrift_need): a fight with the floor's worst common kind (duelCost),
+	 *  with a margin; between a quarter and 70% of the most. Resting costs food (a point every 10 turns, 2.6), so less
+	 *  resting where the floor is easy. */
+	public static int restNeed(Hero h) {
+		Fighter me = HeroView.of(h); me.heals = 0; me.rangedShots = 0;
+		double worst = 0;
+		for (String k : MobTable.kinds(Dungeon.depth)) { Fighter f = MobTable.fighter(k); if (f != null) worst = Math.max(worst, duelCost(me, f)); }
+		int need = (int) Math.ceil(worst * 1.3) + 2, lo = h.HT / 4, hi = h.HT * 7 / 10;
+		return Math.max(lo, Math.min(hi, need));
+	}
 }
