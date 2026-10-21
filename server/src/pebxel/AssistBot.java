@@ -165,7 +165,7 @@ public class AssistBot {
 		WatchSettings.assist(Integer.parseInt(System.getenv().getOrDefault("MODE", "1")));
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
-		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame();
+		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame();
 		Random talentR = new Random(seed * 13 + 5);
 
 		GamesInProgress.selectedClass = cls; GamesInProgress.curSlot = 1;
@@ -290,6 +290,7 @@ public class AssistBot {
 				break;
 			}
 			lastPos = Dungeon.hero.pos; lastKey = key;
+			BotStats.decision(t);
 			whys.merge(t.why, 1, Integer::sum);
 			if (v && System.getenv("VMOBS") != null) { StringBuilder sb = new StringBuilder("    mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.HP); sb.append(" f").append(Lockstep.frames); System.out.println(sb); }
 			String line = "  t" + Math.round(Statistics.duration) + "/" + Math.round(Actor.now()) + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + "/" + Dungeon.hero.HT + ": " + t + (plan.size() > 1 ? "   | B: " + plan.get(1) : "");   // (not String.format: 4% of a game)
@@ -332,6 +333,7 @@ public class AssistBot {
 		if (watch != null) System.out.println("WATCH " + watch.summary());
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);
+		System.out.println(BotStats.line());
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
 				cls, seed, end, Dungeon.depth, maxD, Statistics.duration, Dungeon.hero == null ? 0 : Dungeon.hero.lvl, Dungeon.hero == null ? 0 : Dungeon.hero.HP, Dungeon.hero == null ? 0 : Dungeon.hero.HT,
 				picked, stuckEvents, actFails, windows, decisions, Lockstep.frames - frames0, (System.currentTimeMillis() - t0) / 1000.0, cause.isEmpty() ? "" : "\n  last log: " + cause);
