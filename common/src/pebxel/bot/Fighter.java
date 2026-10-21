@@ -38,13 +38,16 @@ public final class Fighter {
 	public int heals; public int healAmount;
 	/** Hero only: a factor on the damage the hero takes (glyphs, a weapon that slows or dazes: {@link Ench#taken}). */
 	public double taken = 1;
+	/** Hero only, gear values: the share of blows that are surprise blows (sure hits: an ambush, the cloak) and their damage
+	 *  (a dagger, dirk or assassin's blade: 75% of the way to max and up, Dagger.damageRoll; null: the usual roll). */
+	public double sure; public Dist sureDmg;
 
 	public Fighter copy() {
 		Fighter f = new Fighter();
 		f.name = name; f.acc = acc; f.eva = eva; f.dmg = dmg; f.dr = dr; f.delay = delay; f.speed = speed; f.hp = hp; f.ht = ht; f.shield = shield;
 		f.dist = dist; f.ranged = ranged; f.asleep = asleep; f.boss = boss; f.slimeCap = slimeCap; f.rageHp = rageHp; f.rageDmg = rageDmg;
 		f.deathDmg = deathDmg; f.leech = leech; f.zapDmg = zapDmg; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
-		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken;
+		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg;
 		return f;
 	}
 

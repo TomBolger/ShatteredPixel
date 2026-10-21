@@ -90,6 +90,7 @@ public final class UpgradePlan {
 			if (e != Ench.NONE && !e.curse && l + n >= 4) { double pl = Math.min(1, 0.1 * Math.pow(2, l + n - 4)); now = now * (1 - pl) + pl * now / Math.max(0.5, 1 / e.taken / e.dmg); }
 			if (!c.isEquipped(h)) { now = Math.min(now, base); }   // (not worn yet: the old piece stays on till this one is better)
 			double sc = Tune.UPNOW * Math.min(now, base) + (1 - Tune.UPNOW) * Math.min(late, baseLate);
+			if (arm) sc *= 1 - Tune.ARMB;
 			why.append(String.format(Locale.ROOT, " %s+%d: now %.2f late %.2f score %.2f;", c.getClass().getSimpleName(), l, now, late, sc));
 			if (sc < bs) { bs = sc; best = c; bNow = now; }
 		}

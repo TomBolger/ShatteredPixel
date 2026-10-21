@@ -24,5 +24,9 @@ public final class Tune {
 	public static final int STAFF = (int) get("OSTAFF", 3), TOEN = (int) get("OTOEN", 6);
 	public static final boolean TOE = on("OTOE", true);
 	// Identify: keep an unknown potion this likely Healing; Trade: an Ankh's worth, the least worth bought, food when short
+	// GearValue: surprise blows' share (the Rogue's cloak; everyone's ambushes: 6% of the honest bot's blows), the bow's shots before a fight
+	public static final double SURE = get("OSURE", 6) / 100, SURER = get("OSURER", 25) / 100, BOWSHOTS = get("OBOW", 2);
+	// UpgradePlan: armour's edge (a share off its score: armour stays on longer, cuts every blow, the guide's consensus)
+	public static final double ARMB = get("OARMB", 0) / 100;
 	public static final double KEEP = get("OKEEP", 30) / 100, ANKH = get("OANKH", 120), MINW = get("OMINW", 8), FOOD = get("OFOOD", 70);
 }

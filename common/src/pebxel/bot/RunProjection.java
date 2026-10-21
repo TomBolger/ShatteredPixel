@@ -32,8 +32,7 @@ public final class RunProjection {
 			int wlk = wl + (build == w && w != null ? (int) Math.round(ups) : 0), alk = al + (build == a && a != null ? (int) Math.round(ups) : 0);
 			Fighter me = HeroView.of(h, w, a, h.STR() + (int) Math.round(str), wlk, alk, k, Ench.of(w), Ench.of(a));
 			me.hp = me.ht; me.heals = 0; me.rangedShots = 0;
-			if (h.heroClass == HeroClass.WARRIOR && a != null) me.shield = 3 + 2 * a.tier;
-			double zap = w instanceof MagesStaff ? UpgradePlan.zap((MagesStaff) w, wlk) : 0;
+			double zap = (w instanceof MagesStaff ? UpgradePlan.zap((MagesStaff) w, wlk) : 0) + GearValue.prep(me, h, w, wlk, a, (int) Math.round(str));
 			double load = 0;
 			if (d % 5 == 0) {
 				Fighter b = MobTable.fighter(MobTable.boss(d));

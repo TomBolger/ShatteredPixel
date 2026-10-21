@@ -62,7 +62,11 @@ public final class FightModel {
 	}
 
 	/** Damage a turn a deals b (hit odds times the mean blow through b's armour, per a's attack delay). */
-	public static double dps(Fighter a, Fighter b) { return Dist.hit(a.acc, b.eva) * Fighter.blow(a.dmg, b).mean() / Math.max(0.05, a.delay); }
+	public static double dps(Fighter a, Fighter b) {
+		double d = Dist.hit(a.acc, b.eva) * Fighter.blow(a.dmg, b).mean();
+		if (a.sure > 0) d = (1 - a.sure) * d + a.sure * Fighter.blow(a.sureDmg != null ? a.sureDmg : a.dmg, b).mean();
+		return d / Math.max(0.05, a.delay);
+	}
 
 	/** The simulation. */
 	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed) {

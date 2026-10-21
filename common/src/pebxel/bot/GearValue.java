@@ -39,9 +39,8 @@ public final class GearValue {
 	/** zap: damage dealt before each fight's blows (a staff's charges: the Mage), taken off the foe's health. */
 	public static double cost(Hero h, KindOfWeapon w, int wl, Ench we, Armor a, int al, Ench ag, int strPlus, int lvlPlus, int d, double zap) {
 		Fighter me = HeroView.of(h, w, a, h.STR() + strPlus, wl, al, lvlPlus, we, ag);
-		me.hp = me.ht; me.heals = 0; me.rangedShots = 0;
-		if (h.heroClass == HeroClass.WARRIOR && a != null) me.shield = 3 + 2 * a.tier;   // (BrokenSeal.maxShield: the seal goes with the armour)
-		else me.shield = 0;
+		me.hp = me.ht; me.heals = 0;
+		zap += prep(me, h, w, wl, a, strPlus);
 		double c = 0, W = 0;
 		for (int dd = d; dd < d + 3; dd++) {
 			String[] ks = MobTable.kinds(dd);
@@ -53,6 +52,24 @@ public final class GearValue {
 		if (b != null) c += Tune.BOSSW * FightModel.duelCost(me, b);   // (the boss: one fight in a region's ~30, but the one that ends runs)
 		if (a != null) { int enc = a.STRReq(al) - (h.STR() + strPlus); if (enc > 0) c *= Math.pow(Tune.SLOW, enc); }
 		return c;
+	}
+
+	/** What a fight's sums need beyond HeroView: the Warrior's seal shield, surprise blows (a dagger's sneak roll), the
+	 *  spirit bow's shots while foes come (returned: damage before the blows). */
+	static double prep(Fighter me, Hero h, KindOfWeapon w, int wl, Armor a, int strPlus) {
+		double zap = 0;
+		if (h.heroClass == HeroClass.WARRIOR && a != null) me.shield = 3 + 2 * a.tier;   // (BrokenSeal.maxShield: the seal goes with the armour)
+		else me.shield = 0;
+		me.sure = h.heroClass == HeroClass.ROGUE ? Tune.SURER : Tune.SURE;
+		if (w instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.Dagger || w instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.Dirk
+				|| w instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.AssassinsBlade) {
+			int mn = w.min(wl), mx = w.max(wl), ex = h.STR() + strPlus - ((Weapon) w).STRReq(wl);
+			Dist sd = Dist.normal(mn + Math.round((mx - mn) * 0.75f), mx).scale(HeroView.augDmg((Weapon) w));
+			me.sureDmg = ex > 0 ? sd.plus(Dist.normal(0, ex)) : sd;
+		}
+		if (me.rangedDmg != null && me.rangedShots >= 99) zap += Tune.BOWSHOTS * 0.7 * me.rangedDmg.mean();   // (the spirit bow: shots while they come)
+		me.rangedShots = 0;
+		return zap;
 	}
 
 	/** The cost of the pair as the player sees them now. */
