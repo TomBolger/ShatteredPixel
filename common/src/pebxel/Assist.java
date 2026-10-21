@@ -193,6 +193,8 @@ public final class Assist {
 		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)))) fs.add(m);
 		return FightModel.engaged(H, fs);
 	}
+	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
+	static final boolean OGEAR = opt("OGEAR", false), OUPG = opt("OUPG", false), OSHOP = opt("OSHOP", false), OIDENT = opt("OIDENT", false);
 	private static boolean oLosing(int pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
@@ -356,6 +358,8 @@ public final class Assist {
 		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
 		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
 		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
+		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = UpgradePlan.target(h); if (u != null && sel.itemSelectable(u)) return u; }
+		if (src instanceof ScrollOfIdentify && OIDENT) { Item u = Identify.identifyTarget(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfUpgrade) {
 			for (Item i : worn) if (sel.itemSelectable(i) && !(i.cursed && i.cursedKnown)) return i;
 		}
@@ -446,6 +450,7 @@ public final class Assist {
 		od = ovrC != -1 ? ovrDir : -1;
 		if (grassSkip && H.exp + H.lvl * 101 != grassKey) grassSkip = false;
 		zero = false; h0 = 0;
+		if (OIDENT || OSHOP) Identify.observe(H);
 	}
 
 	private static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
@@ -980,12 +985,13 @@ public final class Assist {
 			if (SHOP && best < 0) { int sb = -1, sk = INF;
 				for (Heap h : L.heaps.valueList()) {   // the shop, by the guide's order (2.7): what's wanted and affordable (the price is shown)
 					if (h.type != Heap.Type.FOR_SALE || !h.seen || h.pos == hp || passed.contains(h.pos) || bad.containsKey(h.pos) || seenChar(h.pos) != null) continue;
-					int d = walk(h.pos), pr = buyRank(h.peek());
+					int d = walk(h.pos), pr = OSHOP ? (roomFor(h.peek()) ? Trade.buyRank(H, h, L.heaps.valueList()) : 0) : buyRank(h.peek());
 					if (pr <= 0 || d >= INF) continue;
 					int sc = d - pr * 8;
 					if (sc < sk) { sk = sc; sb = h.pos; }
 				}
-				if (sb >= 0) { why[0] = "buy"; return sb; } }
+				if (sb >= 0) { why[0] = "buy"; return sb; }
+				if (OSHOP && Trade.sellGold(H) >= 20) for (Mob m : mobs()) if (m instanceof Shopkeeper && L.heroFOV[m.pos] && walk(m.pos) < INF && talked.getOrDefault(m.id(), 0) < 1) { kind[0] = GO; why[0] = "sell"; return m.pos; } }
 			for (Mob m : mobs()) {   // a hidden mimic looks like a chest: opened like one (MimicSprite draws it so; knowing better would be cheating)
 				if (!disguised(m) || !L.heroFOV[m.pos] || passed.contains(m.pos) || bad.containsKey(m.pos) || H.HP * 3 < H.HT * 2 || danger[m.pos]) continue;
 				int d = walk(m.pos);
@@ -1390,6 +1396,7 @@ public final class Assist {
 			Class<?>[] esc = { ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
+			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
 		}
@@ -1413,6 +1420,7 @@ public final class Assist {
 			Armor a = H.belongings.armor(); Item wpn = H.belongings.weapon();
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
+			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
@@ -1427,6 +1435,7 @@ public final class Assist {
 			ScrollOfRemoveCurse rc = bag(ScrollOfRemoveCurse.class);
 			if (rc != null && rc.isKnown() && cw && !declined(ScrollOfRemoveCurse.class, Scroll.AC_READ)) return use(rc, Scroll.AC_READ, -1, "remove curse");
 			ScrollOfIdentify id = bag(ScrollOfIdentify.class);
+			if (OIDENT) unid = Identify.identifyTarget(H);
 			if (id != null && id.isKnown() && unid != null && !declined(ScrollOfIdentify.class, Scroll.AC_READ)) { Target t = use(id, Scroll.AC_READ, -1, "identify"); t.on = unid; return t; }
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
 			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
@@ -1445,9 +1454,10 @@ public final class Assist {
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
 			PotionOfLiquidFlame lf = new PotionOfLiquidFlame();
 			if (lf.isKnown() || ((water(hp) || !scr) && !burn))
-				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK)) return use(i, Potion.AC_DRINK, -1, "drink to learn");
+				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i))) return use(i, Potion.AC_DRINK, -1, "drink to learn");
 		}
-		for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
+		if (OGEAR) { Item g = GearValue.bestEquip(H, 0.05); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
+		else for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
 			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff) continue;
 			Item cur = i instanceof Armor ? H.belongings.armor() : H.belongings.weapon();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;

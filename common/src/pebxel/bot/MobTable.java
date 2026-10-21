@@ -85,7 +85,7 @@ public final class MobTable {
 			f.dmg = Dist.normal((Integer) r[4], (Integer) r[5]); f.dr = Dist.normal(0, (Integer) r[6]);
 			f.delay = (Double) r[7]; f.speed = (Double) r[8]; f.ranged = (Boolean) r[9];
 			FoeView.special(f, name, f.ht);
-			if (name.equals("Goo")) { f.lowAt = f.ht / 2; f.lowAcc = 15; f.lowDmg = Dist.normal(1, 12); f.boss = true; }
+			if (name.equals("Goo")) { f.lowAt = f.ht / 2; f.lowAcc = 15; f.lowEva = 12; f.lowDmg = Dist.normal(1, 12); f.boss = true; }
 			if (name.equals("Tengu") || name.equals("DM300") || name.equals("DwarfKing")) f.boss = true;
 			return f;
 		}

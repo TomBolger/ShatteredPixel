@@ -27,8 +27,8 @@ public final class Fighter {
 	/** Foe only: the damage its death does to the hero beside it (a skeleton's bones: armour counts twice), and the health it heals per blow
 	 *  that lands (a vampire bat). */
 	public Dist deathDmg; public double leech;
-	/** Foe only: at or below this health it fights with other numbers (Goo below half: accuracy 15, 1-12). */
-	public int lowAt = -1; public double lowAcc; public Dist lowDmg;
+	/** Foe only: at or below this health it fights with other numbers (Goo below half: accuracy 15, evasion x1.5, 1-12). */
+	public int lowAt = -1; public double lowAcc, lowEva; public Dist lowDmg;
 	/** Hero only: shots before contact (the spirit bow, thrown weapons, wand charges): accuracy factor at range (Dist.hit
 	 *  is skipped when sure: magic bolts always hit), damage, delay, how many. */
 	public double rangedAcc; public Dist rangedDmg; public double rangedDelay = 1; public int rangedShots; public boolean rangedSure;
@@ -41,7 +41,7 @@ public final class Fighter {
 		Fighter f = new Fighter();
 		f.name = name; f.acc = acc; f.eva = eva; f.dmg = dmg; f.dr = dr; f.delay = delay; f.speed = speed; f.hp = hp; f.ht = ht; f.shield = shield;
 		f.dist = dist; f.ranged = ranged; f.asleep = asleep; f.boss = boss; f.slimeCap = slimeCap; f.rageHp = rageHp; f.rageDmg = rageDmg;
-		f.deathDmg = deathDmg; f.leech = leech; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
+		f.deathDmg = deathDmg; f.leech = leech; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
 		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken;
 		return f;
 	}

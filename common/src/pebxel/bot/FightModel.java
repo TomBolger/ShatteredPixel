@@ -56,7 +56,8 @@ public final class FightModel {
 		double c = hp / mine * its;
 		if (f.rageHp > 0 && f.rageDmg != null) c += f.rageHp / mine * (Dist.hit(f.acc, me.eva) * Fighter.blow(f.rageDmg, me).mean() / f.delay - its);
 		if (f.leech > 0) c *= 1 + Dist.hit(f.acc, me.eva) * Fighter.blow(f.dmg, me).mean() / Math.max(0.3, mine * f.delay);
-		if (f.lowAt > 0 && f.lowDmg != null) c += Math.min(f.hp, f.lowAt) / mine * (Dist.hit(f.lowAcc, me.eva) * Fighter.blow(f.lowDmg, me).mean() / f.delay - its);
+		if (f.lowAt > 0 && f.lowDmg != null) { double mineLo = Dist.hit(me.acc, f.lowEva > 0 ? f.lowEva : f.eva) * Fighter.blow(me.dmg, f).mean() / Math.max(0.05, me.delay); int lo = Math.min(f.hp, f.lowAt);
+			c += lo / Math.max(1e-6, mineLo) * Dist.hit(f.lowAcc, me.eva) * Fighter.blow(f.lowDmg, me).mean() / f.delay - lo / mine * its; }
 		return c + (f.deathDmg == null ? 0 : f.deathDmg.minus0(me.dr.plus(me.dr)).mean());
 	}
 
@@ -71,13 +72,13 @@ public final class FightModel {
 		int n = foes0.size();
 		// per foe: hit odds both ways, blow distributions (fixed for the fight)
 		double[] pH = new double[n], pF = new double[n], pR = new double[n];
-		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n];
+		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
 			pH[i] = Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
 			pF[i] = Dist.hit(f.acc, me0.eva); bF[i] = Fighter.blow(f.dmg, me0);
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me0);
-			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); }
+			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
 			if (me0.rangedDmg != null) { pR[i] = me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
 		}
@@ -104,7 +105,7 @@ public final class FightModel {
 					for (int i = 0; i < n; i++) if (hp[i] > 0 && t >= arr[i] - 1e-9 && hp[i] < best) { best = hp[i]; tg = i; }
 					if (tg >= 0) {
 						Fighter f = foes0.get(tg);
-						if (!awake[tg] || rnd.nextDouble() < pH[tg]) hp[tg] -= bH[tg].draw(rnd.nextDouble());   // (a sleeper: a surprise blow, sure)
+						if (!awake[tg] || rnd.nextDouble() < (bLow[tg] != null && hp[tg] <= f.lowAt ? pHLow[tg] : pH[tg])) hp[tg] -= bH[tg].draw(rnd.nextDouble());   // (a sleeper: a surprise blow, sure)
 						if (!awake[tg]) { awake[tg] = true; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
 						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; }
 						if (hp[tg] <= 0) {

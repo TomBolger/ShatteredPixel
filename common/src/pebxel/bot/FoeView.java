@@ -33,11 +33,11 @@ public final class FoeView {
 		f.asleep = m.state == m.SLEEPING;
 		f.ranged = shooter(m);
 		if (m instanceof Goo) {   // (Goo.attackSkill / damageRoll: enraged below half health, pumped up x3)
-			boolean low = m.HP * 2 <= m.HT; if (low) f.acc = 15; Object pu = HeroView.field(m, "pumpedUp"); boolean pumped = pu instanceof Integer && (Integer) pu > 0;
+			boolean low = m.HP * 2 <= m.HT; if (low) { f.acc = 15; f.eva = (int) (m.defenseSkill * 1.5); } Object pu = HeroView.field(m, "pumpedUp"); boolean pumped = pu instanceof Integer && (Integer) pu > 0;
 			int max = low ? 12 : 8;
 			f.dmg = pumped ? Dist.normal(3, 3 * max) : Dist.normal(1, max);
 			f.dr = Dist.normal(0, 2);
-			if (!low && !pumped) { f.lowAt = m.HT / 2; f.lowAcc = 15; f.lowDmg = Dist.normal(1, 12); }
+			if (!low && !pumped) { f.lowAt = m.HT / 2; f.lowAcc = 15; f.lowEva = (int) (m.defenseSkill * 1.5); f.lowDmg = Dist.normal(1, 12); }
 		} else {
 			int[] v = new int[SAMPLES];
 			Random.pushGenerator(0x5eed + m.getClass().getName().hashCode());

@@ -33,6 +33,11 @@ public final class GearValue {
 	/** The cost of fighting with w and a, levels and enchantments as given; strPlus / lvlPlus: projected gains; d: the
 	 *  floor to start the mix at. */
 	public static double cost(Hero h, KindOfWeapon w, int wl, Ench we, Armor a, int al, Ench ag, int strPlus, int lvlPlus, int d) {
+		return cost(h, w, wl, we, a, al, ag, strPlus, lvlPlus, d, 0);
+	}
+
+	/** zap: damage dealt before each fight's blows (a staff's charges: the Mage), taken off the foe's health. */
+	public static double cost(Hero h, KindOfWeapon w, int wl, Ench we, Armor a, int al, Ench ag, int strPlus, int lvlPlus, int d, double zap) {
 		Fighter me = HeroView.of(h, w, a, h.STR() + strPlus, wl, al, lvlPlus, we, ag);
 		me.hp = me.ht; me.heals = 0; me.rangedShots = 0;
 		if (h.heroClass == HeroClass.WARRIOR && a != null) me.shield = 3 + 2 * a.tier;   // (BrokenSeal.maxShield: the seal goes with the armour)
@@ -40,10 +45,11 @@ public final class GearValue {
 		double c = 0, W = 0;
 		for (int dd = d; dd < d + 3; dd++) {
 			String[] ks = MobTable.kinds(dd);
-			for (String k : ks) { Fighter f = MobTable.fighter(k); if (f == null) continue; c += FightModel.duelCost(me, f); W++; }
+			for (String k : ks) { Fighter f = MobTable.fighter(k); if (f == null) continue; if (zap > 0) f.hp = Math.max(1, (int) Math.round(f.hp - zap)); c += FightModel.duelCost(me, f); W++; }
 		}
 		c = W > 0 ? c / W : 0;
 		Fighter b = MobTable.fighter(MobTable.boss(d));
+		if (b != null && zap > 0) b.hp = Math.max(1, (int) Math.round(b.hp - 3 * zap));
 		if (b != null) c += 0.1 * FightModel.duelCost(me, b);   // (the boss: one fight in a region's ~30, but the one that ends runs)
 		if (a != null) { int enc = a.STRReq(al) - (h.STR() + strPlus); if (enc > 0) c *= Math.pow(1.2, enc); }
 		return c;

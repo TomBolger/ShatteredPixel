@@ -35,6 +35,7 @@ public final class BotModelTest {
 	public static void main(String[] a) throws Exception {
 		math();
 		engine(a.length > 0 ? Integer.parseInt(a[0]) : 400);
+		decisions();
 		System.out.println("MODELTEST " + (fails == 0 ? "all pass" : fails + " fail"));
 		System.exit(fails == 0 ? 0 : 1);
 	}
@@ -182,5 +183,78 @@ public final class BotModelTest {
 		Fighter m2 = me.copy(); m2.hp = 100000;
 		FightModel.Result r = FightModel.simulate(m2, Collections.singletonList(foe), 0, 2000, 6);
 		return r.lossMean;
+	}
+
+	static <T extends Item> T make(Class<T> c, int lvl, boolean known) {
+		T i = Reflection.newInstance(c); i.level(lvl); i.cursed = false;
+		if (known) i.identify(); else { i.levelKnown = false; i.cursedKnown = false; }
+		return i;
+	}
+	static void gear(Hero h, int lvl, int str, KindOfWeapon w, Armor ar) {
+		Setup s = new Setup("", lvl, str, null, 0, null, 0, null, Dungeon.depth, 0); reset(h, s);
+		h.HT = h.HP = 20 + 5 * (lvl - 1); h.belongings.weapon = w; h.belongings.armor = ar; h.belongings.backpack.items.clear();
+	}
+
+	/** GearValue, UpgradePlan, Identify, Trade on made-up set-ups: the choices a good player would make. */
+	static void decisions() {
+		Hero h = Dungeon.hero;
+		Dungeon.depth = 3;
+		// 1. armour too heavy for the STR: not worn; once the STR is there: worn
+		gear(h, 4, 10, make(WornShortsword.class, 0, true), make(ClothArmor.class, 0, true));
+		MailArmor mail = make(MailArmor.class, 0, true); h.belongings.backpack.items.add(mail);
+		check("gear: mail at STR 10 (4 short) not worn", GearValue.bestEquip(h, 0.05) == null, String.format("now %.2f with %.2f", GearValue.now(h), GearValue.costWith(h, mail, GearValue.now(h))));
+		h.STR = 14;
+		check("gear: mail at STR 14 worn", GearValue.bestEquip(h, 0.05) == mail, String.format("now %.2f with %.2f", GearValue.now(h), GearValue.costWith(h, mail, GearValue.now(h))));
+		// 2. an unknown leather vs known cloth at STR 12: worth the risk (75% +0 and up; a curse 1 in 3 but most are mild)
+		gear(h, 4, 12, make(WornShortsword.class, 0, true), make(ClothArmor.class, 0, true));
+		LeatherArmor la = make(LeatherArmor.class, 0, false); h.belongings.backpack.items.add(la);
+		double b = GearValue.now(h), u = GearValue.costWith(h, la, b);
+		LeatherArmor lk = make(LeatherArmor.class, 1, true);
+		double k = GearValue.costWith(h, lk, b);
+		check("gear: unknown leather costs more than a known +1 one", u > k, String.format("cloth %.2f unknown leather %.2f known +1 %.2f", b, u, k));
+		check("gear: unknown leather still beats cloth at STR 12", GearValue.bestEquip(h, 0.05) == la, String.format("cloth %.2f unknown %.2f", b, u));
+		// 3. a better weapon: a sword (tier 3) at STR 14 over the worn shortsword
+		gear(h, 5, 14, make(WornShortsword.class, 0, true), make(LeatherArmor.class, 0, true));
+		Sword sw = make(Sword.class, 0, true); h.belongings.backpack.items.add(sw);
+		check("gear: sword at STR 14 over the worn shortsword", GearValue.bestEquip(h, 0.05) == sw, String.format("now %.2f with %.2f", GearValue.now(h), GearValue.costWith(h, sw, GearValue.now(h))));
+		check("gear: the worn shortsword is spare once the sword is in the pack? (no: it's worn)", !GearValue.spare(h).contains(h.belongings.weapon), "");
+		Dirk dk = make(Dirk.class, 0, true); h.belongings.backpack.items.add(dk);
+		h.belongings.weapon = sw; h.belongings.backpack.items.remove(sw);
+		check("gear: a dirk +0 is spare beside a worn sword", GearValue.spare(h).contains(dk), "spare " + GearValue.spare(h));
+		// 4. upgrades: early, cloth +0 and a shortsword: armour or weapon? (printed); the Mage's staff first
+		gear(h, 4, 11, make(WornShortsword.class, 0, true), make(LeatherArmor.class, 0, true));
+		Item t = UpgradePlan.target(h);
+		System.out.println("  upgrade at depth 3, leather + worn shortsword, STR 11: " + (t == null ? "hold" : t.getClass().getSimpleName()) + "  " + UpgradePlan.last);
+		check("upgrade: a target chosen at depth 3 with leather", t != null, "");
+		h.belongings.backpack.items.add(make(ScaleArmor.class, 0, true));
+		Dungeon.depth = 8; gear(h, 9, 13, make(Shortsword.class, 2, true), make(MailArmor.class, 1, true));
+		ScaleArmor sc = make(ScaleArmor.class, 0, true); h.belongings.backpack.items.add(sc);
+		t = UpgradePlan.target(h);
+		System.out.println("  upgrade at depth 8, mail+1 worn, scale+0 in the pack, STR 13: " + (t == null ? "hold" : t.getClass().getSimpleName()) + "  " + UpgradePlan.last);
+		// 5. identify: a label found 4 times by depth 4 is likelier Healing than one found once
+		Dungeon.depth = 4;
+		java.util.List<Class<?>> unk = new java.util.ArrayList<>(com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.getUnknown());
+		if (unk.size() >= 2) {
+			Identify.observe(h);
+			try {
+				java.lang.reflect.Field f = Identify.class.getDeclaredField("found"); f.setAccessible(true);
+				@SuppressWarnings("unchecked") java.util.Map<Class<?>, Integer> m = (java.util.Map<Class<?>, Integer>) f.get(null); m.clear();
+				m.put(unk.get(0), 4); m.put(unk.get(1), 1);
+				java.lang.reflect.Field md = Identify.class.getDeclaredField("maxDepth"); md.setAccessible(true); md.setInt(null, 4);
+			} catch (Exception e) { throw new RuntimeException(e); }
+			Class<?> heal = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength.class;   // (the commonest unknown kind: Healing is the Warrior's from the start)
+			double p4 = Identify.p(unk.get(0), heal), p1 = Identify.p(unk.get(1), heal), sum = 0;
+			for (Class<?> c : unk) sum += Identify.p(c, heal);
+			check("identify: found 4x likelier Strength than found 1x", p4 > p1, String.format("P(heal) 4x %.2f 1x %.2f (sum over labels %.2f)", p4, p1, sum));
+			check("identify: P(Strength) sums to 1 over the unknown labels", Math.abs(sum - 1) < 0.02 || !unk.contains(heal), String.format("%.3f", sum));
+		}
+		// 6. trade: with 300 gold and little food, an Ankh and food before a scroll of magic mapping
+		gear(h, 6, 12, make(Shortsword.class, 1, true), make(LeatherArmor.class, 1, true));
+		Dungeon.gold = 300;
+		double wa = Trade.worth(h, new com.shatteredpixel.shatteredpixeldungeon.items.Ankh()), wf = Trade.worth(h, new com.shatteredpixel.shatteredpixeldungeon.items.food.Food());
+		check("trade: an Ankh and food worth buying with no food", wa > 50 && wf > 30, String.format("ankh %.0f food %.0f", wa, wf));
+		h.belongings.backpack.items.add(dk);
+		h.belongings.backpack.items.add(make(Dirk.class, 0, true));
+		check("trade: a spare dirk is sold", Trade.sellPick(h) instanceof Dirk, "sell " + Trade.sellPick(h));
 	}
 }
