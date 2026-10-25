@@ -87,8 +87,8 @@ public final class AsChoices {
 	}
 
 	// ---- the Wandmaker (strategy-reference 5.2): wands the bot zaps to good effect first ----
-	static final List<Class<?>> WANDS = Arrays.asList(WandOfLightning.class, WandOfDisintegration.class, WandOfFrost.class, WandOfCorrosion.class, WandOfBlastWave.class,
-			WandOfFireblast.class, WandOfPrismaticLight.class, WandOfMagicMissile.class, WandOfCorruption.class, WandOfTransfusion.class, WandOfLivingEarth.class, WandOfRegrowth.class, WandOfWarding.class);
+	static final List<Class<?>> WANDS = new ArrayList<>(Arrays.asList(WandOfLightning.class, WandOfDisintegration.class, WandOfFrost.class, WandOfCorrosion.class, WandOfBlastWave.class,
+			WandOfFireblast.class, WandOfPrismaticLight.class, WandOfMagicMissile.class, WandOfCorruption.class, WandOfTransfusion.class, WandOfLivingEarth.class, WandOfRegrowth.class, WandOfWarding.class));
 	static int wandScore(Item i) {
 		int k = WANDS.indexOf(i.getClass()); int v = k < 0 ? 0 : 100 - k * 5;
 		Hero h = Dungeon.hero;

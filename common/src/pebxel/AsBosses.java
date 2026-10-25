@@ -98,10 +98,12 @@ final class AsBosses {
 					while (!q.isEmpty()) { int c = q.poll(); mark(c); if (d[c] >= 2) continue;
 						for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < l.length() && Math.abs(n % W - c % W) <= 1 && !l.solid[n] && d[n] > d[c] + 1) { d[n] = d[c] + 1; q.add(n); } } }
 				} else if (i instanceof Tengu.ShockerAbility.ShockerItem) {
-					for (int k : PathFinder.NEIGHBOURS9) mark(h.pos + k);
+					mark(h.pos);   // (its own cell every turn; round it the sparks shown: Tengu.ShockerAbility.ShockerBlob)
 				}
 			}
 		}
+		Blob sh = l.blobs.get(Tengu.ShockerAbility.ShockerBlob.class);   // (a spark cell shocks as it goes out: those lit now)
+		if (sh != null && sh.volume > 0 && sh.cur != null) for (int c = 0; c < l.length() && c < sh.cur.length; c++) if (sh.cur[c] > 0) mark(c);
 		Blob f = l.blobs.get(Tengu.FireAbility.FireBlob.class);
 		if (f != null && f.volume > 0 && f.cur != null) for (int c = 0; c < l.length() && c < f.cur.length; c++) if (f.cur[c] > 0) mark(c);
 	}
@@ -136,14 +138,55 @@ final class AsBosses {
 	 *  it (strategy-reference 4.3): to it and strike it. Pylons never move: one seen is remembered. */
 	static Target dm300(DM300 dm) {
 		Hero h = Dungeon.hero; int hp = h.pos;
-		if (!dm.isSupercharged() || !dm.isAlive()) return null;
+		if (pyL != L) { pyL = L; darkSeen.clear(); gone.clear(); wasCharged = false; }
+		for (Mob m : mobs()) if (m instanceof Pylon && L.heroFOV[m.pos] && m.alignment == Char.Alignment.NEUTRAL) darkSeen.put(m.pos, Actor.now());
+		for (int p : CavesBossLevel.pylonPositions) if (p >= 0 && p < L.length() && L.heroFOV[p] && !(Actor.findChar(p) instanceof Pylon)) gone.add(p);
+		if (!dm.isSupercharged() || !dm.isAlive()) { wasCharged = false; return null; }
 		Mob py = null; int bd = INF;
-		for (Mob m : mobs()) if (m instanceof Pylon && m.alignment == Char.Alignment.ENEMY && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos]) && walkNear(m.pos) < bd) { bd = walkNear(m.pos); py = m; }
-		if (py == null) return null;
-		if (L.adjacent(py.pos, hp)) return new Target(py.pos, ENEMY, "boss: strike the lit pylon");
-		int c = besideStep(py.pos);
-		return c >= 0 ? new Target(c, GO, "boss: to the lit pylon") : null;
+		for (Mob m : mobs()) if (m instanceof Pylon && m.alignment == Char.Alignment.ENEMY && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos]) && L.distance(m.pos, hp) < bd) { bd = L.distance(m.pos, hp); py = m; }
+		if (chargeL != L || !wasCharged) { chargeL = L; chargeAt = Actor.now(); aim = -1; }
+		wasCharged = true;
+		if (py != null) {
+			if (L.adjacent(py.pos, hp)) return new Target(py.pos, ENEMY, "boss: strike the lit pylon");
+			aim = py.pos;
+		} else {   // the lit one not seen: the pylons' places are the arena's (CavesBossLevel.pylonPositions); one not seen dark since the charge began
+			if (aim >= 0 && ((darkSeen.containsKey(aim) && darkSeen.get(aim) >= chargeAt) || gone.contains(aim))) aim = -1;
+			if (aim < 0) { int ad = INF;   // (the nearest not ruled out, kept till it is: no back and forth)
+				for (int p : CavesBossLevel.pylonPositions) {
+					if (p < 0 || p >= L.length() || (darkSeen.containsKey(p) && darkSeen.get(p) >= chargeAt) || gone.contains(p)) continue;
+					if (L.distance(p, hp) < ad) { ad = L.distance(p, hp); aim = p; } } }
+		}
+		if (aim < 0) return null;
+		int st = stepTowards(aim);
+		if (st < 0 && py == null) { gone.add(aim); aim = -1; }   // (no way known there, none to explore: another)
+		return st >= 0 ? new Target(st, GO, py != null ? "boss: to the lit pylon" : "boss: find the lit pylon") : null;
 	}
+
+	/** The first step of the cheapest known way to beside c: the electrified floor and other blows' cells cost 4 a
+	 *  step (better crossed than not reached), the unknown can't be walked; none known that far: the known cell
+	 *  nearest c. One step at a time, so the game's own walk can't take another way. */
+	static int stepTowards(int c) {
+		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
+		int[] cost = new int[N]; Arrays.fill(cost, INF); int[] first = new int[N];
+		PriorityQueue<int[]> q = new PriorityQueue<>((x, y) -> Integer.compare(x[0], y[0]));
+		cost[hp] = 0; first[hp] = -1; q.add(new int[]{0, hp});
+		int best = -1, bs = INF;
+		while (!q.isEmpty()) {
+			int[] e = q.poll(); int u = e[1]; if (e[0] > cost[u]) continue;
+			// beside c, else the edge of the known nearest it (once there it is seen past: no stopping short)
+			int sc = L.distance(u, c) <= 1 ? cost[u] : unseenBy(u) ? 1000 + L.distance(u, c) * 2 + cost[u] : INF;
+			if (u != hp && sc < bs) { bs = sc; best = u; }
+			for (int k : PathFinder.NEIGHBOURS8) { int n = u + k;
+				if (n < 0 || n >= N || Math.abs(n % W - u % W) > 1 || !L.passable[n] || L.avoid[n] || !(known[n] || L.heroFOV[n]) || (seenChar(n) != null && n != hp)) continue;
+				int nc = cost[u] + (danger[n] ? 4 : 1);
+				if (nc < cost[n]) { cost[n] = nc; first[n] = u == hp ? n : first[u]; q.add(new int[]{nc, n}); } }
+		}
+		return best >= 0 ? first[best] : -1;
+	}
+	static boolean unseenBy(int c) { return Assist.unseenBy(c); }
+
+	static final Map<Integer, Float> darkSeen = new HashMap<>(); static final Set<Integer> gone = new HashSet<>();
+	static Level chargeL, pyL; static float chargeAt; static boolean wasCharged; static int litAt = -1, aim = -1;
 
 	/** The Dwarf King on his throne, immune behind his barrier (phase 2): only his minions' deaths wear it down
 	 *  (strategy-reference 4.4); the minions, never him. */

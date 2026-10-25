@@ -36,18 +36,25 @@ final class AsBasics {
 	// a fight going nowhere (BF-smoke4: 8 of 60 games looped on the Great Crab or a necromancer's skeleton)
 	// =============================================================================================================
 	static int stallId = -1, stallBlows, stallLow, stallOff; static Level stallL;
-	static float breakUntil = -1; static int breakId = -1;
+	static float breakUntil = -1, stallAt = -1; static int breakId = -1;
 
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
+		// the blows struck (the hero's last action an attack, once a turn), not what plan A would do: the tactics may move instead
 		Mob m = null;
-		if (planA != null && planA.kind == ENEMY && planA.action == null && planA.cell >= 0) { Char c = Actor.findChar(planA.cell); if (c instanceof Mob && L.adjacent(c.pos, hp)) m = (Mob) c; }
+		if (h.lastAction instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack && Actor.now() != stallAt) {
+			Char c = ((com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack) h.lastAction).target;
+			if (c instanceof Mob && c.isAlive() && L.adjacent(c.pos, hp)) m = (Mob) c;
+		}
 		if (stallL != L) { stallL = L; stallId = -1; breakId = -1; }
-		if (m == null) { if (++stallOff > 3) stallId = -1; }
-		else if (m.id() != stallId) { stallId = m.id(); stallBlows = 0; stallLow = m.HP; stallOff = 0; }
-		else { stallOff = 0; stallBlows++; if (m.HP < stallLow) { stallLow = m.HP; stallBlows = 0; } }
+		if (Actor.now() != stallAt) {
+			stallAt = Actor.now();
+			if (m == null) { if (++stallOff > 3) stallId = -1; }
+			else if (m.id() != stallId) { stallId = m.id(); stallBlows = 0; stallLow = m.HP; stallOff = 0; }
+			else { stallOff = 0; stallBlows++; if (m.HP < stallLow) { stallLow = m.HP; stallBlows = 0; } }
+		}
 		boolean breaking = breakId >= 0 && Actor.now() < breakUntil;
 		if (m == null && !breaking) return null;
 		if (m != null && stallBlows >= STALL) { breakId = m.id(); breakUntil = Actor.now() + 6; stallBlows = 0; breaking = true; }
