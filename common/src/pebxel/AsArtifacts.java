@@ -125,7 +125,8 @@ final class AsArtifacts {
 	// =============================================================================================================
 
 	/** In front of the hands: emergencies (time frozen, chained away), and the Horn before rations when starving. */
-	static Target urgent(Target planA) {
+	static Target urgent(Target planA) { return guard(urgent0(planA)); }
+	static Target urgent0(Target planA) {
 		if (!ON) return null;
 		try {
 			if (Dungeon.hero == null || Assist.L == null) return null;
@@ -157,7 +158,8 @@ final class AsArtifacts {
 	}
 
 	/** After the hands: everything else (a fight's artifact use, then, calm, eating, feeding, wearing, charging). */
-	static Target suggest(Target planA) {
+	static Target suggest(Target planA) { return guard(suggest0(planA)); }
+	static Target suggest0(Target planA) {
 		if (!ON) return null;
 		try {
 			if (Dungeon.hero == null || Assist.L == null) return null;
@@ -177,6 +179,23 @@ final class AsArtifacts {
 			if ((t = skeletonKey()) != null) return t;
 			return null;
 		} catch (Throwable e) { Assist.lastError = e; return null; }
+	}
+
+	/** A use that did nothing (plan A last time, no time passed, the hero where he was: the game refused it) is not
+	 *  offered again for a while: twice at the same moment and it is held back 20 turns. */
+	static final Map<String, Float> noUse = new HashMap<>();
+	static float lastNow = -1; static int lastPos = -1, again;
+	static Target guard(Target t) {
+		float now = Actor.now(); int p = Dungeon.hero == null ? -1 : Dungeon.hero.pos;
+		Target last = Assist.last.isEmpty() ? null : Assist.last.get(0);
+		boolean same = t != null && last != null && last.why.startsWith("art: ") && last.item == t.item && Objects.equals(last.action, t.action) && last.kind == t.kind;
+		if (same && now == lastNow && p == lastPos) again++; else if (t != null) again = 0;
+		lastNow = now; lastPos = p;
+		noUse.values().removeIf(u -> u < now);
+		if (t == null) return null;
+		String k = (t.item == null ? "-" : t.item.getClass().getSimpleName()) + ":" + t.action + ":" + t.kind;
+		if (again >= 2) { noUse.put(k, now + 20); again = 0; }
+		return noUse.containsKey(k) ? null : t;
 	}
 
 	// =============================================================================================================
@@ -372,10 +391,12 @@ final class AsArtifacts {
 		DriedRose r = worn(DriedRose.class);
 		if (r == null || !can(r, DriedRose.AC_SUMMON)) return null;
 		if (adj && H.HP * 3 < H.HT) return null;
+		boolean room = false; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (c >= 0 && c < Dungeon.level.length() && Actor.findChar(c) == null && (Dungeon.level.passable[c] || Dungeon.level.avoid[c])) room = true; }
+		if (!room) return null;   // (no free cell beside the hero for it)
 		return use(r, DriedRose.AC_SUMMON, -1, "call the ghost");
 	}
 
-	/** A foe in sight: the chains pull a shooter into reach, the armband blinds and cripples one beside the hero, the
+	/** A foe in sight: the chains pull a shooter into reach, the armband blinds and cripples a fresh one beside the hero (at two thirds of its health or more: not one nearly dead), the
 	 *  sandals' seed at a foe (or Earthroot on the hero beside one). */
 	static Target fight() {
 		EtherealChains ec = worn(EtherealChains.class);
@@ -392,7 +413,7 @@ final class AsArtifacts {
 		}
 		MasterThievesArmband ab = worn(MasterThievesArmband.class);
 		if (ab != null && adj && can(ab, MasterThievesArmband.AC_STEAL)) {
-			for (Mob m : adjFoes) if (m.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class) == null && m.HP >= 8 && !(m instanceof Mimic)) return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal, blind and cripple");   // (blinded: shown on it)
+			for (Mob m : adjFoes) if (m.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class) == null && m.HP >= 8 && m.HP * 3 >= m.HT * 2 && !(m instanceof Mimic)) return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal, blind and cripple");   // (blinded: shown on it)
 		}
 		SandalsOfNature sn = worn(SandalsOfNature.class);
 		if (sn != null && can(sn, SandalsOfNature.AC_ROOT) && sn.curSeedEffect != null) {
@@ -497,8 +518,8 @@ final class AsArtifacts {
 				if (!(i instanceof Scroll) || !i.isIdentified() || i instanceof ScrollOfUpgrade) continue;
 				if ((i instanceof ScrollOfTeleportation || i instanceof ScrollOfTerror || i instanceof ScrollOfMirrorImage || i instanceof ScrollOfIdentify) && i.quantity() < 2) continue;   // (one kept to read)
 				if (i instanceof ScrollOfRemoveCurse && (cw || i.quantity() < 2)) continue;
-				boolean takes; try { java.lang.reflect.Field f = UnstableSpellbook.class.getDeclaredField("scrolls"); f.setAccessible(true); takes = ((List<?>) f.get(sb)).contains(i.getClass()); } catch (Throwable e) { takes = false; }
-				if (!takes) continue;   // (its window shows which it takes)
+				boolean takes; try { java.lang.reflect.Field f = UnstableSpellbook.class.getDeclaredField("scrolls"); f.setAccessible(true); List<?> l = (List<?>) f.get(sb); takes = l.indexOf(i.getClass()) >= 0 && l.indexOf(i.getClass()) <= 1; } catch (Throwable e) { takes = false; }
+				if (!takes) continue;   // (only the next two it asks for, as its description shows)
 				Target t = use(sb, UnstableSpellbook.AC_ADD, -1, "feed the spellbook a " + i.getClass().getSimpleName()); t.on = i; return t;
 			}
 		}
