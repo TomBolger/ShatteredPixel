@@ -93,6 +93,8 @@ final class AsAbilities {
 				if (d <= 1) adj.add(m);
 			}
 		}
+		if (!near.isEmpty()) { if (fightHP < 0 || now - fightSeen > 10) fightHP = H.HP; fightSeen = now; }
+		else if (now - fightSeen > 10) fightHP = -1;
 		return true;
 	}
 
@@ -106,10 +108,16 @@ final class AsAbilities {
 		}
 		return c;
 	}
-	static boolean strong(Mob m) { return Assist.boss(m) || cost(m) >= Math.max(4, H.HP * STRONG / 100.0); }
+	/** Kinds the duel sums undersell (their bolts and gazes, charms, rage, explosions): strong whatever the sum says. */
+	static final Set<String> NASTY = new HashSet<>(Arrays.asList("Eye", "Warlock", "Succubus", "Golem", "RipperDemon", "Scorpio", "AcidicScorpio", "Brute", "ArmoredBrute",
+			"DM201", "FireElemental", "FrostElemental", "ShockElemental", "ChaosElemental", "Elemental", "SpectralNecromancer", "Necromancer", "GnollGeomancer", "CrystalGuardian", "Wraith", "TormentedSpirit"));
+	static boolean strong(Mob m) { return Assist.boss(m) || NASTY.contains(m.getClass().getSimpleName()) || cost(m) >= Math.max(4, H.HP * STRONG / 100.0); }
 	static Mob strongest(List<Mob> l) { Mob b = null; for (Mob m : l) if (b == null || cost(m) > cost(b)) b = m; return b; }
 	static boolean losing() { return fightCost >= H.HP * 0.8; }
-	static boolean strongFight() { return anyStrong || fightCost >= H.HP * 0.6; }
+	/** A hard fight: a strong foe in it, its sum 60% of the hero's health, three foes or more, or it has cost a quarter of his health already. */
+	static boolean strongFight() { return anyStrong || fightCost >= H.HP * 0.6 || near.size() >= 3 || hurt() >= 0.25f; }
+	static float hurt() { return fightHP < 0 ? 0 : (fightHP - H.HP) / (float) Math.max(1, H.HT); }
+	static int fightHP = -1; static float fightSeen = -99;
 
 	static boolean ok(Item it, String action) { return it != null && !Assist.declined(it.getClass(), action) && !ban.containsKey(key(it, action)); }
 	static String key(Item it, String action) { return (it == null ? "-" : it.getClass().getSimpleName()) + ":" + action; }
@@ -626,7 +634,9 @@ final class AsAbilities {
 
 	/** The armour ability in a strong fight, by its kind. */
 	static Target armorAbility() {
-		ClassArmor ca = classArmor(); if (!abilityReady(ca) || near.isEmpty() || !strongFight()) return null;
+		ClassArmor ca = classArmor(); if (!abilityReady(ca) || near.isEmpty()) return null;
+		boolean spare = ca.charge >= Math.min(95, 2 * H.armorAbility.chargeUse(H));   // (two uses' worth, or nearly full: it'd go to waste)
+		if (!strongFight() && !spare) return null;
 		String n = H.armorAbility.getClass().getSimpleName();
 		Mob s = strongest(near); Mob e = adj.isEmpty() ? null : strongest(adj);
 		boolean inLine = new Ballistica(hp, s.pos, Ballistica.PROJECTILE).collisionPos == s.pos;
@@ -637,7 +647,7 @@ final class AsAbilities {
 			case "Endure": if (e != null && (Assist.boss(e) || losing())) cell = hp; break;
 			case "ElementalBlast": if (close >= 2 || e != null) cell = hp; break;
 			case "WildMagic": if (inLine && hasWand()) cell = s.pos; break;
-			case "DeathMark": case "SpectralBlades": if (inLine && strong(s)) cell = s.pos; break;
+			case "DeathMark": case "SpectralBlades": if (inLine && (strong(s) || spare)) cell = s.pos; break;
 			case "Ratmogrify": if (inLine && strong(s) && !Assist.boss(s)) cell = s.pos; break;
 			case "Challenge": if (strong(s) && !Assist.boss(s) && Assist.distance(s.pos, hp) <= 5) cell = s.pos; break;
 			case "ElementalStrike": if (e != null) cell = e.pos; break;
