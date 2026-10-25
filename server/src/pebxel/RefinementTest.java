@@ -454,6 +454,112 @@ public final class RefinementTest {
     }
     static Object get(Object o, String name, Class<?> c) throws Exception { Field f = c.getDeclaredField(name); f.setAccessible(true); return f.get(o); }
 
+    // ---- fights: what is passed over in a fight comes back after it; a blow is no pass; foes seen coming are waited for ----
+    static Field nowF;
+    static void setNow(float t) throws Exception { if (nowF == null) { nowF = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.class.getDeclaredField("now"); nowF.setAccessible(true); } nowF.setFloat(null, t); }
+    static com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat rat(int c, boolean hunting) throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat r = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat();
+        r.pos = c; r.state = r.HUNTING; GameScene.add(r);
+        Dungeon.level.updateFieldOfView(Dungeon.hero, Dungeon.level.heroFOV);
+        @SuppressWarnings("unchecked") Map<Integer, Boolean> hm = (Map<Integer, Boolean>) get(null, "huntMem", Assist.class); hm.put(r.id(), hunting);
+        return r;
+    }
+    static void gone(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m) { m.destroy(); if (m.sprite != null) m.sprite.killAndErase(); Dungeon.level.updateFieldOfView(Dungeon.hero, Dungeon.level.heroFOV); }
+    static Assist.Target entry(java.util.List<Assist.Target> l, int kind, int obj) { for (Assist.Target t : l) if (t.kind == kind && objOf(t) == obj) return t; return null; }
+    static void fights(WatchApp app) throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero; int pos0 = h.pos, W = L.width();
+        float t00 = now();
+        Field rf = com.shatteredpixel.shatteredpixeldungeon.levels.RegularLevel.class.getDeclaredField("rooms"); rf.setAccessible(true);
+        @SuppressWarnings("unchecked") java.util.List<com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room> rooms = (java.util.List<com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room>) rf.get(L);
+        com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room room = null; com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room.Door door = null;
+        for (com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room r : rooms) {
+            if (r.width() < 7 || r.height() < 7 || r.inside(L.cellToPoint(L.entrance())) || r.inside(L.cellToPoint(L.exit()))) continue;
+            for (com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room.Door d : r.connected.values()) if (d != null && door == null) { room = r; door = d; }
+            if (room != null) break;
+        }
+        check(room != null, "a room with a door for the fights");
+        // a dead end: the room's other doors walled up, the room alone known, the floor plain
+        L.heaps.clear(); L.mobs.clear(); Arrays.fill(L.visited, false); Arrays.fill(L.mapped, false);
+        for (com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room.Door d : room.connected.values()) if (d != null && d != door) com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(d.x + d.y * W, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.WALL);
+        int dc = door.x + door.y * W; com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(dc, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR);
+        for (int y = room.top; y <= room.bottom; y++) for (int x = room.left; x <= room.right; x++) { int c = x + y * W;
+            if (x > room.left && x < room.right && y > room.top && y < room.bottom) com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EMPTY);
+            L.visited[c] = true; }
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(dc, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR);
+        // the hero in the corner farthest from the door
+        int far = -1; for (int y = room.top + 1; y < room.bottom; y++) for (int x = room.left + 1; x < room.right; x++) { int c = x + y * W; if (far < 0 || L.distance(c, dc) > L.distance(far, dc)) far = c; }
+        h.pos = far; L.updateFieldOfView(h, L.heroFOV);
+        WatchSettings.assist(2); WatchSettings.itemAssist(false); Assist.reset();
+        // 1. gold passed over in a fight is held back only till it's over (a kill clearing the threat, or calm a while)
+        int gc = -1, rc = -1;
+        for (int y = room.top + 1; y < room.bottom; y++) for (int x = room.left + 1; x < room.right; x++) { int c = x + y * W; int d = L.distance(c, h.pos);
+            if (gc < 0 && d == 2) gc = c; }
+        for (int y = room.top + 1; y < room.bottom; y++) for (int x = room.left + 1; x < room.right; x++) { int c = x + y * W;
+            if (rc < 0 && L.distance(c, h.pos) == 4 && L.distance(c, gc) >= 2 && L.heroFOV[c]) rc = c; }
+        check(gc >= 0 && rc >= 0, "cells for the gold and the gnoll");
+        L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.Gold(20), gc).seen = true;
+        for (int round = 0; round < 2; round++) {
+            com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat r = rat(rc, round == 0);   // (the second wanders off: not coming)
+            java.util.List<Assist.Target> l = Assist.plan(false, null); Assist.Target g = entry(l, Assist.PICKUP, gc);
+            check(g != null, "the gold is listed in the fight: " + l);
+            Assist.passed(g, h.pos, h.pos);   // (something else done: a step back, a wait)
+            check(Assist.heldInFight(gc) && !Assist.skipped(gc), "gold passed over in a fight is held back for the fight, not for the floor");
+            if (round == 0) gone(r);   // (the kill: Mob.destroy counts it)
+            else { Dungeon.level.mobs.remove(r); com.shatteredpixel.shatteredpixeldungeon.actors.Actor.remove(r); r.sprite.killAndErase(); Dungeon.level.updateFieldOfView(h, Dungeon.level.heroFOV); }   // (gone off, no kill)
+            if (round == 1) { Assist.Target a = first(); check(objOf(a) != gc, "the gnoll just gone from sight: the gold still held back: " + a); setNow(now() + Assist.CALM); }
+            Assist.Target a = first();
+            check(objOf(a) == gc && !Assist.heldInFight(gc), "the fight over (" + (round == 0 ? "a kill" : "calm") + "): the gold is plan A again: " + a);
+        }
+        // 2. a blow struck is no pass: chosen from the list past the gold, or a tap on the foe beside him
+        int ac = -1; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = h.pos + k; if (ac < 0 && L.passable[c] && L.distance(c, gc) >= 1 && c != gc && room.inside(L.cellToPoint(c))) ac = c; }
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat r = rat(ac, true);
+        java.util.List<Assist.Target> l = Assist.plan(false, null); Assist.Target g = entry(l, Assist.PICKUP, gc), e = entry(l, Assist.ENEMY, ac);
+        check(g != null && e != null, "the gold and the gnoll beside him listed: " + l);
+        Assist.chose(e, l.get(0)); Assist.passed(g, e.cell, h.pos);   // (as Controls.select: the entries cycled past on the way)
+        check(!Assist.heldInFight(gc) && !Assist.skipped(gc), "attacking from the list is no pass over the gold");
+        Assist.passed(g, h.pos, h.pos);   // (a tap on the foe: he stays put and strikes)
+        check(!Assist.heldInFight(gc) && !Assist.skipped(gc), "a blow struck by a tap is no pass over the gold");
+        gone(r); L.heaps.clear(); setNow(now() + 5); Assist.reset();
+        // 3. a dead end: foes seen coming from the door's way, now out of sight: wait for them, don't walk out to them
+        L.updateFieldOfView(h, L.heroFOV);
+        Assist.Target a0 = first();
+        check(a0 != null && a0.kind == Assist.GO, "the dead end alone: plan A walks out to explore: " + a0);
+        int out = -1; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = dc + k; if (out < 0 && L.passable[c] && !room.inside(L.cellToPoint(c)) && L.map[c] != com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR) out = c; }
+        check(out >= 0 && !L.heroFOV[out], "a cell past the door, out of sight");
+        r = rat(dc, true); first();   // (seen at the door, coming)
+        r.pos = out; L.updateFieldOfView(h, L.heroFOV); check(!L.heroFOV[out], "the gnoll out of sight past the door");
+        setNow(now() + 1);
+        Assist.Target a = first();
+        check(Assist.threats() > 0 && a != null && a.kind == Assist.WAIT && a.why.startsWith("hold") && Assist.WAIT_ACT.equals(a.action), "foes seen coming beyond the dead end's door: plan A waits, not out: " + a + " list " + Assist.plan(false, null));
+        boolean also = false; for (Assist.Target t : Assist.plan(false, null)) also |= t.kind == Assist.GO;
+        check(also, "the way out is still offered further down");
+        setNow(now() + L.distance(h.pos, dc) + 8);   // (it had time to come and didn't)
+        a = first();
+        check(a != null && !a.why.startsWith("hold"), "the threat had time to come and didn't: plan A explores again: " + a);
+        gone(r);
+        setNow(t00); Assist.reset();
+        Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); WatchSettings.itemAssist(true);
+        h.pos = pos0; L.updateFieldOfView(h, L.heroFOV);
+        // 4. the hands' item flies to the Select tag: from the backpack for a bag item, from its quickslot for a slot item
+        oc = new Controls(); WatchSettings.assist(1); Assist.reset(); h.HP = h.HT; h.buff(Hunger.class).satisfy(1000);
+        com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength str = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength(); str.identify();
+        h.belongings.backpack.items.add(str);
+        int f0 = pebxel.ui.WatchHud.flights;
+        a = planA(app, -1, -1); frames(app, 3);
+        check(a != null && a.item == str, "a known Strength potion is suggested: " + a);
+        check(pebxel.ui.WatchHud.flights > f0 && pebxel.ui.WatchHud.flyFrom == pebxel.ui.WatchHud.TB_BAG, "a bag item's suggestion flies from the backpack to the Select tag (" + pebxel.ui.WatchHud.flights + " from " + pebxel.ui.WatchHud.flyFrom + ")");
+        h.belongings.backpack.items.remove(str);
+        com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfExperience xp = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfExperience(); xp.identify();
+        h.belongings.backpack.items.add(xp); Dungeon.quickslot.setSlot(0, xp);
+        Field st = Controls.class.getDeclaredField("targetsStale"); st.setAccessible(true); st.set(oc, true);
+        f0 = pebxel.ui.WatchHud.flights; frames(app, 5);
+        check(oc != null && list().size() > 0 && list().get(0).item == xp, "a quickslot's potion is suggested: " + list());
+        check(pebxel.ui.WatchHud.flights > f0 && pebxel.ui.WatchHud.flyFrom == pebxel.ui.WatchHud.TB_Q[0], "a slot item's suggestion flies from its quickslot (" + pebxel.ui.WatchHud.flyFrom + ")");
+        h.belongings.backpack.items.remove(xp); Dungeon.quickslot.clearSlot(0); st.set(oc, true); frames(app, 3);
+        WatchSettings.assist(2); oc = null; Assist.reset();
+        System.out.println("fights: gold passed over in a fight back after it (a kill, calm), a blow is no pass, foes seen coming past a dead end's door waited for (till they had time to come), the hands' item flies from the bag / its slot: ok");
+    }
+
     public static void main(String[] args) {
         try { run(); } catch (Throwable e) { e.printStackTrace(); System.exit(1); }
     }
@@ -501,6 +607,7 @@ public final class RefinementTest {
         buttons(app);
         places();
         options();
+        fights(app);
         oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); oc = null;
         chestFromBeside();
 

@@ -505,6 +505,7 @@ public class WatchHud extends Group {
 		boolean act = alive && kind > 0 && (cell >= 0 || kind >= 4);
 		Item use = kind == 4 || kind == 5 ? hooks.targetItem() : null;
 		if (kind == 4 || kind == 5) act &= use != null;
+		if (act && kind != 4 && kind != 5) flown = null;   // (something else suggested since: the item flies again when it comes back, as Pebble PD's s_hand_key)
 		String actKey = !act ? "-" : kind == 4 || kind == 5 ? kind + "/" + use.image() : kind == 1 ? "1/" + (weapon == null ? 0 : weapon.image()) : kind == 2 && there != null ? "2/" + thereTop.image() : "" + kind;
 		if (tagChanged(1, actKey) && act) {
 			a = ctag(1);
@@ -563,8 +564,12 @@ public class WatchHud extends Group {
 		int[] r = round ? tbBox[b] : buttonRect(b);
 		float tx = s.x, ty = s.y;
 		s.x = r[0] + Math.round((r[2] - s.width()) / 2); s.y = r[1] + Math.round((r[3] - s.height()) / 2);
-		into.add(new com.watabou.noosa.tweeners.PosTweener(s, new com.watabou.utils.PointF(tx, ty), 0.7f));
+		into.add(new com.watabou.noosa.tweeners.PosTweener(s, new com.watabou.utils.PointF(tx, ty), FLY_S));
+		flights++; flyFrom = b;
 	}
+	public static final float FLY_S = 0.7f;
+	/** Flights started, and the button the last one left from (tests). */
+	public static int flights, flyFrom = -1;
 
 	/** A tag: PD's 16x14 tag art stretched, reaching 4 px past its rectangle (off the screen's edge). */
 	private void tag(int[] a, String art) {
