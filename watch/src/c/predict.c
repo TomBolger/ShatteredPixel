@@ -220,7 +220,7 @@ void predict_pass(int fresh, int w, int h, const uint8_t *d, int n) {
 }
 static bool ground(int c) { return s_pass[c >> 3] & (1 << (c & 7)); }
 
-#define TAP_R 24                 // the way is worked out in the square this far round him (Controls.TAP_R): any way of
+#define TAP_R 20                 // the way is worked out in the square this far round him (Controls.TAP_R): any way of
                                  // up to TAP_R steps lies in it, so it is the same as on the whole floor
 #define FAR 255
 bool predict_tap(int x, int y, uint32_t now) {

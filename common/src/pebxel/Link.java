@@ -184,7 +184,6 @@ public final class Link {
 				if (o == null) {
 					o = new Obj(); o.id = freeIds.isEmpty() ? nextId++ : freeIds.poll(); o.kind = st[0];
 					objs.put(g, o);
-					if (DEBUG_NEW && (g instanceof NinePatch || g.getClass() == Image.class)) { StringBuilder pc = new StringBuilder(); for (Gizmo q = g.parent; q != null; q = q.parent) pc.append(" < ").append(q.getClass().getName().replaceAll(".*\\.", "")); System.out.printf("NEWPIC %.3f %s %s%n", now, g.getClass().getSimpleName(), pc); }
 					if (DEBUG_NEW && g instanceof RenderedText) System.out.println("NEWTEXT " + ((RenderedText) g).text() + " in " + g.parent.getClass().getName());
 					cmd(C_NEW); u16(o.id); u16(prev); out.write(st, 0, st.length); o.stat = st;
 					sendDyn(g, o, dyn); stat(g, "new", out.size() - before);
@@ -207,7 +206,6 @@ public final class Link {
 						}
 					} else if (drifted(g, o, dyn) || (tweens.get(g) != null && tweens.get(g) != o.tw && !NO_UNTIL)) {
 						// (a new movement starting is sent at once, not a frame later when it shows as a drift)
-						if (System.getenv("MOVEWHY") != null && g.getClass().getSimpleName().equals(System.getenv("MOVEWHY"))) { com.watabou.noosa.tweeners.Tweener tw2 = tweens.get(g); System.out.printf("movewhy %.3f %s tw %s was %s y %.1f%n", now, g.getClass().getSimpleName(), tw2 == null ? "-" : tw2.getClass().getSimpleName() + tw2.elapsed + "/" + tw2.interval, o.tw == null ? "-" : o.tw.getClass().getSimpleName(), dyn[D_Y] / 8); }
 						if (step(g, o, dyn)) stat(g, "step", out.size() - before);
 						else { cmd(C_MOVE); u16(o.id); sendDyn(g, o, dyn); stat(g, "move", out.size() - before); }
 					}
@@ -1191,17 +1189,6 @@ public final class Link {
 			last = c; lastState = one ? st[t[0]] : -1;
 		}
 		byte[] bb = b.toByteArray();
-		if (System.getenv("FOGDBG") != null) {
-			int changed = 0, mixed = 0, toSight = 0, fromSight = 0;
-			for (int c = 0; c < cw * ch; c++) {
-				int x = c % cw * 2, y = c / cw * 2, t0 = y * w + x; int[] t = {t0, t0 + 1, t0 + w, t0 + w + 1};
-				boolean chg = false; for (int q : t) if (st[q] != old[q]) chg = true;
-				if (!chg) continue; changed++;
-				if (!(st[t[0]] == st[t[1]] && st[t[0]] == st[t[2]] && st[t[0]] == st[t[3]])) mixed++;
-				if (st[t[0]] == 0 && old[t[0]] != 0) toSight++; if (st[t[0]] != 0 && old[t[0]] == 0) fromSight++;
-			}
-			System.out.printf("FOG %.3f %dx%d changed %d mixed %d in %d out %d bytes %d%n", now, cw, ch, changed, mixed, toSight, fromSight, bb.length);
-		}
 		if (FOG_CHECK) {   // (tests: the watch's reading of it gives the states)
 			byte[] chk = old.clone(); int[] q = {0};
 			java.util.function.IntSupplier vi = () -> { int v = 0, sh = 0, c; do { c = bb[q[0]++] & 255; v |= (c & 127) << sh; sh += 7; } while ((c & 128) != 0); return v; };
@@ -1462,7 +1449,9 @@ public final class Link {
 		// The rest just carry on (each marked newest, they arrived ever later than their time: on a slow radio the
 		// watch then held everything after a big change, a level, seconds late)
 		List<byte[]> out = new ArrayList<>();
-		int ms = pendNewest - aheadMs;   // (the clock as it would be without running ahead: Ahead)
+		// (the clock now, as it would be without running ahead, Ahead: not the newest frame's, which after a still while
+		// was seconds old, and the watch took the message for that late, and held its play-out back for seconds after)
+		int ms = Math.max(pendNewest, nowMs()) - aheadMs;
 		// C_READY x, y (s16, x8): the hero is ready again there (see sync), right after C_LATEST
 		int[] rd = Pacer.OLD ? null : ready; ready = null;
 		// C_AHEAD from, to (u32 ms; to 0xFFFFFFFF: not over yet): these frames are a walk worked out ahead (Ahead), after that

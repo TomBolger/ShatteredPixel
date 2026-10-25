@@ -469,6 +469,7 @@ public class RadioTest {
 			if (mobs.isEmpty()) break;
 			staleTargets();   // (the enemies first, as when they come into view)
 			run(0.4);
+			if (System.getenv("PLANS") != null) { System.out.println("  plan: " + (sim.plans.isEmpty() ? "-" : sim.plans.get(sim.plans.size() - 1)) + " plan A " + (targetsNow().isEmpty() ? "-" : targetsNow().get(0)) + " hero " + Dungeon.hero.pos); }
 			button("attack", Controls.SELECT);
 			run(1.0);
 		}
@@ -563,7 +564,7 @@ public class RadioTest {
 			if (VERBOSE) System.out.println("    now: " + Game.scene().getClass().getSimpleName() + (Ui.topWindow() != null ? " + " + Ui.topWindow().getClass().getSimpleName() : ""));
 			if (VERBOSE) for (Press p : presses.subList(p0, presses.size())) System.out.printf("      %s at %.2f: %.0f ms%n", p.what, p.at, (p.seen - p.at) * 1000);
 		}
-		System.out.printf("radio measured %.0f bytes/s (budget %d)%n", pacer.rate(), pacer.budget());
+		System.out.printf("radio measured %.0f bytes/s (budget %d); the game held for the radio on walks %d frames%n", pacer.rate(), pacer.budget(), stalls());
 		System.out.printf("radio: %d nacks, %d lost; watch got %d messages it couldn't apply%n", nacks, drops, sim.errors);
 		scene("end");
 		if (traceOut != null) traceOut.close();

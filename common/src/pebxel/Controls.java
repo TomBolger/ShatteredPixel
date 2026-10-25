@@ -1138,7 +1138,9 @@ public class Controls {
 			if (mid < 0 || (rest != null && shiftFor(cell, rest, cam) != null)) { w16(b, 0x7FFF); w16(b, 0x7FFF); }
 			else { w16(b, Math.round(xy[0] * 8)); w16(b, Math.round(xy[1] * 8)); }
 			Assist.Target t = i < plan.size() && plan.size() == targets.size() ? plan.get(i) : null;
-			boolean walks = t == null || t.kind == Assist.GO || t.kind == Assist.PICKUP || (t.kind == Assist.ENEMY && t.action == null);   // (an item's use, a wait: no walk)
+			// (an item's use, a wait: no walk. Nor towards a monster while the box is off the watch: he may well have come
+			// to the hero meanwhile, and a blow is struck instead of the steps shown)
+			boolean walks = t == null || t.kind == Assist.GO || t.kind == Assist.PICKUP || (t.kind == Assist.ENEMY && t.action == null && mid >= 0);
 			List<Integer> path = aiming || hid < 0 || i >= PLAN_WALKS || !walks ? null : steps(h, cell);
 			int k = path == null ? 0 : Math.min(PLAN_STEPS, path.size());
 			byte[] dirs = new byte[k];
@@ -1154,7 +1156,7 @@ public class Controls {
 		return b.toByteArray();
 	}
 	/** Cells the watch looks at round the hero for a tap's walk (predict.c TAP_R: its way is worked out in that square). */
-	static final int TAP_R = 24, TAP_HOT = 32;
+	static final int TAP_R = 20, TAP_HOT = 32;
 	/**
 	 * What the watch needs to walk the hero at once on a tap of the map, as the game will (CellSelector.onClick, then
 	 * Hero.handle and getCloser): the ground he may walk (Link.pass: as Hero.getCloser's, where he has been or mapped),
@@ -1166,6 +1168,7 @@ public class Controls {
 		Level lv = Dungeon.level;
 		if (no || h.rooted || h.flying || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Amok.class) != null || Char.hasProp(h, Char.Property.LARGE)) { b.write(0); return; }
 		int len = lv.length(), w = lv.width();
+		if (w > 255 || lv.height() > 255) { b.write(0); return; }   // (C_PASS: a byte a side)
 		boolean[] pass = new boolean[len];
 		for (int i = 0; i < len; i++) pass[i] = lv.passable[i] && (lv.visited[i] || lv.mapped[i]);
 		h.modifyPassable(pass);

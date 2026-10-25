@@ -133,8 +133,10 @@ static bool s_flush;         // play everything waiting now, due or not
 #define SNAP GAME_MS(600)    // ...unless it is this far off (game ms): the phone's clock jumped, or stood still
 
 // the delay towards where the messages lately want it (at most DRIFT's pace, a jump of the phone's clock at once)
+static bool s_after_walk;    // the delay was raised to a walk's (due_of): it comes back down quicker, nothing walking
 static void off_move(uint32_t now) {
-  int32_t want = s_base + MARGIN + s_jit, d = want - s_off, step = (int32_t)(now - s_off_at) / DRIFT;
+  int32_t want = s_base + MARGIN + s_jit, d = want - s_off, step = (int32_t)(now - s_off_at) / (s_after_walk && d < 0 ? DRIFT / 3 : DRIFT);
+  if (d >= 0) s_after_walk = false;
   s_off_at = now;
   if (d > SNAP || d < -SNAP) s_off = want;
   else s_off += d > step ? step : d < -step ? -step : d;
@@ -161,7 +163,7 @@ static uint32_t due_of(uint32_t st) {
   // (the frames after a walk played later than the usual delay, put back below, or begun at a delay that has come down
   // since: they go on from it, the delay coming back down slowly as after any other late message. At the usual delay
   // they were due before the walk's end and played at once: his last step or two in a leap)
-  if (s_wk.on && s_wk.join && s_wk.a1 != NO_END && (int32_t)(st - s_wk.a1) > 0) { s_wk.join = false; if (s_wk.off > s_off) { s_off = s_wk.off; s_off_at = now_ms(); } }
+  if (s_wk.on && s_wk.join && s_wk.a1 != NO_END && (int32_t)(st - s_wk.a1) > 0) { s_wk.join = false; if (s_wk.off > s_off) { s_off = s_wk.off; s_off_at = now_ms(); s_after_walk = true; } }
   uint32_t d = st + s_off;
   // (from before the walk: played by its start at the latest)
   if (s_wk.on && (int32_t)(st - s_wk.a0) < 0 && (int32_t)(d - (s_wk.a0 + s_wk.off)) > 0) d = s_wk.a0 + s_wk.off;
@@ -230,9 +232,10 @@ static void pump(void *data) {
       // A walk's frame that came late (the radio fell behind it) puts the rest of the walk back by as much: the hero
       // stops at the end of his step until it comes and walks on from there. Played as late as it came, as other
       // frames are, he leapt on to where he would have been by then: a cell or two at once. (Not while the watch
-      // shows him walking ahead, predict.c: there the phone's frames catching up don't show)
+      // shows him walking ahead, predict.c: there the phone's frames catching up don't show; nor at the walk's start,
+      // which catches up on purpose, walk_heard: put back, a late start held the delay up for seconds after)
       Walk *w = rush ? NULL : walk_of(stamp_at(m->data + m->pos));
-      if (w && (int32_t)(now - due) > STALL_SLACK && !predict_hero()) {
+      if (w && (int32_t)(now - due) > STALL_SLACK && !predict_hero() && (int32_t)(stamp_at(m->data + m->pos) - w->a0) > CATCH) {
 #ifdef TRACE_WALK
         APP_LOG(APP_LOG_LEVEL_INFO, "walk put back %d ms (queue %d)", (int)(now - due), s_qbytes);
 #endif
