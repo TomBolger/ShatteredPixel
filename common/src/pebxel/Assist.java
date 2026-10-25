@@ -112,69 +112,69 @@ public final class Assist {
 	// =============================================================================================================
 	// state kept between turns (reset per floor)
 	// =============================================================================================================
-	private static Level floor;                    // the floor this state is for
-	private static int goal = -1;                  // look() / explore: the spot chosen before (anti-dither)
-	private static final Set<Integer> passed = new HashSet<>();     // things put down on purpose, or no use
-	private static final Set<Integer> skippedHeaps = new HashSet<>();   // things the player passed over: never plan A again this floor, still last in the list
-	private static final LinkedHashMap<String, Integer> declined = new LinkedHashMap<>();   // hands suggestions passed over (class:action -> how things stood)
-	private static final Map<Integer, Float> demoted = new HashMap<>();   // objectives passed over: behind the rest till then (game time)
+	static Level floor;                    // the floor this state is for
+	static int goal = -1;                  // look() / explore: the spot chosen before (anti-dither)
+	static final Set<Integer> passed = new HashSet<>();     // things put down on purpose, or no use
+	static final Set<Integer> skippedHeaps = new HashSet<>();   // things the player passed over: never plan A again this floor, still last in the list
+	static final LinkedHashMap<String, Integer> declined = new LinkedHashMap<>();   // hands suggestions passed over (class:action -> how things stood)
+	static final Map<Integer, Float> demoted = new HashMap<>();   // objectives passed over: behind the rest till then (game time)
 	static final int DEMOTE = 20;                  // turns an objective passed over stays behind the rest
-	private static boolean upgradeHeld;            // an upgrade was passed over: only for worn-down gear from now on
-	private static int ovrC = -1;                  // the player's choice: -1 none, WAY: only the way, else an objective cell
-	private static final int WAY = -2;
-	private static int ovrDir = -1;                // its way (pang 0..63)
-	private static boolean ovrObj, ovrUnseen;      // chosen from the list (an objective) / it was unseen when chosen
-	private static int wayOn = -1;                 // the player's way ran out: tgt2 offers the next click that way, once
-	private static boolean grassSkip, planAGrass; private static int grassKey;
-	private static int vetoId = -1; private static float vetoUntil;
-	private static int vetoStand = -1; private static float vetoStandUntil;   // tactics' spot overridden
-	private static int resumeCell = -1; private static float resumeUntil;
-	private static boolean stepBackWaited;         // the doorway rule: waited once after a step back
-	private static int waitId = -1, waitCount;     // (the same enemy waited for again and again: stop)
-	private static int lastPos = -1, from = -1;
-	private static boolean[] srchFrom, checked;    // searched from / cells searched
-	private static boolean fishSeen; private static float fishAt = -99;               // a piranha seen on this floor: keep out of the water
-	private static boolean[] hazMem, trapMem; private static Object fadingSeen;               // gas / fire seen on the cell and not seen gone since (only what the hero saw)
-	private static final Set<Integer> sentries = new HashSet<>();   // sentries seen (they never move)
-	private static boolean[] sentryZone; private static int sentryKey = -1;
-	private static final Map<Integer, Integer> talked = new HashMap<>();
-	private static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
-	private static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
-	private static int actPos = -1, actCell = -1, actKind; private static float actTime = -1; private static Item actItem;
-	private static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
-	private static float floorT0;
-	private static int eatBand;
+	static boolean upgradeHeld;            // an upgrade was passed over: only for worn-down gear from now on
+	static int ovrC = -1;                  // the player's choice: -1 none, WAY: only the way, else an objective cell
+	static final int WAY = -2;
+	static int ovrDir = -1;                // its way (pang 0..63)
+	static boolean ovrObj, ovrUnseen;      // chosen from the list (an objective) / it was unseen when chosen
+	static int wayOn = -1;                 // the player's way ran out: tgt2 offers the next click that way, once
+	static boolean grassSkip, planAGrass; private static int grassKey;
+	static int vetoId = -1; private static float vetoUntil;
+	static int vetoStand = -1; private static float vetoStandUntil;   // tactics' spot overridden
+	static int resumeCell = -1; private static float resumeUntil;
+	static boolean stepBackWaited;         // the doorway rule: waited once after a step back
+	static int waitId = -1, waitCount;     // (the same enemy waited for again and again: stop)
+	static int lastPos = -1, from = -1;
+	static boolean[] srchFrom, checked;    // searched from / cells searched
+	static boolean fishSeen; private static float fishAt = -99;               // a piranha seen on this floor: keep out of the water
+	static boolean[] hazMem, trapMem; private static Object fadingSeen;               // gas / fire seen on the cell and not seen gone since (only what the hero saw)
+	static final Set<Integer> sentries = new HashSet<>();   // sentries seen (they never move)
+	static boolean[] sentryZone; private static int sentryKey = -1;
+	static final Map<Integer, Integer> talked = new HashMap<>();
+	static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
+	static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
+	static int actPos = -1, actCell = -1, actKind; private static float actTime = -1; private static Item actItem;
+	static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
+	static float floorT0;
+	static int eatBand;
 	// mind reading: the list as it was last taken
-	private static int mindPos = -1; private static Level mindFloor;
-	private static int[] mindObj = new int[0], mindWalk = new int[0];
+	static int mindPos = -1; private static Level mindFloor;
+	static int[] mindObj = new int[0], mindWalk = new int[0];
 	// the last plan
-	private static List<Target> last = new ArrayList<>();
-	private static boolean searchLast, ambushing, fishRelaxed; private static float waterChosen = -99;   // (plan A is an ambush: no hands, no resumed walk)
+	static List<Target> last = new ArrayList<>();
+	static boolean searchLast, ambushing, fishRelaxed; private static float waterChosen = -99;   // (plan A is an ambush: no hands, no resumed walk)
 	// a fight (Thomas: "combat caused us to ignore pickups, and then that stuck"): what is passed over while a foe is
 	// about is only held back till the fight is over (none in view for CALM turns, or a kill with none left in view)
-	private static final Set<Integer> combatHeld = new HashSet<>();
-	private static boolean grassHeld, fight;       // (fight: an awake foe in view when the list on show was made)
-	private static float foeAt = -99, strikeAt = -1; private static int killKey = -1, strikePos = -1;
+	static final Set<Integer> combatHeld = new HashSet<>();
+	static boolean grassHeld, fight;       // (fight: an awake foe in view when the list on show was made)
+	static float foeAt = -99, strikeAt = -1; private static int killKey = -1, strikePos = -1;
 	static final int CALM = optInt("CALM", 2);
 	// threats seen lately (Thomas: "it has goldfish memory"): where each foe coming for the hero was last seen, and
 	// its way; only what the hero saw. Forgotten when it has had time to come and hasn't, or when seen to die.
 	static final class Threat { int id, pos, dx, dy; float at; boolean coming; float speed = 1; }
-	private static final Map<Integer, Threat> threats = new LinkedHashMap<>();
+	static final Map<Integer, Threat> threats = new LinkedHashMap<>();
 	static final int HOLDX = optInt("HOLDX", 3);   // turns past its walk here a threat out of sight is waited for
-	private static boolean holdOff, holding, threatNear;   // (holdOff: the player passed a hold over: none till a foe is seen again)
-	private static int holdId = -1, holdCount, holdW;
+	static boolean holdOff, holding, threatNear;   // (holdOff: the player passed a hold over: none till a foe is seen again)
+	static int holdId = -1, holdCount, holdW;
 
 	// per-plan scratch
-	private static Level L; private static Hero H; private static int W, LEN, hp, ENT, EXIT;
-	private static int[] dist, wlk, N8;
-	private static boolean[] known, open, pass, danger;
-	private static boolean inDanger, anyDanger;
-	private static IntPredicate screen;
-	private static int head, od;
-	private static boolean fish, seenFoe, zero;
-	private static List<Target> out;
-	private static int h0;                         // entries pinned in front
-	private static final int INF = 0x7FFF;
+	static Level L; private static Hero H; private static int W, LEN, hp, ENT, EXIT;
+	static int[] dist, wlk, N8;
+	static boolean[] known, open, pass, danger;
+	static boolean inDanger, anyDanger;
+	static IntPredicate screen;
+	static int head, od;
+	static boolean fish, seenFoe, zero;
+	static List<Target> out;
+	static int h0;                         // entries pinned in front
+	static final int INF = 0x7FFF;
 	static final boolean DBG = opt("ADBG", false);
 	/** A/B switches for the bot's batches (env AS_NAME=0/1; the watch has no environment, so it gets the default). */
 	static boolean opt(String name, boolean def) {
@@ -219,14 +219,14 @@ public final class Assist {
 	static final boolean OFIGHT = opt("OFIGHT", false);
 	static final double ODEATH = Tune.DEATH, OESC = Tune.ESC, OUP = Tune.UP, OAVOID = Tune.AVOID;   // (percent: pebxel.bot.Tune, env AS_ODEATH...)
 	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
-	private static FightModel.Result oFight() {
+	static FightModel.Result oFight() {
 		List<Mob> fs = new ArrayList<>();
 		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && distance(m.pos, hp) <= 8 && line(m.pos, hp)))) fs.add(m);   // (a shooter needn't come nearer)
 		return FightModel.engaged(H, fs);
 	}
 	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
 	static final boolean OGEAR = opt("OGEAR", false), OUPG = opt("OUPG", false), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", false);
-	private static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
+	static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
 	// the API
@@ -295,7 +295,7 @@ public final class Assist {
 		} catch (Throwable x) { lastError = x; }
 	}
 
-	private static void pass(Target e, int went, int from) {
+	static void pass(Target e, int went, int from) {
 		Level l = Dungeon.level; Hero h = Dungeon.hero;
 		if (e.kind == USE && e.item != null) decline(e.item.getClass(), e.action);
 		if (e.kind == WAIT && REST_ACT.equals(e.action)) decline(null, REST_ACT);
@@ -318,7 +318,7 @@ public final class Assist {
 
 	/** Did the hero strike rather than pass (from: where he was when it was offered, went: where he went)? A blow
 	 *  chosen from the list this turn, or he stayed put with a foe in sight beside him (a tap on it). */
-	private static boolean struck(int from, int went) {
+	static boolean struck(int from, int went) {
 		if (strikeAt == Actor.now() && strikePos == from) return true;
 		if (went != from || Dungeon.level == null) return false;
 		for (Mob m : new ArrayList<>(Dungeon.level.mobs))
@@ -419,7 +419,7 @@ public final class Assist {
 	}
 
 	/** After an item use: aim it, answer the item selector, confirm an upgrade. True if something was done. */
-	private static boolean followUp(Target t, boolean player) {
+	static boolean followUp(Target t, boolean player) {
 		if (Controls.aiming()) {
 			int c = t.cell >= 0 && t.cell != Dungeon.hero.pos ? t.cell : -1;
 			if (c < 0) { if (!player) GameScene.cancelCellSelector(); return false; }   // (the player's: Down offers the cells)
@@ -445,7 +445,7 @@ public final class Assist {
 	}
 
 	/** What to answer an item selector with, from the scroll that asked. */
-	private static Item choose(WndBag.ItemSelector sel, Item src) {
+	static Item choose(WndBag.ItemSelector sel, Item src) {
 		Hero h = Dungeon.hero; List<Item> worn = new ArrayList<>();
 		if (h.belongings.armor() != null) worn.add(h.belongings.armor());
 		if (h.belongings.weapon() != null) worn.add(h.belongings.weapon());
@@ -465,7 +465,7 @@ public final class Assist {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static WndBag.ItemSelector selector(Window w) {
+	static WndBag.ItemSelector selector(Window w) {
 		for (Class<?> c = w.getClass(); c != null && c != Object.class; c = c.getSuperclass())
 			for (java.lang.reflect.Field f : c.getDeclaredFields())
 				if (WndBag.ItemSelector.class.isAssignableFrom(f.getType())) {
@@ -474,11 +474,11 @@ public final class Assist {
 		return null;
 	}
 
-	private static void clearPath(Hero h) {
+	static void clearPath(Hero h) {
 		try { java.lang.reflect.Field f = Char.class.getDeclaredField("path"); f.setAccessible(true); f.set(h, null); } catch (Throwable e) { }
 	}
 
-	private static Object field(Object o, String name) {
+	static Object field(Object o, String name) {
 		for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
 			try { java.lang.reflect.Field f = c.getDeclaredField(name); f.setAccessible(true); return f.get(o); }
 			catch (NoSuchFieldException e) { } catch (Exception e) { return null; }
@@ -490,9 +490,9 @@ public final class Assist {
 	// set-up for a list
 	// =============================================================================================================
 
-	private static boolean setupOk(Level l) { return L == l && dist != null && dist.length == l.length(); }
+	static boolean setupOk(Level l) { return L == l && dist != null && dist.length == l.length(); }
 
-	private static void ensureFloor(Level l) {
+	static void ensureFloor(Level l) {
 		if (floor == l && srchFrom != null && srchFrom.length == l.length()) return;
 		floor = l; goal = -1; passed.clear(); skippedHeaps.clear(); declined.clear(); demoted.clear(); planned.clear(); upgradeHeld = false; ovrC = -1; wayOn = -1; grassSkip = false;
 		vetoId = -1; vetoStand = -1; resumeCell = -1; stepBackWaited = false; ambGoal = -1; ambId = -1; waitId = -1; lastPos = -1; from = -1;
@@ -504,7 +504,7 @@ public final class Assist {
 		doorSpot = -1; floorT0 = Actor.now(); actCell = -1; actTime = -1; eatBand = 0;
 	}
 
-	private static void setup(IntPredicate onScreen) {
+	static void setup(IntPredicate onScreen) {
 		H = Dungeon.hero; L = Dungeon.level; W = L.width(); LEN = L.length(); hp = H.pos; ENT = L.entrance(); EXIT = L.exit();   // (the stairs looked up once: per cell they were a tenth of a bot game)
 		ensureFloor(L);
 		screen = mode() == 2 ? null : onScreen;
@@ -557,27 +557,27 @@ public final class Assist {
 		if (OIDENT || OSHOP) Identify.observe(H);
 	}
 
-	private static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
+	static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
 	/** A mimic still hiding: on screen it is a chest (sprites/MimicSprite), so it is treated as one. */
-	private static boolean hiddenMimic(Mob m) { return m instanceof Mimic && m.alignment == Char.Alignment.NEUTRAL; }
-	private static boolean disguised(Mob m) {
+	static boolean hiddenMimic(Mob m) { return m instanceof Mimic && m.alignment == Char.Alignment.NEUTRAL; }
+	static boolean disguised(Mob m) {
 		if (!(m instanceof Mimic) || m.alignment != Char.Alignment.NEUTRAL) return false;
 		if (m instanceof GoldenMimic) return Notes.keyCount(new GoldenKey(Dungeon.depth)) > 0;   // (drawn as a locked chest)
 		if (m instanceof CrystalMimic) return Notes.keyCount(new CrystalKey(Dungeon.depth)) > 0;
 		return true;
 	}
 	/** The heap on c, if the hero has seen it. */
-	private static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return h != null && h.seen ? h : null; }
+	static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return h != null && h.seen ? h : null; }
 	/** A key of this floor lying on c, as seen (iron: a locked door; golden: a chest; crystal: the crystal door or
 	 *  chest; worn: the boss's exit). */
-	private static boolean keyAt(int c) {
+	static boolean keyAt(int c) {
 		Level l = Dungeon.level; Heap h = l == null || c < 0 ? null : l.heaps.get(c);
 		if (h == null || !h.seen || h.type != Heap.Type.HEAP) return false;
 		for (Item i : h.items) if (i instanceof Key && ((Key) i).depth == Dungeon.depth) return true;
 		return false;
 	}
 	/** The character on c as the hero sees it (none out of sight or invisible: Thomas's rule). */
-	private static Char seenChar(int c) {
+	static Char seenChar(int c) {
 		Char ch = Actor.findChar(c);
 		if (ch == null || ch == H) return ch;
 		return c >= 0 && c < LEN && L.heroFOV[c] && ch.invisible <= 0 ? ch : null;
@@ -586,7 +586,7 @@ public final class Assist {
 	/** Tengu's dart traps are hidden, but each jump shows them for a moment (PrisonBossLevel.FadingTraps draws a trap
 	 *  tile on each): the cells shown are remembered as traps till the next showing (strategy-reference 4.2; the dev:
 	 *  "watch for them and take the clear path"). */
-	private static void tenguTraps() {
+	static void tenguTraps() {
 		if (L.customTiles == null) return;
 		for (Object t : L.customTiles) {
 			if (!(t instanceof com.shatteredpixel.shatteredpixeldungeon.levels.PrisonBossLevel.FadingTraps) || t == fadingSeen) continue;
@@ -600,7 +600,7 @@ public final class Assist {
 	/** The cells to keep off: gas and fire seen (hazMem), a seen sentry's beat (the special floor in its sight: it zaps
 	 *  whoever stands there), and with piranhas about the water. They are walls for the plan, except when the hero
 	 *  already stands in one (then the way out is through them). Then the walk (bfs). */
-	private static void hazards(boolean water) {
+	static void hazards(boolean water) {
 		if (sentries.hashCode() != sentryKey) {
 			sentryKey = sentries.hashCode(); Arrays.fill(sentryZone, false);
 			for (int s : sentries) for (int c = 0; c < LEN; c++)
@@ -617,13 +617,13 @@ public final class Assist {
 	}
 
 	/** The hazards, the characters in sight (in the way), the walk. */
-	private static void walls(boolean water) {
+	static void walls(boolean water) {
 		hazards(water);
 		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.pos != hp) pass[m.pos] = false;
 		bfs();
 	}
 
-	private static void bfs() {
+	static void bfs() {
 		Arrays.fill(dist, INF);
 		int[] q = new int[LEN]; int qh = 0, qt = 0;
 		dist[hp] = 0; q[qt++] = hp;
@@ -647,24 +647,24 @@ public final class Assist {
 	// geometry
 	// =============================================================================================================
 
-	private static int x(int c) { return c % W; }
-	private static int y(int c) { return c / W; }
-	private static boolean nb(int c, int n) { return n >= 0 && n < LEN && Math.abs(n % W - c % W) <= 1; }
-	private static int cheb(Level l, int a, int b) { return l.distance(a, b); }
-	private static int distance(int a, int b) { return Math.max(Math.abs(x(a) - x(b)), Math.abs(y(a) - y(b))); }
-	private static boolean adjacent(int a, int b) { return distance(a, b) == 1; }
-	private static int walk(int c) { return c < 0 || c >= LEN ? INF : wlk[c]; }
+	static int x(int c) { return c % W; }
+	static int y(int c) { return c / W; }
+	static boolean nb(int c, int n) { return n >= 0 && n < LEN && Math.abs(n % W - c % W) <= 1; }
+	static int cheb(Level l, int a, int b) { return l.distance(a, b); }
+	static int distance(int a, int b) { return Math.max(Math.abs(x(a) - x(b)), Math.abs(y(a) - y(b))); }
+	static boolean adjacent(int a, int b) { return distance(a, b) == 1; }
+	static int walk(int c) { return c < 0 || c >= LEN ? INF : wlk[c]; }
 
 	/** A pseudo-angle 0..63, clockwise on screen from the east. */
 	static int pang(int dx, int dy) {
 		int s = Math.abs(dx) + Math.abs(dy); if (s == 0) return 0;
 		return dx > 0 && dy >= 0 ? 16 * dy / s : dx <= 0 && dy > 0 ? 16 + 16 * -dx / s : dx < 0 ? 32 + 16 * -dy / s : 48 + 16 * dx / s;
 	}
-	private static int off(int c, int a) { return Math.abs(((pang(x(c) - x(hp), y(c) - y(hp)) - a + 32) & 63) - 32); }
-	private static final int CONE = 12;
-	private static boolean ahead(int c) { return od < 0 || c == hp || off(c, od) <= CONE || dist[c] <= 3; }
-	private static boolean onScreen(int c) { try { return screen == null || screen.test(c); } catch (Throwable e) { return true; } }
-	private static boolean direct(int c) {
+	static int off(int c, int a) { return Math.abs(((pang(x(c) - x(hp), y(c) - y(hp)) - a + 32) & 63) - 32); }
+	static final int CONE = 12;
+	static boolean ahead(int c) { return od < 0 || c == hp || off(c, od) <= CONE || dist[c] <= 3; }
+	static boolean onScreen(int c) { try { return screen == null || screen.test(c); } catch (Throwable e) { return true; } }
+	static boolean direct(int c) {
 		if (od < 0) return true;
 		if (dist[c] > 2 * distance(c, hp) + 2) return false;
 		while (!onScreen(c)) { int b = c; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && dist[n] < dist[b]) b = n; } if (b == c) break; c = b; }
@@ -675,9 +675,9 @@ public final class Assist {
 	// the list
 	// =============================================================================================================
 
-	private static void del(int j) { out.remove(j); }
+	static void del(int j) { out.remove(j); }
 
-	private static Target add(int c, int kind, int key, int obj, String why) {
+	static Target add(int c, int kind, int key, int obj, String why) {
 		if (c < 0 || c >= LEN) return null;
 		int m = L.map[c];
 		if (m == Terrain.WALL || m == Terrain.WALL_DECO || m == Terrain.SECRET_DOOR) return null;   // never a wall
@@ -693,7 +693,7 @@ public final class Assist {
 	}
 
 	/** t_put: off screen, the farthest step on screen along the walk there (not onto stairs on the way). */
-	private static Target put(int c, int kind, int key, String why) {
+	static Target put(int c, int kind, int key, String why) {
 		int obj = c, c0 = c;
 		int ent = L.entrance(), ex = L.exit();
 		for (int guard = 0; guard < LEN && (!onScreen(c) || (c != c0 && (c == ent || c == ex))); guard++) {
@@ -716,14 +716,14 @@ public final class Assist {
 		return null;
 	}
 
-	private static Target front(Target t) {   // t_front: pinned, after those pinned before it
+	static Target front(Target t) {   // t_front: pinned, after those pinned before it
 		for (int j = h0; j < out.size(); j++) if (out.get(j).cell == t.cell && out.get(j).kind == t.kind && t.kind != USE) { del(j); break; }
 		if (out.size() >= CAP) out.remove(out.size() - 1);
 		t.key = 0; out.add(h0++, t);
 		return t;
 	}
 
-	private static List<Target> planList() {
+	static List<Target> planList() {
 		out = new ArrayList<>(); h0 = 0;
 		int[] kind = new int[1]; String[] why = new String[1]; boolean[] waitF = new boolean[1];
 		searchLast = false; ambushing = false; fishRelaxed = false;
@@ -742,11 +742,12 @@ public final class Assist {
 		if (mode() != 0) {
 			Target first = out.isEmpty() ? null : out.get(0);
 			if (itemsOn()) { Target hk = hands(first); if (hk != null) front(hk); }
+			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = escape();
 			if (e != null) front(e);
-			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = tactics(); if (tc != null) front(tc); }
+			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = AsBosses.tactics(); if (tc == null) tc = tactics(); if (tc != null) front(tc); }   // (a boss's own mechanics first: AsBosses)
 			h0 = 0;
 		}
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
@@ -759,7 +760,7 @@ public final class Assist {
 
 	/** Objectives the player passed over lately go behind the rest (still there for a Down), unless an enemy is in
 	 *  sight or the hero is in danger (then what's safest stays first). */
-	private static void demote() {
+	static void demote() {
 		if (demoted.isEmpty() && combatHeld.isEmpty()) return;
 		demoted.values().removeIf(t -> t < Actor.now());
 		if (seenFoe || inDanger || out.size() < 2) return;
@@ -794,7 +795,7 @@ public final class Assist {
 
 	/** The game walks its own shortest way (Hero.getCloser): one through a hazard is replaced by a cell on the safe way
 	 *  there, the farthest one the game's walk to which stays clear (the objective is kept). */
-	private static int safeWay(int c) {
+	static int safeWay(int c) {
 		if (c == hp || adjacent(c, hp)) return c;
 		boolean gs = gameSafe(c);
 		if (DBG) System.out.println("    safeWay " + c + " safe " + gs + " dist " + dist[c] + " danger " + danger[c] + " inDanger " + inDanger);
@@ -811,7 +812,7 @@ public final class Assist {
 		for (int i = 0, step = 1, tries = 0; i < way.size() && tries < 8; i += step, step++, tries++) { int w = way.get(i); if (w == c) continue; if (adjacent(w, hp) || gameSafe(w)) return w; }
 		return way.get(way.size() - 1);
 	}
-	private static boolean gameSafe(int c) {
+	static boolean gameSafe(int c) {
 		try {
 			boolean[] p = new boolean[LEN];
 			for (int i = 0; i < LEN; i++) p[i] = L.passable[i] && (L.visited[i] || L.mapped[i]);
@@ -826,7 +827,7 @@ public final class Assist {
 	/** The walk PathFinder.find would give (the same shortest way and the same choice among equals), without touching
 	 *  PathFinder's shared arrays: the game reads PathFinder.distance after its own builds, and a plan run in between
 	 *  changed what the game did. null: no way. */
-	private static List<Integer> gamePath(int from, int to, boolean[] p) {
+	static List<Integer> gamePath(int from, int to, boolean[] p) {
 		if (from == to) return null;
 		int[] d = new int[LEN]; Arrays.fill(d, Integer.MAX_VALUE);
 		int[] q = new int[LEN]; int qh = 0, qt = 0;
@@ -851,7 +852,7 @@ public final class Assist {
 		return r;
 	}
 
-	private static List<Target> aimList() {
+	static List<Target> aimList() {
 		out = new ArrayList<>();
 		List<Mob> ms = new ArrayList<>();
 		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.alignment == Char.Alignment.ENEMY && m.invisible <= 0 && m.isAlive()) ms.add(m);
@@ -862,9 +863,9 @@ public final class Assist {
 		if (out.size() < CAP && !has(hp)) out.add(new Target(hp, GO, "self"));
 		return out;
 	}
-	private static boolean has(int c) { for (Target t : out) if (t.cell == c) return true; return false; }
+	static boolean has(int c) { for (Target t : out) if (t.cell == c) return true; return false; }
 
-	private static List<Target> fallback(boolean aiming) {
+	static List<Target> fallback(boolean aiming) {
 		List<Target> r = new ArrayList<>();
 		Level l = Dungeon.level; int h = Dungeon.hero.pos;
 		for (Mob m : new ArrayList<>(l.mobs)) if (l.heroFOV[m.pos] && m.alignment == Char.Alignment.ENEMY && r.size() < CAP && (aiming || !Dungeon.hero.isCharmedBy(m))) r.add(new Target(m.pos, ENEMY, "fallback"));
@@ -881,13 +882,13 @@ public final class Assist {
 	// what's what
 	// =============================================================================================================
 
-	private static boolean enemy(Mob m) { return m.isAlive() && m.alignment == Char.Alignment.ENEMY && L.heroFOV[m.pos] && m.invisible <= 0; }
+	static boolean enemy(Mob m) { return m.isAlive() && m.alignment == Char.Alignment.ENEMY && L.heroFOV[m.pos] && m.invisible <= 0; }
 	/** Is it after the hero, as the screen shows it (Shatterfish's Observer rule: no AI state, only what is drawn): the
 	 *  Zz of a sleeper, the "!" of one that noticed, the "?" of one that lost track, and one stepping nearer. */
-	private static boolean hunting(Mob m) { return FAIRHUNT ? huntMem.getOrDefault(m.id(), false) : m.state == m.HUNTING; }
-	private static final Map<Integer, Boolean> huntMem = new HashMap<>();
-	private static final Map<Integer, Integer> mobLast = new HashMap<>();
-	private static void watchMobs() {
+	static boolean hunting(Mob m) { return FAIRHUNT ? huntMem.getOrDefault(m.id(), false) : m.state == m.HUNTING; }
+	static final Map<Integer, Boolean> huntMem = new HashMap<>();
+	static final Map<Integer, Integer> mobLast = new HashMap<>();
+	static void watchMobs() {
 		for (Mob m : mobs()) {
 			if (!m.isAlive() || !L.heroFOV[m.pos] || m.alignment != Char.Alignment.ENEMY) continue;
 			int id = m.id(); Integer lp = mobLast.get(id);
@@ -903,12 +904,12 @@ public final class Assist {
 		}
 	}
 	/** A foe in sight that is awake: a fight on (a sleeper, a passive one, isn't). */
-	private static boolean hostile(Mob m) { return enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC); }
+	static boolean hostile(Mob m) { return enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC); }
 
 	/** The threats seen lately, brought up to date: each foe in sight coming for the hero (where, which way it was going);
 	 *  one seen to die where the hero could see (it was in sight the turn before, gone now from a cell still in view) is
 	 *  forgotten; so is one out of sight that has had time to come (its walk here, plus HOLDX) and hasn't. */
-	private static void remember() {
+	static void remember() {
 		float now = Actor.now();
 		Set<Integer> live = new HashSet<>();
 		for (Mob m : mobs()) {
@@ -934,18 +935,18 @@ public final class Assist {
 		threatNear &= !fight;
 	}
 	/** The walk from c over the known floor (characters not counted: the foe walks round them). */
-	private static void tdist(int c, int[] d) {
+	static void tdist(int c, int[] d) {
 		Arrays.fill(d, INF);
 		int[] q = new int[LEN]; int qh = 0, qt = 0; d[c] = 0; q[qt++] = c;
 		while (qh < qt) { int a = q[qh++], nd = d[a] + 1;
 			for (int k = 0; k < 8; k++) { int n = a + N8[k]; if (!nb(a, n) || d[n] <= nd || !L.passable[n] || !(known[n] || L.heroFOV[n])) continue; d[n] = nd; q[qt++] = n; } }
 	}
 	/** A narrow spot: two ways in at most (a corridor, the cell past a door): one foe at a time reaches it. */
-	private static boolean choke(int c) { int o = 0; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && open[n]) o++; } return o <= 2; }
+	static boolean choke(int c) { int o = 0; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && open[n]) o++; } return o <= 2; }
 	/** Plan A would walk to c with foes out of sight lately coming (Thomas: "if I run into a dead end room to escape
 	 *  enemies, it shouldn't suggest I run immediately back out into the danger I ran from"): wait for them instead when
 	 *  c lies their way (nearer where one was last seen, or the walk there goes by it). Why, or null. */
-	private static String hold(int c) {
+	static String hold(int c) {
 		if (holdOff || fight || !threatNear || inDanger || ambushing || mode() == 0) return null;
 		int[] dt = new int[LEN];
 		for (Threat t : threats.values()) {
@@ -959,24 +960,24 @@ public final class Assist {
 	/** Threats remembered (tests). */
 	public static int threats() { return threats.size(); }
 
-	private static boolean boss(Char m) { return Char.hasProp(m, Char.Property.BOSS) || Char.hasProp(m, Char.Property.MINIBOSS); }
-	private static boolean ranged(Mob m) {
+	static boolean boss(Char m) { return Char.hasProp(m, Char.Property.BOSS) || Char.hasProp(m, Char.Property.MINIBOSS); }
+	static boolean ranged(Mob m) {
 		return m instanceof Shaman || m instanceof Warlock || m instanceof Eye || m instanceof Scorpio || m instanceof GnollTrickster || m instanceof DM100
 				|| m instanceof DM200 || m instanceof Tengu || m instanceof Necromancer || m instanceof Elemental || m instanceof FungalSentry
 				|| m instanceof GnollGeomancer || m instanceof YogFist || m instanceof DwarfKing || m instanceof Goo || m instanceof Spinner;
 	}
-	private static boolean held(Char m) {
+	static boolean held(Char m) {
 		for (Buff b : m.buffs()) { String n = b.getClass().getSimpleName(); if (n.equals("Paralysis") || n.equals("Roots") || n.equals("Frost") || n.equals("Terror") || n.equals("Dread")) return true; }
 		return false;
 	}
-	private static boolean water(int c) { return L.water[c]; }
+	static boolean water(int c) { return L.water[c]; }
 	/** Water or beside it: a piranha bites from the water onto the shore. */
-	private static boolean wet(int c) { if (L.water[c]) return true; if (!SHORE || Actor.now() - fishAt > 20) return false; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && L.water[n]) return true; } return false; }
+	static boolean wet(int c) { if (L.water[c]) return true; if (!SHORE || Actor.now() - fishAt > 20) return false; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && L.water[n]) return true; } return false; }
 
 	/** Gas or fire on c, as the hero last saw it. */
-	private static boolean foul(int c) { return c >= 0 && c < LEN && hazMem != null && c < hazMem.length && hazMem[c]; }
+	static boolean foul(int c) { return c >= 0 && c < LEN && hazMem != null && c < hazMem.length && hazMem[c]; }
 	/** (the game's own state: only for cells in sight) */
-	private static boolean blobAt(int c) {
+	static boolean blobAt(int c) {
 		for (Blob b : L.blobs.values()) {
 			if (b == null || b.volume <= 0 || b.cur == null || c >= b.cur.length || b.cur[c] <= 0) continue;
 			if (b instanceof ToxicGas || b instanceof CorrosiveGas || b instanceof ConfusionGas || b instanceof Fire || b instanceof ParalyticGas
@@ -984,13 +985,13 @@ public final class Assist {
 		}
 		return false;
 	}
-	private static boolean burning() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Burning")) return true; return false; }
-	private static boolean fireAt(int c) { Blob f = L.blobs.get(Fire.class); return c >= 0 && c < LEN && L.heroFOV[c] && f != null && f.volume > 0 && f.cur != null && f.cur[c] > 0; }
-	private static boolean fireNear(int c) { if (fireAt(c)) return true; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && fireAt(n) && L.flamable[c]) return true; } return false; }
-	private static boolean oozed() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Ooze")) return true; return false; }
-	private static boolean blind() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Blindness")) return true; return false; }
+	static boolean burning() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Burning")) return true; return false; }
+	static boolean fireAt(int c) { Blob f = L.blobs.get(Fire.class); return c >= 0 && c < LEN && L.heroFOV[c] && f != null && f.volume > 0 && f.cur != null && f.cur[c] > 0; }
+	static boolean fireNear(int c) { if (fireAt(c)) return true; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && fireAt(n) && L.flamable[c]) return true; } return false; }
+	static boolean oozed() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Ooze")) return true; return false; }
+	static boolean blind() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Blindness")) return true; return false; }
 
-	private static boolean unseenBy(int c) {   // c is beside the unknown (not just beside the hero)
+	static boolean unseenBy(int c) {   // c is beside the unknown (not just beside the hero)
 		if (!known[c] || !open[c] || L.map[c] == Terrain.ALCHEMY || c == ENT || c == EXIT || (fish && water(c))) return false;
 		for (int k = 0; k < 8; k++) {
 			int n = c + N8[k]; if (!nb(c, n) || known[n] || distance(n, hp) <= 1) continue;
@@ -1000,15 +1001,15 @@ public final class Assist {
 		}
 		return false;
 	}
-	private static boolean opening(int c) {
+	static boolean opening(int c) {
 		if (!unseenBy(c)) return false;
 		for (int k = 0; k < 4; k++) { int n = c + N8[k]; if (nb(c, n) && !known[n]) return true; }
 		return false;
 	}
-	private static boolean wall(int c) { int t = L.map[c]; return t == Terrain.WALL || t == Terrain.WALL_DECO || t == Terrain.SECRET_DOOR; }
-	private static boolean searched(int w) { return checked[w]; }
+	static boolean wall(int c) { int t = L.map[c]; return t == Terrain.WALL || t == Terrain.WALL_DECO || t == Terrain.SECRET_DOOR; }
+	static boolean searched(int w) { return checked[w]; }
 
-	private static boolean deadEnd(int c) {   // a corridor that just stops: a hidden door
+	static boolean deadEnd(int c) {   // a corridor that just stops: a hidden door
 		if (!known[c] || !open[c] || c == ENT || c == EXIT || srchFrom[c]) return false;
 		int o = 0, oo = 0;
 		for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (!nb(c, n)) continue; if (!known[n]) return false;
@@ -1016,7 +1017,7 @@ public final class Assist {
 		return o == 1 && oo == 1;
 	}
 
-	private static int wallWorth(int w) {
+	static int wallWorth(int w) {
 		int t = L.map[w];
 		if ((t != Terrain.WALL && t != Terrain.SECRET_DOOR) || searched(w)) return 0;
 		int best = 0;
@@ -1031,7 +1032,7 @@ public final class Assist {
 		return best;
 	}
 
-	private static int srchSpot(int x1, int x2) {
+	static int srchSpot(int x1, int x2) {
 		int best = -1, fb = -1; long bk = 0;
 		for (int c = 0; c < LEN; c++) {
 			if (dist[c] >= INF || !open[c] || L.map[c] == Terrain.ALCHEMY || c == ENT || c == EXIT || (fish && water(c)) || (c != hp && seenChar(c) != null) || bad.containsKey(c)) continue;
@@ -1046,17 +1047,17 @@ public final class Assist {
 		return best < 0 ? fb : best;
 	}
 
-	private static boolean foodItem(Item i) { return i instanceof Food && !(i instanceof Blandfruit); }
-	private static boolean known(Item i) {
+	static boolean foodItem(Item i) { return i instanceof Food && !(i instanceof Blandfruit); }
+	static boolean known(Item i) {
 		if (i instanceof Potion) return ((Potion) i).isKnown();
 		if (i instanceof Scroll) return ((Scroll) i).isKnown();
 		return true;
 	}
-	private static boolean precious(Item i) { return (i instanceof ScrollOfUpgrade || i instanceof PotionOfStrength) && known(i); }
-	private static <T extends Item> T bag(Class<T> c) { return H.belongings.getItem(c); }
-	private static boolean hasFood() { for (Item i : H.belongings.backpack) if (foodItem(i)) return true; return false; }
+	static boolean precious(Item i) { return (i instanceof ScrollOfUpgrade || i instanceof PotionOfStrength) && known(i); }
+	static <T extends Item> T bag(Class<T> c) { return H.belongings.getItem(c); }
+	static boolean hasFood() { for (Item i : H.belongings.backpack) if (foodItem(i)) return true; return false; }
 
-	private static boolean roomFor(Item it) {
+	static boolean roomFor(Item it) {
 		Bag bp = H.belongings.backpack; int n = bp.items.size(), cap = bp.capacity();
 		if (n < cap - 2) return true;
 		for (Bag b : H.belongings.getBags()) if (b != bp && b.canHold(it)) return true;
@@ -1064,17 +1065,17 @@ public final class Assist {
 		if (it instanceof Gold || it instanceof Dewdrop || it instanceof Key || it instanceof EnergyCrystal || it instanceof Amulet) return true;
 		return it.stackable && H.belongings.getSimilar(it) != null;
 	}
-	private static boolean junk(Item it) { return it.visiblyCursed() || (it.levelKnown && it.level() < 0 && (it instanceof EquipableItem || it instanceof Wand)); }
+	static boolean junk(Item it) { return it.visiblyCursed() || (it.levelKnown && it.level() < 0 && (it instanceof EquipableItem || it instanceof Wand)); }
 
-	private static boolean risky(Heap h) {
+	static boolean risky(Heap h) {
 		if (h.type == Heap.Type.TOMB) return H.lvl < Dungeon.depth + 3;
 		if ((h.type == Heap.Type.SKELETON || h.type == Heap.Type.REMAINS) && H.HP * 3 < H.HT * 2) return true;
 		return false;
 	}
 
-	private static boolean heapOk(Heap h) { return heapOk(h, false); }
+	static boolean heapOk(Heap h) { return heapOk(h, false); }
 	/** skippedToo: one the player passed over counts (the list's tail), else it doesn't (plan A, the floor left). */
-	private static boolean heapOk(Heap h, boolean skippedToo) {
+	static boolean heapOk(Heap h, boolean skippedToo) {
 		if (h == null || h.isEmpty() || !h.seen) return false;
 		int c = h.pos;
 		if (c < 0 || c >= LEN || risky(h) || h.type == Heap.Type.FOR_SALE || !known[c] || L.avoid[c] || passed.contains(c) || (!skippedToo && (skippedHeaps.contains(c) || combatHeld.contains(c))) || bad.containsKey(c) || (danger[c] && c != hp) || (fishRelaxed && wet(c) && c != hp)) return false;
@@ -1093,7 +1094,7 @@ public final class Assist {
 		return true;
 	}
 
-	private static boolean floorLeft() {
+	static boolean floorLeft() {
 		for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && unseenBy(c)) return true;
 		for (Heap h : L.heaps.valueList()) if (heapOk(h) && walk(h.pos) < INF) return true;
 		boolean iron = Notes.keyCount(new IronKey(Dungeon.depth)) > 0, crystal = Notes.keyCount(new CrystalKey(Dungeon.depth)) > 0;   // (a locked room a held key opens)
@@ -1101,11 +1102,11 @@ public final class Assist {
 		return false;
 	}
 
-	private static int hunger() { Hunger hu = H.buff(Hunger.class); return hu == null ? 0 : hu.hunger(); }
-	private static boolean hungry() { return hunger() >= Hunger.HUNGRY; }
-	private static boolean starving() { return hunger() >= Hunger.STARVING; }
+	static int hunger() { Hunger hu = H.buff(Hunger.class); return hu == null ? 0 : hu.hunger(); }
+	static boolean hungry() { return hunger() >= Hunger.HUNGRY; }
+	static boolean starving() { return hunger() >= Hunger.STARVING; }
 
-	private static int foodNear() {   // hungry, none in the pack: the nearest food lying about (12 steps at most)
+	static int foodNear() {   // hungry, none in the pack: the nearest food lying about (12 steps at most)
 		if (!hungry() || hasFood()) return -1;
 		int best = -1, bd = 13;
 		for (Heap h : L.heaps.valueList()) { int c = h.pos;
@@ -1113,13 +1114,13 @@ public final class Assist {
 		return best;
 	}
 
-	private static boolean questFlag(Class<?> npc, String field, boolean def) {
+	static boolean questFlag(Class<?> npc, String field, boolean def) {
 		try {
 			Class<?> q = Class.forName(npc.getName() + "$Quest");
 			java.lang.reflect.Field f = q.getDeclaredField(field); f.setAccessible(true); return f.getBoolean(null);
 		} catch (Throwable e) { return def; }
 	}
-	private static boolean npcWanted(Mob m) {   // a quest person worth talking to now
+	static boolean npcWanted(Mob m) {   // a quest person worth talking to now
 		if (talked.getOrDefault(m.id(), 0) >= 2) return false;
 		if (m instanceof Ghost) return !questFlag(Ghost.class, "given", true) || Ghost.Quest.processed();
 		if (m instanceof Wandmaker) return !questFlag(Wandmaker.class, "given", true) || bag(CorpseDust.class) != null || bag(Embers.class) != null || bag(Rotberry.Seed.class) != null;
@@ -1128,23 +1129,23 @@ public final class Assist {
 		return false;
 	}
 
-	private static boolean line(int a, int b) { try { Ballistica bl = new Ballistica(a, b, Ballistica.PROJECTILE); return bl.collisionPos != null && bl.collisionPos == b; } catch (Throwable e) { return false; } }
+	static boolean line(int a, int b) { try { Ballistica bl = new Ballistica(a, b, Ballistica.PROJECTILE); return bl.collisionPos != null && bl.collisionPos == b; } catch (Throwable e) { return false; } }
 
-	private static String dk(Class<?> c, String a) { return (c == null ? "-" : c.getSimpleName()) + ":" + a; }
-	private static void decline(Class<?> c, String a) {
+	static String dk(Class<?> c, String a) { return (c == null ? "-" : c.getSimpleName()) + ":" + a; }
+	static void decline(Class<?> c, String a) {
 		String k = dk(c, a); declined.remove(k); declined.put(k, situation(c, a));
 		while (declined.size() > 8) declined.remove(declined.keySet().iterator().next());
 		if (c == ScrollOfUpgrade.class) upgradeHeld = true;
 	}
 	/** Passed over on this floor, and nothing has changed since (more of the item came, or, for resting, the hero is
 	 *  worse hurt by a quarter: then it is offered again). */
-	private static boolean declined(Class<?> c, String a) {
+	static boolean declined(Class<?> c, String a) {
 		String k = dk(c, a); Integer s = declined.get(k);
 		if (s == null) return false;
 		if (situation(c, a) > s) { declined.remove(k); return false; }
 		return true;
 	}
-	private static int situation(Class<?> c, String a) {
+	static int situation(Class<?> c, String a) {
 		Hero h = Dungeon.hero; if (h == null) return 0;
 		if (c == null) return REST_ACT.equals(a) ? (h.HT - h.HP) * 4 / Math.max(1, h.HT) : 0;
 		int n = 0; for (Item i : h.belongings) if (i.getClass() == c) n += i.quantity();
@@ -1155,7 +1156,7 @@ public final class Assist {
 	// plan A (tgt.c first())
 	// =============================================================================================================
 
-	private static int first(int[] kind, String[] why, boolean[] waitF) {
+	static int first(int[] kind, String[] why, boolean[] waitF) {
 		int best = -1, bk = INF; Mob bm = null;
 		planAGrass = false;
 		boolean crabNow = false; for (Mob m : mobs()) if (m instanceof GreatCrab && enemy(m)) crabNow = true;
@@ -1320,7 +1321,7 @@ public final class Assist {
 	 *  the hero from a cell with no sight of it is surprised, and the hero's next blow can't miss. Where to stand for that:
 	 *  here (hp) or a free step away, so that the mob's walk there (the known map only) comes up beside it from a cell
 	 *  out of its sight. -1: no such spot. */
-	private static int ambushSpot(Mob m) {
+	static int ambushSpot(Mob m) {
 		boolean[] p = new boolean[LEN];
 		for (int i = 0; i < LEN; i++) p[i] = L.passable[i] && (known[i] || L.heroFOV[i]);
 		int best = -1, bd = INF;
@@ -1351,16 +1352,16 @@ public final class Assist {
 	/** The doorway held (Pebble PD's bot: "a choke point, so they come one at a time"; "let it come to you"): the hero in
 	 *  a narrow spot, a foe coming that fights hand to hand: wait for it there rather than walk out to it, for as many
 	 *  turns as its walk took when first held plus HOLDX (one that doesn't come isn't waited for for ever). */
-	private static boolean holdDoor(Mob m, int w, boolean fast) {
+	static boolean holdDoor(Mob m, int w, boolean fast) {
 		if (holdOff || w < 2 || w > 8 || !hunting(m) || ranged(m) || held(m) || fast || Char.hasProp(m, Char.Property.IMMOVABLE) || m instanceof Piranha || inDanger || !choke(hp)) { if (holdId == m.id()) holdId = -1; return false; }
 		if (holdId != m.id()) { holdId = m.id(); holdCount = 0; holdW = w; }
 		return ++holdCount <= holdW + HOLDX;
 	}
-	private static int ambGoal = -1, ambId = -1; private static float ambUntil;
+	static int ambGoal = -1, ambId = -1; private static float ambUntil;
 	static final int AMBR = opt("AMB3", true) ? 3 : 1;
 
 	/** How much a shop item is wanted (0: not, or can't pay): Ankh, Healing, food, a bag, Magic Mapping. */
-	private static int buyRank(Item i) {
+	static int buyRank(Item i) {
 		int price; try { price = com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Shopkeeper.sellPrice(i); } catch (Throwable e) { return 0; }
 		if (price > Dungeon.gold || !roomFor(i)) return 0;
 		if (i instanceof Ankh && bag(Ankh.class) == null) return 6;
@@ -1371,7 +1372,7 @@ public final class Assist {
 		return 0;
 	}
 
-	private static boolean wellUseful(int c) {
+	static boolean wellUseful(int c) {
 		Blob h = L.blobs.get(WaterOfHealth.class), a = L.blobs.get(WaterOfAwareness.class);
 		if (h != null && h.volume > 0 && h.cur != null && h.cur[c] > 0) return H.HP < H.HT * 2 / 3;
 		if (a != null && a.volume > 0 && a.cur != null && a.cur[c] > 0) return true;
@@ -1379,25 +1380,25 @@ public final class Assist {
 	}
 
 	/** A trap a player would step on for a key: it alarms, slimes, confuses, chills, pricks or moves him, no worse. */
-	private static boolean mild(com.shatteredpixel.shatteredpixeldungeon.levels.traps.Trap t) {
+	static boolean mild(com.shatteredpixel.shatteredpixeldungeon.levels.traps.Trap t) {
 		String n = t.getClass().getSimpleName();
 		return n.equals("AlarmTrap") || n.equals("OozeTrap") || n.equals("ConfusionTrap") || n.equals("ChillingTrap") || n.equals("WornDartTrap") || n.equals("FlockTrap") || n.equals("TeleportationTrap");
 	}
 
 	/** Is a walk of d far off next to the nearest spot to explore (a sensible player looks round where he is first)? */
-	private static boolean farOff(int c0, int d) {
+	static boolean farOff(int c0, int d) {
 		Float pt = planned.get(c0); if (pt != null && pt >= Actor.now()) return false;   // (plan A lately: on the way there already, kept, or the hero walked back and forth)
 		if (fx < 0) { fx = INF; fxc = -1; for (int c = 0; c < LEN; c++) if (dist[c] < fx && dist[c] > 0 && !bad.containsKey(c) && unseenBy(c) && ahead(c) && direct(c)) { fx = dist[c]; fxc = c; } }
 		boolean far = fx < INF && d > 2 * fx + 6;
 		deferred |= far;
 		return far;
 	}
-	private static int fxc = -1; private static boolean deferred;
-	private static final Map<Integer, Float> planned = new HashMap<>();   // plan A's objectives lately (till when)
-	private static int fx = -1;
+	static int fxc = -1; private static boolean deferred;
+	static final Map<Integer, Float> planned = new HashMap<>();   // plan A's objectives lately (till when)
+	static int fx = -1;
 
 	/** On screen first: the spots beside the unknown and the tall grass, nearest first, those ahead before the rest. */
-	private static int look(boolean all) {
+	static int look(boolean all) {
 		int best = -1, bk = INF; boolean gb = false, gr = !grassSkip && !grassHeld;
 		for (int c = 0; c < LEN; c++) {
 			int d = dist[c];
@@ -1419,7 +1420,7 @@ public final class Assist {
 	// plans B, C... (tgt2)
 	// =============================================================================================================
 
-	private static void plansB() {
+	static void plansB() {
 		boolean hunt = false;
 		for (Mob m : mobs()) if (enemy(m) && hunting(m) && !(m instanceof NPC)) hunt = true;
 		if (searchLast) {   // plan A's last resort: the best spot to search for secret doors from
@@ -1511,7 +1512,7 @@ public final class Assist {
 	/** Tall grass to trample (dew, seeds): one entry a patch, at its nearest spot, a short walk off or in view (plan A
 	 *  takes the nearest only: the owner, "only 2 tiles and nothing else when there is grass to trample"). Passed
 	 *  over (skipped till a kill, Pebble PD): last, still there for a Down. */
-	private static void grass() {
+	static void grass() {
 		if (!GRASS || GRASSD <= 0) return;
 		boolean[] g = new boolean[LEN]; int[] q = new int[LEN];
 		for (int n = 0; n < 3; n++) {
@@ -1527,7 +1528,7 @@ public final class Assist {
 	}
 
 	/** "Read my mind": two steps or more nearer one of the list's other objectives (and plan A's not nearer): that's plan A. */
-	private static void mind() {
+	static void mind() {
 		if (mode() == 0) return;
 		boolean up = false; int pr = -1;
 		if (mindFloor == L && mindPos != hp) {
@@ -1554,7 +1555,7 @@ public final class Assist {
 	// escape and tactics (tgt4)
 	// =============================================================================================================
 
-	private static Target escape() {
+	static Target escape() {
 		int best = -1, bk = INF;
 		if (FIRE2 && (burning() || fireNear(hp))) {   // fire: water if near (it puts you out), else a cell fire can't reach (no grass on or beside it), away from the flames
 			int bs = INF;
@@ -1591,7 +1592,7 @@ public final class Assist {
 
 	/** Low, an enemy after the hero, no known Healing: the way up is a sure escape (enemies stay behind; strategy-reference 2.3).
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
-	private static Target upstairs() {
+	static Target upstairs() {
 		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || (OFIGHT ? !oLosing(OUP) : H.HP * 100 >= H.HT * 35)) return null;
 		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
@@ -1602,7 +1603,7 @@ public final class Assist {
 		return t;
 	}
 
-	private static Target tactics() {
+	static Target tactics() {
 		if (H.rooted) return null;
 		int adj = 0, os = 0;
 		for (Mob m : mobs()) if (enemy(m) && hunting(m) && adjacent(m.pos, hp)) adj++;
@@ -1649,31 +1650,31 @@ public final class Assist {
 		if (doorSpot == hp && Actor.now() < doorUntil && sh != null) { Target t = new Target(hp, WAIT, "tactic: wait round the corner"); t.action = WAIT_ACT; return t; }
 		return null;
 	}
-	private static boolean crabUnseen = true; private static float crabSeen = -1, bossSeen = -1;
-	private static float crabVisSince = -1;   // (the crab in sight since when)
-	private static boolean sight(int a, int b) { try { Ballistica bl = new Ballistica(a, b, Ballistica.STOP_TARGET | Ballistica.STOP_SOLID); return bl.collisionPos != null && bl.collisionPos == b; } catch (Throwable e) { return true; } }
+	static boolean crabUnseen = true; private static float crabSeen = -1, bossSeen = -1;
+	static float crabVisSince = -1;   // (the crab in sight since when)
+	static boolean sight(int a, int b) { try { Ballistica bl = new Ballistica(a, b, Ballistica.STOP_TARGET | Ballistica.STOP_SOLID); return bl.collisionPos != null && bl.collisionPos == b; } catch (Throwable e) { return true; } }
 	/** Goo's pumped blast reaches c: Goo.canAttack's own test (2 cells, a clear line both ways). */
-	private static boolean gooReach(int g, int c) {
+	static boolean gooReach(int g, int c) {
 		if (!GOOREACH) return distance(g, c) <= 2 && line(g, c);
 		try {
 			int f = Ballistica.STOP_TARGET | Ballistica.STOP_SOLID | Ballistica.IGNORE_SOFT_SOLID;
 			return distance(g, c) <= 2 && new Ballistica(g, c, f).collisionPos == c && new Ballistica(c, g, f).collisionPos == g;
 		} catch (Throwable e) { return distance(g, c) <= 2; }
 	}
-	private static boolean pumped(Mob m) { Object v = field(m, "pumpedUp"); return v instanceof Integer && (Integer) v > 0; }
-	private static boolean standOk(int c) { return c == hp || (open[c] && seenChar(c) == null && walk(c) <= 6); }
+	static boolean pumped(Mob m) { Object v = field(m, "pumpedUp"); return v instanceof Integer && (Integer) v > 0; }
+	static boolean standOk(int c) { return c == hp || (open[c] && seenChar(c) == null && walk(c) <= 6); }
 
 	// =============================================================================================================
 	// the hands (tgt3): item and toolbar actions
 	// =============================================================================================================
 
-	private static Target use(Item it, String action, int aim, String why) {
+	static Target use(Item it, String action, int aim, String why) {
 		Target t = new Target(aim >= 0 ? aim : hp, USE, why); t.item = it; t.action = action; t.obj = -1; t.qty = it.quantity();
 		try { for (int i = 0; i < QuickSlot.SIZE; i++) if (Dungeon.quickslot.getItem(i) == it) { t.quickslot = i; break; } } catch (Throwable e) { }
 		return t;
 	}
 
-	private static Target hands(Target planA) {
+	static Target hands(Target planA) {
 		boolean near = false, seen = false, adj = false; int hard = 0;
 		for (Mob m : mobs()) { if (!enemy(m) || m.state == m.PASSIVE || m instanceof NPC) continue; seen = true;
 			int d = distance(m.pos, hp); if (d <= 3) near = true; if (d <= 1) adj = true;
@@ -1789,17 +1790,17 @@ public final class Assist {
 		return null;
 	}
 
-	private static boolean declinedAny(String a) { for (String s : declined.keySet()) if (s.endsWith(":" + a)) return true; return false; }
-	private static int tier(Item i) { return i instanceof Armor ? ((Armor) i).tier : i instanceof MeleeWeapon ? ((MeleeWeapon) i).tier : 0; }
+	static boolean declinedAny(String a) { for (String s : declined.keySet()) if (s.endsWith(":" + a)) return true; return false; }
+	static int tier(Item i) { return i instanceof Armor ? ((Armor) i).tier : i instanceof MeleeWeapon ? ((MeleeWeapon) i).tier : 0; }
 
 	/** Has the wand a charge? Its count is shown only once its level is known; till then a guess: not zapped in 30 turns. */
-	private static boolean charged(Wand w, Item holder) {
+	static boolean charged(Wand w, Item holder) {
 		if (w.levelKnown && w.curChargeKnown) return w.curCharges > 0;
 		Float t = zapped.get(holder); return t == null || Actor.now() - t > 30 || Actor.now() < t;
 	}
-	private static final Map<Item, Float> zapped = new IdentityHashMap<>();
+	static final Map<Item, Float> zapped = new IdentityHashMap<>();
 
-	private static boolean attackWand(Class<?> c, int ed) {
+	static boolean attackWand(Class<?> c, int ed) {
 		if (c == null) return false;
 		if (c == WandOfLightning.class || c == WandOfCorrosion.class) return ed >= 3;
 		if (c == WandOfFireblast.class) return ed >= 2 && !L.flamable[hp];
@@ -1807,7 +1808,7 @@ public final class Assist {
 	}
 
 	/** A ranged blow to hand (the bow, a charged staff, Guiding Light, a thrown weapon): better spent than an ambush's wait. */
-	private static boolean rangedToHand() {
+	static boolean rangedToHand() {
 		if (bag(SpiritBow.class) != null) return true;
 		MagesStaff st = bag(MagesStaff.class); Object w = st == null ? null : field(st, "wand");
 		if (w instanceof Wand && charged((Wand) w, st)) return true;
@@ -1819,7 +1820,7 @@ public final class Assist {
 
 	public static final String SPELL_GL = "SPELL:GuidingLight";
 	/** The Cleric's Guiding Light (a sure magic hit; the target, lit, can't dodge the next blow), whenever the tome can cast it. */
-	private static Target guiding(Mob e) {
+	static Target guiding(Mob e) {
 		if (!CLERIC) return null;
 		com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome tome = bag(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome.class);
 		if (tome == null || tome.cursed) return null;
@@ -1829,7 +1830,7 @@ public final class Assist {
 	}
 
 	/** From afar: what's in a quickslot first, the bow, charged wands, known harmful potions, missiles. */
-	private static Target ranged() {
+	static Target ranged() {
 		Mob e = null; int ed = 99;
 		for (Mob m : mobs()) { if (!enemy(m) || !hunting(m) || m instanceof NPC) continue; int d = distance(m.pos, hp); if (d < ed && line(hp, m.pos)) { ed = d; e = m; } }
 		if (e == null) return null;
