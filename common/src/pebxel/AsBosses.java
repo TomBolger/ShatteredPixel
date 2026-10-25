@@ -197,9 +197,9 @@ final class AsBosses {
 		// the fists alive (seen or not: each comes with a phase, "the darkness pulls in closer")
 		Mob fist = null; int fd = INF;
 		boolean hurt = boltHP >= 0 && h.HP < boltHP && boltAt < Actor.now();
-		if (boltL != L) { boltL = L; boltFrom.clear(); }
+		if (boltL != L) { boltL = L; boltFrom.clear(); fistSeenAt = Actor.now(); }
 		for (Mob m : mobs()) if (m instanceof YogFist && m.isAlive()) {
-			if (enemy(m)) { boltFrom.put(m.id(), m.pos); if (L.distance(m.pos, hp) < fd) { fd = L.distance(m.pos, hp); fist = m; } }
+			if (enemy(m)) { boltFrom.put(m.id(), m.pos); fistSeenAt = Actor.now(); if (L.distance(m.pos, hp) < fd) { fd = L.distance(m.pos, hp); fist = m; } }
 			else if (hurt && (m instanceof YogFist.BrightFist || m instanceof YogFist.DarkFist) && L.distance(m.pos, hp) <= 7
 					&& new Ballistica(m.pos, hp, Ballistica.MAGIC_BOLT).collisionPos == hp) boltFrom.put(m.id(), m.pos);   // (its bolt is drawn from where it stands: shot from the dark, it shows where)
 		}
@@ -227,6 +227,12 @@ final class AsBosses {
 			if (L.distance(at, hp) <= 1 || (L.heroFOV[at] && seenChar(at) == null)) { boltFrom.remove(e.getKey()); break; }   // (not there now)
 			int st = stepTowards(at);
 			if (st >= 0) return new Target(st, GO, "Yog: to the fist shooting from the dark");
+		}
+		if (fist == null && Actor.now() - fistSeenAt > 20) for (Map.Entry<Integer, Integer> e : boltFrom.entrySet()) {   // one not come for 20 turns (the Rusted one is large: narrow ways stop it): where it was last seen
+			int at = e.getValue();
+			if (L.distance(at, hp) <= 1 || (L.heroFOV[at] && seenChar(at) == null)) { boltFrom.remove(e.getKey()); break; }
+			int st = stepTowards(at);
+			if (st >= 0) return new Target(st, GO, "Yog: look for the fist");
 		}
 		// a fist by Yog, or none in sight: wait for it out of his reach (6+ from the seat; a Bright or Dark one shoots
 		// rather than comes while it sees the hero: out of its line, and far enough that where it first sees the hero
@@ -260,7 +266,7 @@ final class AsBosses {
 		return best;
 	}
 
-	static final Map<Integer, Integer> boltFrom = new HashMap<>(); static int boltHP = -1; static float boltAt; static Level boltL;
+	static final Map<Integer, Integer> boltFrom = new HashMap<>(); static int boltHP = -1; static float boltAt, fistSeenAt; static Level boltL;
 
 	static boolean nearSeat(int c) { return L.distance(c, seat()) <= 4; }
 	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
