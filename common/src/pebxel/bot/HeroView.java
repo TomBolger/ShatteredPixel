@@ -93,7 +93,8 @@ public final class HeroView {
 		}
 		int bark = 0; try { bark = Barkskin.currentLevel(h); } catch (Throwable e) { }
 		if (bark > 0) f.dr = f.dr.plus(Dist.normal(0, bark));
-		f.acc = Math.max(1, Math.round(acc)); f.eva = Math.max(1, Math.round(eva));   // (Hero.attackSkill / defenseSkill round) f.taken = we.taken * ag.taken;
+		f.acc = Math.max(1, Math.round(acc)); f.eva = Math.max(1, Math.round(eva));   // (Hero.attackSkill / defenseSkill round)
+		f.taken = we.taken * ag.taken;   // (MT: this had been inside the comment above: glyphs and curses never counted)
 		// shots before contact: the spirit bow (MissileWeapon.adjacentAccFactor: 1.5 at range), a charged attack wand
 		SpiritBow bow = h.belongings.getItem(SpiritBow.class);
 		if (bow != null) {
