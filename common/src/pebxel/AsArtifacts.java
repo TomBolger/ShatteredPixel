@@ -367,7 +367,8 @@ final class AsArtifacts {
 				int r = i instanceof Pasty || i instanceof PhantomMeat || i instanceof MeatPie ? 0 : i instanceof MysteryMeat ? 1 : i instanceof SmallRation || i instanceof Berry || i instanceof ChargrilledMeat || i instanceof FrozenCarpaccio || i instanceof StewedMeat ? 2 : 3;
 				if (r < pr) { pr = r; pick = i; }
 			}
-			if (n >= 2 && pick != null) { Target t = use(h, HornOfPlenty.AC_STORE, -1, "store spare food in the horn"); t.on = pick; return t; }
+			if (n >= 3 && !Assist.hungry() && pick != null) {   // (two kept: the horn fills only as the hero gains levels, and a slow start starved with one)
+				Target t = use(h, HornOfPlenty.AC_STORE, -1, "store spare food in the horn"); t.on = pick; return t; }
 		}
 		return null;
 	}
