@@ -64,7 +64,12 @@ final class AsArtifacts {
 			Class<?> enc = w.getClass().getEnclosingClass();
 			if (enc == null) return null;
 			Hero h = Dungeon.hero;
-			if (enc == KindofMisc.class && swapOut != null && h != null && swapOut.isEquipped(h)) return Messages.titleCase(swapOut.title()).toLowerCase(Locale.ROOT);
+			if (enc == KindofMisc.class && h != null) {
+				KindofMisc out = swapOut != null && (swapOut == h.belongings.artifact || swapOut == h.belongings.misc || swapOut == h.belongings.ring) ? swapOut : null;
+				if (out == null) { H = h; double ow = 1e9;   // (not one of ours: the least worth that can come off)
+					for (KindofMisc o : new KindofMisc[]{ h.belongings.artifact, h.belongings.misc, h.belongings.ring }) if (o != null && !stuck(o) && worth(o) < ow) { ow = worth(o); out = o; } }
+				if (out != null) return Messages.titleCase(out.title()).toLowerCase(Locale.ROOT);
+			}
 			if (enc == ChaliceOfBlood.class && h != null) {
 				ChaliceOfBlood c = h.belongings.getItem(ChaliceOfBlood.class);
 				return Messages.get(ChaliceOfBlood.class, c != null && prickSafe(h, c, true) ? "yes" : "no").toLowerCase(Locale.ROOT);
@@ -141,6 +146,9 @@ final class AsArtifacts {
 					freezeWanted = true; return use(hg, TimekeepersHourglass.AC_ACTIVATE, -1, "dying: freeze time");
 				}
 				Target c = chainsAway(); if (c != null) return c;
+				MasterThievesArmband ab = worn(MasterThievesArmband.class);
+				if (ab != null && adjFoes.size() == 1 && !Assist.boss(adjFoes.get(0)) && adjFoes.get(0).buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Cripple.class) == null && can(ab, MasterThievesArmband.AC_STEAL))
+					return use(ab, MasterThievesArmband.AC_STEAL, adjFoes.get(0).pos, "dying: armband, blind and cripple it to get away");
 				SandalsOfNature sn = worn(SandalsOfNature.class);
 				if (sn != null && can(sn, SandalsOfNature.AC_ROOT)) {
 					Class<?> e = sn.curSeedEffect;
@@ -306,6 +314,7 @@ final class AsArtifacts {
 
 	/** The best ring or artifact to put on now (into a free slot, or in place of a worse one: swapOut), or null. */
 	static Target equip() {
+		if (H.belongings.lostInventory()) return null;
 		Belongings0 b = new Belongings0();
 		Target best = null; double bg = 0;
 		for (Item it : H.belongings.backpack) {
@@ -336,7 +345,7 @@ final class AsArtifacts {
 
 	/** The three misc slots as they stand. */
 	static final class Belongings0 {
-		Artifact art = H.belongings.artifact(); KindofMisc misc = H.belongings.misc(); Ring ring = H.belongings.ring();
+		Artifact art = H.belongings.artifact; KindofMisc misc = H.belongings.misc; Ring ring = H.belongings.ring;   // (the slots themselves: after an Ankh's lost inventory artifact() reads null for one still worn, and the swap went round and round)
 		boolean free(KindofMisc k) {
 			if (k instanceof Artifact) return art == null || misc == null || (misc instanceof Ring && ring == null);
 			return ring == null || misc == null || (misc instanceof Artifact && art == null);
@@ -397,7 +406,7 @@ final class AsArtifacts {
 		return use(r, DriedRose.AC_SUMMON, -1, "call the ghost");
 	}
 
-	/** A foe in sight: the chains pull a shooter into reach, the armband blinds and cripples a fresh one beside the hero worth it (two thirds of its health left, and a strong one, a boss, or the hero below half: 29 a game on everything was too many), the
+	/** A foe in sight: the chains pull a shooter into reach, the armband steals from a sleeper, the
 	 *  sandals' seed at a foe (or Earthroot on the hero beside one). */
 	static Target fight() {
 		EtherealChains ec = worn(EtherealChains.class);
@@ -412,9 +421,12 @@ final class AsArtifacts {
 			}
 			if (best != null) return use(ec, EtherealChains.AC_CAST, best.pos, "chains: pull the " + best.getClass().getSimpleName() + " into reach");
 		}
+		// the armband: a blinded foe still senses the hero beside it (Level.updateFieldOfView: sense 1), so in a fight a
+		// steal is a blow lost; only from a sleeper (the surprise: half again the loot) with loot worth the try
 		MasterThievesArmband ab = worn(MasterThievesArmband.class);
-		if (ab != null && adj && can(ab, MasterThievesArmband.AC_STEAL)) {
-			for (Mob m : adjFoes) if (m.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class) == null && m.HP * 3 >= m.HT * 2 && (m.HT * 4 >= H.HT || Assist.boss(m) || H.HP * 2 < H.HT) && !(m instanceof Mimic)) return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal, blind and cripple");   // (blinded: shown on it)
+		if (ab != null && can(ab, MasterThievesArmband.AC_STEAL) && H.HP * 4 >= H.HT * 3) {
+			for (Mob m : Assist.mobs()) if (Assist.enemy(m) && Assist.adjacent(m.pos, hp) && m.state == m.SLEEPING && !Assist.boss(m) && !(m instanceof Mimic) && m.lootChance() >= 0.15f && H.lvl <= m.maxLvl + 2)
+				return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal from the sleeper");
 		}
 		SandalsOfNature sn = worn(SandalsOfNature.class);
 		if (sn != null && can(sn, SandalsOfNature.AC_ROOT) && sn.curSeedEffect != null) {
