@@ -41,6 +41,7 @@ import com.shatteredpixel.shatteredpixeldungeon.ui.Window;
 import com.shatteredpixel.shatteredpixeldungeon.windows.WndBag;
 import java.util.*;
 import java.util.function.IntPredicate;
+import pebxel.bot.*;
 
 /**
  * Pebble PD's Assistant (watch/src/ovl/tgt/tgt.c: tgt plan A, tgt2 plans B, C..., tgt3 the hands, tgt4 escape and
@@ -212,6 +213,18 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
+	// agent O's models (pebxel.bot), each on by default (AS_Oxxx=0 turns one off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid)
+	static final boolean OFIGHT = opt("OFIGHT", true);
+	static final double ODEATH = Tune.DEATH, OESC = Tune.ESC, OUP = Tune.UP, OAVOID = Tune.AVOID;   // (percent: pebxel.bot.Tune, env AS_ODEATH...)
+	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
+	private static FightModel.Result oFight() {
+		List<Mob> fs = new ArrayList<>();
+		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (adjacent(m.pos, hp) || (hunting(m) && walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && distance(m.pos, hp) <= 8 && line(m.pos, hp)))) fs.add(m);   // (a shooter needn't come nearer)
+		return FightModel.engaged(H, fs);
+	}
+	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
+	static final boolean OGEAR = opt("OGEAR", true), OUPG = opt("OUPG", true), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", true);
+	private static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
 	// the API
@@ -437,6 +450,8 @@ public final class Assist {
 		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
 		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
 		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
+		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = UpgradePlan.target(h); if (u != null && sel.itemSelectable(u)) return u; }
+		if (src instanceof ScrollOfIdentify && OIDENT) { Item u = Identify.identifyTarget(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfUpgrade) {
 			for (Item i : worn) if (sel.itemSelectable(i) && !(i.cursed && i.cursedKnown)) return i;
 		}
@@ -537,6 +552,7 @@ public final class Assist {
 		od = ovrC != -1 ? ovrDir : -1;
 		if (grassSkip && H.exp + H.lvl * 101 != grassKey) grassSkip = false;
 		zero = false; h0 = 0;
+		if (OIDENT || OSHOP) Identify.observe(H);
 	}
 
 	private static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
@@ -1153,6 +1169,7 @@ public final class Assist {
 			if (!adj && walk(m.pos) > 2 * distance(m.pos, hp) + 4) continue;
 			if (!adj && !hunting(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;
 			if (m.state == m.SLEEPING && !adj && !boss(m) && distance(m.pos, hp) > 2 && floorLeft()) continue;
+			if (OFIGHT && !adj && !hunting(m) && !boss(m) && FightModel.evaluate(H, Collections.singletonList(m)).pDeath * 100 >= OAVOID) continue;   // (O: a fight it would likely lose: not started)
 			int k = adj ? (boss(m) ? 0 : 1 + m.HP) : walk(m.pos) < INF ? 1000 + walk(m.pos) * 64 + m.HP : INF;
 			if (m instanceof Necromancer && NECRO > 0 && walk(m.pos) <= NECRO) k = adj ? 0 : 1;   // (it keeps raising a skeleton; the skeleton falls with it)
 			if (k < bk) { bk = k; best = m.pos; bm = m; }
@@ -1224,12 +1241,13 @@ public final class Assist {
 			if (SHOP && best < 0) { int sb = -1, sk = INF;
 				for (Heap h : L.heaps.valueList()) {   // the shop, by the guide's order (2.7): what's wanted and affordable (the price is shown)
 					if (h.type != Heap.Type.FOR_SALE || !h.seen || h.pos == hp || passed.contains(h.pos) || skippedHeaps.contains(h.pos) || combatHeld.contains(h.pos) || bad.containsKey(h.pos) || seenChar(h.pos) != null) continue;
-					int d = walk(h.pos), pr = buyRank(h.peek());
+					int d = walk(h.pos), pr = OSHOP ? (roomFor(h.peek()) ? Trade.buyRank(H, h, L.heaps.valueList()) : 0) : buyRank(h.peek());
 					if (pr <= 0 || d >= INF) continue;
 					int sc = d - pr * 8;
 					if (sc < sk) { sk = sc; sb = h.pos; }
 				}
-				if (sb >= 0) { why[0] = "buy"; return sb; } }
+				if (sb >= 0) { why[0] = "buy"; return sb; }
+				if (OSHOP && Trade.sellGold(H) >= 20) for (Mob m : mobs()) if (m instanceof Shopkeeper && L.heroFOV[m.pos] && walk(m.pos) < INF && talked.getOrDefault(m.id(), 0) < 1) { kind[0] = GO; why[0] = "sell"; return m.pos; } }
 			for (Mob m : mobs()) {   // a hidden mimic looks like a chest: opened like one (MimicSprite draws it so; knowing better would be cheating)
 				if (!disguised(m) || !L.heroFOV[m.pos] || passed.contains(m.pos) || skippedHeaps.contains(m.pos) || combatHeld.contains(m.pos) || bad.containsKey(m.pos) || H.HP * 3 < H.HT * 2 || danger[m.pos]) continue;
 				int d = walk(m.pos);
@@ -1572,7 +1590,7 @@ public final class Assist {
 	/** Low, an enemy after the hero, no known Healing: the way up is a sure escape (enemies stay behind; strategy-reference 2.3).
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
 	private static Target upstairs() {
-		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || H.HP * 100 >= H.HT * 35) return null;
+		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || (OFIGHT ? !oLosing(OUP) : H.HP * 100 >= H.HT * 35)) return null;
 		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
 		int near = INF; boolean hunted = false;
@@ -1681,14 +1699,15 @@ public final class Assist {
 		}
 		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
-		if (seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
+		if (OFIGHT ? pot && H.HP * 100 < H.HT * Tune.HEALMAX && oLosing(ODEATH) : seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0)) return use(heal, Potion.AC_DRINK, -1, "low: heal");
 		if (!seen && threatNear && H.HP * 100 < H.HT * HEALPCT && pot && !declined(PotionOfHealing.class, Potion.AC_DRINK)) return use(heal, Potion.AC_DRINK, -1, "low, it's coming: heal");   // (waiting for one seen coming: healed first)
 		Waterskin ws = bag(Waterskin.class);
 		if (adj && H.HP * 4 < H.HT && !pot && ws != null && ws.actions(H).contains("DRINK")) return use(ws, "DRINK", -1, "low: waterskin");
-		if (adj && H.HP * 4 < H.HT && !pot) {   // dying beside one: a known way out first
+		if (adj && !pot && (OFIGHT ? oLosing(OESC) : H.HP * 4 < H.HT)) {   // dying beside one: a known way out first
 			Class<?>[] esc = { ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
+			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
 		}
@@ -1712,6 +1731,7 @@ public final class Assist {
 			Armor a = H.belongings.armor(); Item wpn = H.belongings.weapon();
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
+			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
@@ -1726,6 +1746,7 @@ public final class Assist {
 			ScrollOfRemoveCurse rc = bag(ScrollOfRemoveCurse.class);
 			if (rc != null && rc.isKnown() && cw && !declined(ScrollOfRemoveCurse.class, Scroll.AC_READ)) return use(rc, Scroll.AC_READ, -1, "remove curse");
 			ScrollOfIdentify id = bag(ScrollOfIdentify.class);
+			if (OIDENT) unid = Identify.identifyTarget(H);
 			if (id != null && id.isKnown() && unid != null && !declined(ScrollOfIdentify.class, Scroll.AC_READ)) { Target t = use(id, Scroll.AC_READ, -1, "identify"); t.on = unid; return t; }
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
 			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
@@ -1744,9 +1765,10 @@ public final class Assist {
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
 			PotionOfLiquidFlame lf = new PotionOfLiquidFlame();
 			if (lf.isKnown() || ((water(hp) || !scr) && !burn))
-				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK)) return use(i, Potion.AC_DRINK, -1, "drink to learn");
+				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i))) return use(i, Potion.AC_DRINK, -1, "drink to learn");
 		}
-		for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
+		if (OGEAR) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
+		else for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
 			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff) continue;
 			Item cur = i instanceof Armor ? H.belongings.armor() : H.belongings.weapon();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
@@ -1761,7 +1783,7 @@ public final class Assist {
 		boolean bossHere = bossSeen >= 0 && Actor.now() - bossSeen < 100;   // (a boss seen on this floor lately)
 		if (!L.locked && Dungeon.bossLevel() && bossHere && H.HP * 20 < H.HT * 19 && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "rest before the boss"); t.action = REST_ACT; t.obj = -1; return t; }
 		if (DEWREST && H.HP * 100 < H.HT * RESTPCT && ws != null && field(ws, "volume") instanceof Integer && (Integer) field(ws, "volume") > DEWKEEP && !declined(Waterskin.class, "DRINK")) return use(ws, "DRINK", -1, "hurt: dew, not food");   // (resting costs 10 turns of food a point)
-		if (!L.locked && H.HP * 100 < H.HT * RESTPCT && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "hurt: rest"); t.action = REST_ACT; t.obj = -1; return t; }
+		if (!L.locked && (OFIGHT ? H.HP < FightModel.restNeed(H) : H.HP * 100 < H.HT * RESTPCT) && !starving() && !declined(null, REST_ACT)) { Target t = new Target(hp, WAIT, "hurt: rest"); t.action = REST_ACT; t.obj = -1; return t; }
 		return null;
 	}
 
