@@ -26,7 +26,8 @@ import java.util.*;
  * SIMSEED=n (repeatable games: see Lockstep), CHEAT=1 (the whole-game smoke test: Cheat, BotWindows, BotItems, BotQuests,
  * BotAlchemy, Rescue), WATCH=1 (played through the watch: WatchDriver), STARTDEPTH=n (cheat: straight down to n),
  * ASCEND=0 (cheat: win at the Amulet instead of climbing out), MINES=0 (keep out of the Blacksmith's mine), MAXFRAMES,
- * MAXWATCHFRAMES. Frames are a fixed 1/30 s of game time, in lockstep with the actor thread: no wall clock decides anything.
+ * MAXWATCHFRAMES. Training set-ups (Cheat's header): HEAD=1 + STARTDEPTH (head start), KIT / ARTIFACTS / WANDS ... (spawn
+ * kits), MILD=1 (mild cheat); TALENTS=human (HumanTalents: a simulated player's random, specialising build). Frames are a fixed 1/30 s of game time, in lockstep with the actor thread: no wall clock decides anything.
  * Ends with "COVER ..." (sim/cover.py adds them up) and "RESULT ..." lines for scripts.
  */
 public class AssistBot {
@@ -185,7 +186,7 @@ public class AssistBot {
 		WatchSettings.assist(Integer.parseInt(System.getenv().getOrDefault("MODE", "1")));
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
-		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); FightCal.newGame();
+		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); FightCal.newGame(); Cheat.newGame(seed); HumanTalents.newGame(seed);
 		Random talentR = new Random(seed * 13 + 5);
 
 		GamesInProgress.selectedClass = cls; GamesInProgress.curSlot = 1;
@@ -270,7 +271,9 @@ public class AssistBot {
 				com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr = StairsTest.stairs(false);
 				if (tr != null) { Cheat.apply(); StairsTest.jump(tr); continue; }
 			}
-			if (Cheat.ON) { Cheat.apply(); if (watch == null || !watch.talents()) Cheat.spendTalents(talentR); if (Ui.topWindow() != null) continue; }
+			if (Cheat.SETUP && Cheat.setup()) continue;   // (head start, kits, mild cheat: a floor change started, or items given)
+			if (Cheat.ON) { Cheat.apply(); if (watch == null || !watch.talents()) { if (HumanTalents.ON) HumanTalents.spend(Dungeon.hero); else Cheat.spendTalents(talentR); } if (Ui.topWindow() != null) continue; }
+			else if (HumanTalents.ON) HumanTalents.spend(Dungeon.hero);   // (TALENTS=human: a simulated player's picks)
 			else Build.spendTalents(Dungeon.hero);   // (the guide's build: a player's own choice)
 			if (Controls.aiming()) {   // (left over: aim at plan A of the aiming list, else cancel)
 				List<Assist.Target> al = Assist.plan(true, null);
@@ -365,6 +368,7 @@ public class AssistBot {
 		Coverage.report(end);
 		System.out.println(BotStats.line());
 		if (Sense.ON) System.out.println(Sense.line());
+		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
 				cls, seed, end, Dungeon.depth, maxD, Statistics.duration, Dungeon.hero == null ? 0 : Dungeon.hero.lvl, Dungeon.hero == null ? 0 : Dungeon.hero.HP, Dungeon.hero == null ? 0 : Dungeon.hero.HT,
 				picked, stuckEvents, actFails, windows, decisions, Lockstep.frames - frames0, (ms() - t0) / 1000.0, cause.isEmpty() ? "" : "\n  last log: " + cause);

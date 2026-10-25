@@ -88,6 +88,12 @@ public final class BotWindows {
 		if (kind.equals("WndTradeItem") && byText(bs, "sell") != null && sales < 3) { sales++; return new Answer(byText(bs, "sell"), null, "sell"); }
 		if (kind.equals("WndTradeItem")) { Gizmo b = byText(bs, "buy"); return b != null ? new Answer(b, null, "buy") : new Answer(null, null, "can't buy: back"); }
 		// the hero's subclass and armour ability, quest rewards: one of the choices (each game its own), confirmed
+		if (HumanTalents.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null && (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility"))) {   // (TALENTS=human: the simulated player's random pick)
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass hc = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass;
+			String want = kind.equals("WndChooseSubclass") ? HumanTalents.subclass(hc).shortDesc() : HumanTalents.ability(hc).shortDesc();
+			Gizmo b = byText(bs, want.toLowerCase(Locale.ROOT));
+			if (b != null) return new Answer(b, null, "the human's pick");
+		}
 		if (kind.equals("WndChooseSubclass") && !Cheat.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null) {   // (honest games: the build's subclass)
 			Gizmo b = byText(bs, Build.subclass(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
 			if (b != null) return new Answer(b, null, "the build's subclass");

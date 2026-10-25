@@ -84,6 +84,50 @@ public final class Build {
 		return null;
 	}
 
+	/** A talent's "type", the family it shares with talents of other classes (Shattered lines its talents up by slot:
+	 *  each class has a meal, an intuition, a potion or scroll one...). Tier 3 subclass talents and the armour abilities'
+	 *  tier 4 talents get the family of what they do; the abilities' own odd ones are ABILITY. Used by the simulated
+	 *  human player (HumanTalents: people stick to the kinds they like) and, later, for the build's context (a Horn of
+	 *  Plenty makes the FOOD ones better). The families:
+	 *  FOOD (meals, rations, stomach), IDENTIFY (the intuitions), CONSUMABLE (potions and scrolls: liquid, inscribed),
+	 *  DEFENSE (shields, barriers, armour, healing, not dying), MELEE (blows, combos, the weapon), RANGED (thrown and
+	 *  shot), MAGIC (wands, charges, spells, allies), STEALTH (sneaking, searching, seeing, moving), GEAR (rings,
+	 *  upgrades and glyphs moved about), ABILITY (the armour abilities' own). */
+	public static String family(Talent t) {
+		String f = FAMILY.get(t.name());
+		if (f != null) return f;
+		String n = t.name();
+		if (n.contains("MEAL") || n.contains("RATION")) return "FOOD";
+		if (n.contains("INTUITION")) return "IDENTIFY";
+		if (n.startsWith("LIQUID") || n.startsWith("INSCRIBED")) return "CONSUMABLE";
+		return "ABILITY";
+	}
+	static final Map<String, String> FAMILY = new HashMap<>();
+	static void fam(String f, String... ts) { for (String t : ts) FAMILY.put(t, f); }
+	static {
+		fam("FOOD", "HEARTY_MEAL", "IRON_STOMACH", "EMPOWERING_MEAL", "ENERGIZING_MEAL", "CACHED_RATIONS", "MYSTICAL_MEAL", "NATURES_BOUNTY",
+				"INVIGORATING_MEAL", "STRENGTHENING_MEAL", "FOCUSED_MEAL", "SATIATED_SPELLS", "ENLIGHTENING_MEAL", "SOUL_EATER");
+		fam("IDENTIFY", "VETERANS_INTUITION", "SCHOLARS_INTUITION", "THIEFS_INTUITION", "SURVIVALISTS_INTUITION", "ADVENTURERS_INTUITION", "HOLY_INTUITION");
+		fam("CONSUMABLE", "LIQUID_WILLPOWER", "INSCRIBED_POWER", "INSCRIBED_STEALTH", "LIQUID_NATURE", "LIQUID_AGILITY", "RECALL_INSCRIPTION", "LIGHT_READING");
+		fam("DEFENSE", "IRON_WILL", "HOLD_FAST", "DEATHLESS_FURY", "LETHAL_DEFENSE", "BACKUP_BARRIER", "SHIELD_BATTERY", "DESPERATE_POWER", "SOUL_SIPHON",
+				"REACTIVE_BARRIER", "PROTECTIVE_SHADOWS", "EVASIVE_ARMOR", "DEATHLY_DURABILITY", "CLONED_ARMOR", "NATURES_AID", "BARKSKIN", "SHIELDING_DEW",
+				"AGGRESSIVE_BARRIER", "MONASTIC_VIGOR", "INVIGORATING_VICTORY", "SHIELD_OF_LIGHT", "CLEANSE", "LAY_ON_HANDS", "AURA_OF_PROTECTION",
+				"WALL_OF_LIGHT", "SUSTAINED_RETRIBUTION", "SHRUG_IT_OFF", "LIFE_LINK", "STASIS", "RATSISTANCE");
+		fam("MELEE", "PROVOKED_ANGER", "LETHAL_MOMENTUM", "STRONGMAN", "ENDLESS_RAGE", "ENRAGED_CATALYST", "CLEAVE", "ENHANCED_COMBO", "BODY_SLAM",
+				"STRIKING_WAVE", "EVEN_THE_ODDS", "EMPOWERED_STRIKE", "SUCKER_PUNCH", "ENHANCED_LETHALITY", "ASSASSINS_REACH", "BOUNTY_HUNTER",
+				"SHADOW_BLADE", "FEAR_THE_REAPER", "FOLLOWUP_STRIKE", "PATIENT_STRIKE", "LETHAL_HASTE", "WEAPON_RECHARGING", "SWIFT_EQUIP",
+				"PRECISE_ASSAULT", "DEADLY_FOLLOWUP", "VARIED_CHARGE", "COMBINED_LETHALITY", "UNENCUMBERED_SPIRIT", "COMBINED_ENERGY",
+				"CLOSE_THE_GAP", "ELIMINATION_MATCH", "STRIKING_FORCE", "EXPOSE_WEAKNESS", "SEARING_LIGHT", "BODY_FORM");
+		fam("RANGED", "IMPROVISED_PROJECTILES", "PROJECTILE_MOMENTUM", "DURABLE_PROJECTILES", "POINT_BLANK", "SEER_SHOT", "FARSIGHT",
+				"SHARED_ENCHANTMENT", "SHARED_UPGRADES", "DURABLE_TIPS", "FAN_OF_BLADES", "PROJECTING_BLADES", "SPIRIT_BLADES", "EAGLE_EYE", "GO_FOR_THE_EYES");
+		fam("MAGIC", "LINGERING_MAGIC", "WAND_PRESERVATION", "MYSTICAL_CHARGE", "EXCESS_CHARGE", "NECROMANCERS_MINIONS", "ALLY_WARP", "BLAST_RADIUS",
+				"ELEMENTAL_POWER", "WILD_POWER", "FIRE_EVERYTHING", "CONSERVED_MAGIC", "SUNRAY", "BLESS", "HOLY_LANCE", "HALLOWED_GROUND",
+				"MNEMONIC_PRAYER", "DIVINE_INTERVENTION", "JUDGEMENT", "FLASH", "MIND_FORM", "SPIRIT_FORM", "BEAMING_RAY", "ELEMENTAL_REACH", "DIRECTED_POWER", "HEROIC_ENERGY");
+		fam("STEALTH", "WIDE_SEARCH", "SILENT_STEPS", "ROGUES_FORESIGHT", "LIGHT_CLOAK", "SPEEDY_STEALTH", "HASTY_RETREAT", "SHADOW_STEP",
+				"ARCANE_VISION", "HEIGHTENED_SENSES", "REJUVENATING_STEPS", "DIVINE_SENSE", "SWIFT_SPIRIT", "DOUBLE_JUMP", "FEIGNED_RETREAT");
+		fam("GEAR", "RUNIC_TRANSFERENCE", "ENHANCED_RINGS", "TWIN_UPGRADES");
+	}
+
 	/** Every point there is to spend, spent. Returns how many. */
 	public static int spendTalents(Hero h) {
 		int n = 0;
