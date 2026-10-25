@@ -49,6 +49,11 @@ final class AsQuests {
 
 	/** A suggestion for the hero's hands this turn, or null. planA: the list's first entry so far (may be null). */
 	static Target suggest(Target planA) {
+		Target t = suggest0(planA);
+		if (t != null && (t.kind == GO || t.kind == PICKUP) && (Dungeon.hero.rooted || bad.containsKey(t.cell))) return null;   // (rooted, or it did nothing when tried: Assist's own rules)
+		return t;
+	}
+	static Target suggest0(Target planA) {
 		try {
 			Target b = AsBasics.fightLoop(planA);
 			if (b != null) return b;
@@ -69,7 +74,20 @@ final class AsQuests {
 	}
 
 	/** A hands suggestion vetoed (Assist planList's hook). */
-	static boolean veto(Target hk) { try { return AsBasics.veto(hk); } catch (Throwable e) { lastError = e; return false; } }
+	static boolean veto(Target hk) {
+		try {
+			if (ON && hk != null && "drink to learn".equals(hk.why) && graveOpen()) return true;   // (unknown potions kept for the barricade: one is the floor's Liquid Flame)
+			return AsBasics.veto(hk);
+		} catch (Throwable e) { lastError = e; return false; }
+	}
+	/** The corpse dust quest on, its barricade seen standing and no known fire to burn it: the Wandmaker's floor. */
+	static boolean graveOpen() {
+		if (!flag(Wandmaker.class, "spawned") || !flag(Wandmaker.class, "given") || Wandmaker.Quest.wand1 == null || !seenAt.containsKey(Wandmaker.class)) return false;
+		Object t = qobj(Wandmaker.class, "type"); if (!(t instanceof Integer) || (Integer) t != 1 || Dungeon.hero.belongings.getItem(CorpseDust.class) != null) return false;
+		if (gambleL == L && gambles >= 3) return false;
+		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c]) return true;
+		return false;
+	}
 
 	static void remember() {
 		if (memL != L) { memL = L; seenAt.clear(); }
@@ -110,6 +128,7 @@ final class AsQuests {
 		}
 		return patrolGoal >= 0 ? new Target(patrolGoal, GO, "quest: round the floor for the ghost's foe") : null;
 	}
+	static Level gambleL; static int gambles;
 	static Level patrolL; static float patrolT0; static int patrolGoal = -1, patrolLast = -1;
 	static final int GHOSTHUNT = optInt("QGHOST", 400);   // turns spent looking for it once the floor is done
 
@@ -123,6 +142,7 @@ final class AsQuests {
 		if (h.belongings.getItem(CorpseDust.class) != null || h.belongings.getItem(Embers.class) != null || h.belongings.getItem(Rotberry.Seed.class) != null)
 			return toNpc(Wandmaker.class, "quest: back to the Wandmaker");
 		Object t = qobj(Wandmaker.class, "type"); int type = t instanceof Integer ? (Integer) t : 0;
+		if (DBG) System.out.println("    WANDMAKER type " + type + " given " + flag(Wandmaker.class, "given"));
 		if (type == 1) return grave();
 		if (type == 2) return candles();
 		if (type == 3) return heart();
@@ -133,19 +153,37 @@ final class AsQuests {
 	static Target grave() {
 		Heap dust = null;
 		for (Heap hp : L.heaps.valueList()) if (hp.seen) for (Item i : hp.items) if (i instanceof CorpseDust) dust = hp;
-		if (dust == null) return null;
-		if (walk(dust.pos) < INF || dust.pos == Dungeon.hero.pos) return new Target(dust.pos, PICKUP, "quest: the corpse dust");
-		int bar = -1, bd = INF;
-		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c] && distance(c, dust.pos) < bd) { bd = distance(c, dust.pos); bar = c; }
-		if (bar < 0 || bd > 10) return null;
+		if (dust != null && (walk(dust.pos) < INF || dust.pos == Dungeon.hero.pos)) return new Target(dust.pos, PICKUP, "quest: the corpse dust");
+		// the grave is behind a barricade (the Wandmaker said so): the one by the dust, or (the dust not seen yet) any seen
+		int bar = -1, bd = INF, ref = dust != null ? dust.pos : Dungeon.hero.pos;
+		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c] && distance(c, ref) < bd) { bd = distance(c, ref); bar = c; }
+		if (DBG) { int nb = 0; for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE) nb++; System.out.println("    GRAVE bar " + bar + " barricades " + nb + " dust " + (dust == null ? -1 : dust.pos)); }
+		if (bar < 0 || (dust != null && bd > 10)) return null;
 		Hero h = Dungeon.hero; Item fire = null; String act = Item.AC_THROW;
 		PotionOfLiquidFlame lf = h.belongings.getItem(PotionOfLiquidFlame.class); if (lf != null && lf.isKnown()) fire = lf;
 		WandOfFireblast fb = h.belongings.getItem(WandOfFireblast.class); if (fire == null && fb != null && charged(fb, fb)) { fire = fb; act = Wand.AC_ZAP; }
-		if (fire == null) return null;   // (nothing known to burn it with)
+		if (fire == null && gambleL == L && gambles >= 3) return null;
+		if (fire == null) {   // nothing known to burn it with: the floor holds a Liquid Flame for this (MassGraveRoom): the unknown potion likeliest to be it, by the labels' odds (pebxel.bot.Identify), not one likely Healing
+			double bp = 0.15;
+			for (Item i : h.belongings.backpack) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion && !known(i)) {
+				double pf = pebxel.bot.Identify.p(i.getClass(), PotionOfLiquidFlame.class), ph = pebxel.bot.Identify.p(i.getClass(), com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class)
+						+ pebxel.bot.Identify.p(i.getClass(), com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength.class) + pebxel.bot.Identify.p(i.getClass(), com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfExperience.class);
+				if (pf > bp && ph < 0.25) { bp = pf; fire = i; } }   // (never one likely Healing, Strength or Experience)
+			if (DBG) System.out.println("    GRAVE gamble " + fire);
+			if (fire == null) return null;
+		}
 		int d = distance(h.pos, bar);
-		if (d >= 2 && d <= 4 && line(h.pos, bar) && !L.flamable[h.pos]) return use(fire, act, bar, "quest: burn the barricade");
+		if (DBG) System.out.println("    GRAVE fire " + fire + " d " + d + " line " + line(h.pos, bar) + " bar " + bar + " hp " + h.pos);
+		if (d >= 1 && d <= 4 && line(h.pos, bar) && (!L.flamable[h.pos] || d >= 3)) {   // (beside it from bare floor will do: fire spreads only over what burns)
+			if (!known(fire)) { if (gambleL != L) { gambleL = L; gambles = 0; } gambles++; }
+			return use(fire, act, bar, known(fire) ? "quest: burn the barricade" : "quest: an unknown potion at the barricade");
+		}
 		int best = -1, bb = INF;   // a spot 2-3 off with a clear throw
-		for (int c = 0; c < L.length(); c++) if (dist[c] < bb && open[c] && seenChar(c) == null && distance(c, bar) >= 2 && distance(c, bar) <= 3 && !L.flamable[c] && new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) { bb = dist[c]; best = c; }
+		for (int c = 0; c < L.length(); c++) if (dist[c] < INF && open[c] && seenChar(c) == null && distance(c, bar) >= 1 && distance(c, bar) <= 4 && !(distance(c, bar) == 1 && L.flamable[c]) && new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) {
+			int k = dist[c] + (L.flamable[c] ? 6 : 0) + (distance(c, bar) <= 2 ? 2 : 0); if (k < bb) { bb = k; best = c; } }   // (off grass if it can be: the fire spreads)
+		if (DBG) { int a = 0, b2 = 0, c3 = 0; for (int c = 0; c < L.length(); c++) if (distance(c, bar) >= 2 && distance(c, bar) <= 4) { if (dist[c] < INF && open[c]) { a++; if (new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) b2++; else c3 = new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos; } }
+			System.out.println("    GRAVE spots " + a + " in line " + b2 + " e.g. stops at " + c3 + " best " + best); }
+		if (best < 0) { int bk = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && open[c] && seenChar(c) == null) { int k = distance(c, bar) * 6 + dist[c]; if (k < bk) { bk = k; best = c; } } }   // (none known: nearer it, to see round it)
 		return best >= 0 && best != h.pos ? new Target(best, GO, "quest: to throw at the barricade") : null;
 	}
 

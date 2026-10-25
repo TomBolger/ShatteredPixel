@@ -42,10 +42,10 @@ final class AsBasics {
 	static Target fightLoop(Target planA) {
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
-		// the blows struck (the hero's last action an attack, once a turn), not what plan A would do: the tactics may move instead
+		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
 		Mob m = null;
-		if (h.lastAction instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack && Actor.now() != stallAt) {
-			Char c = ((com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack) h.lastAction).target;
+		if (actKind == ENEMY && actCell >= 0 && Actor.now() != stallAt) {   // (Assist.act's note of what was done last: a blow at that cell)
+			Char c = Actor.findChar(actCell);
 			if (c instanceof Mob && c.isAlive() && L.adjacent(c.pos, hp)) m = (Mob) c;
 		}
 		if (stallL != L) { stallL = L; stallId = -1; breakId = -1; }
@@ -55,6 +55,7 @@ final class AsBasics {
 			else if (m.id() != stallId) { stallId = m.id(); stallBlows = 0; stallLow = m.HP; stallOff = 0; }
 			else { stallOff = 0; stallBlows++; if (m.HP < stallLow) { stallLow = m.HP; stallBlows = 0; } }
 		}
+		if (DBG) System.out.println("    STALL act " + actKind + "@" + actCell + " m " + (m == null ? null : m.getClass().getSimpleName()) + " id " + stallId + " blows " + stallBlows + " low " + stallLow + " break " + breakId);
 		boolean breaking = breakId >= 0 && Actor.now() < breakUntil;
 		if (m == null && !breaking) return null;
 		if (m != null && stallBlows >= STALL) { breakId = m.id(); breakUntil = Actor.now() + 6; stallBlows = 0; breaking = true; }
@@ -76,6 +77,13 @@ final class AsBasics {
 		if (stuck instanceof GreatCrab && !adjacent(stuck.pos, hp)) { Target r = harmfulAt(stuck); if (r != null) return r; }
 		int c = stepAwayFrom(stuck.pos);
 		if (c >= 0) return new Target(c, GO, "stalled: away from it");
+		// cornered by a foe no blow gets through (the crab sees it coming): unseen (its blows land), away, or a gamble
+		Class<?>[] esc = { PotionOfInvisibility.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfMirrorImage.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class };
+		boolean read = !blind();
+		for (Class<?> k : esc) for (Item i : h.belongings.backpack) if (k.isInstance(i) && known(i) && (i instanceof Potion || read))
+			return use(i, i instanceof Potion ? Potion.AC_DRINK : com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.AC_READ, -1, "stalled, cornered: a way out");
+		if (read) for (Item i : h.belongings.backpack) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll && !known(i)) return use(i, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.AC_READ, -1, "stalled, cornered: an unknown scroll");
+		for (Item i : h.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "stalled, cornered: an unknown potion");
 		return null;
 	}
 
