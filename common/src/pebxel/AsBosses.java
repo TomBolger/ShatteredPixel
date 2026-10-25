@@ -10,6 +10,9 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.*;
 import com.shatteredpixel.shatteredpixeldungeon.items.Heap;
 import com.shatteredpixel.shatteredpixeldungeon.items.Item;
 import com.shatteredpixel.shatteredpixeldungeon.levels.CavesBossLevel;
+import com.shatteredpixel.shatteredpixeldungeon.levels.HallsBossLevel;
+import com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing;
+import com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Level;
 import com.shatteredpixel.shatteredpixeldungeon.levels.PrisonBossLevel;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Terrain;
@@ -30,7 +33,8 @@ final class AsBosses {
 	private AsBosses() {}
 
 	static final boolean ON = opt("BOSSES", true);
-	static final boolean PYLON = opt("BPYLON", true), KING2 = opt("BKING2", true), FISTS = opt("BFISTS", true);
+	static final boolean PYLON = opt("BPYLON", true), KING2 = opt("BKING2", true), FISTS = opt("BFISTS", true), LEAPS = opt("BLEAPS", true), YOG = opt("BYOG", true);
+	static final int YOGHEAL = optInt("BYOGHEAL", 45);   // (Yog's floor: Healing below this share of health with a foe at hand or bleeding)
 
 	// =============================================================================================================
 	// the cells to keep off (worked out once a turn)
@@ -52,6 +56,7 @@ final class AsBosses {
 		if (dz.length != l.length()) { dz = new boolean[l.length()]; soon = new boolean[l.length()]; } else { Arrays.fill(dz, false); Arrays.fill(soon, false); }
 		dzAny = false;
 		boolean mine = l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.MiningLevel;
+		if (LEAPS) leaps(l);
 		if (!Dungeon.bossLevel() && !mine) return;
 		rocks(l);   // (falling rocks: DM-300's, the Gnoll Geomancer's)
 		if (mine) return;
@@ -68,6 +73,15 @@ final class AsBosses {
 			}
 		}
 		if (dzAny) for (int c = 0; c < dz.length; c++) if (l.solid[c]) dz[c] = false;
+	}
+
+	/** A ripper demon's leap: the cell it's aimed at is shown (RipperDemon: GameScene.targetedCell, while the demon or
+	 *  the cell is in sight), and only whoever stands there as it lands is hit (bleeding: 0.75 of 15-25). */
+	static void leaps(Level l) {
+		for (Mob m : new ArrayList<>(l.mobs)) if (m instanceof RipperDemon && m.isAlive()) {
+			Object lp = field(m, "leapPos");
+			if (lp instanceof Integer && (Integer) lp >= 0 && (Integer) lp < l.length() && (l.heroFOV[m.pos] || l.heroFOV[(Integer) lp])) mark((Integer) lp);
+		}
 	}
 
 	static void mark(int c) { if (c >= 0 && c < dz.length) { dz[c] = true; dzAny = true; } }
@@ -117,6 +131,22 @@ final class AsBosses {
 	static Target tactics() {
 		if (!ON) return null;
 		int hp = Dungeon.hero.pos, LEN = L.length();
+		Target dg = dodge(); if (dg != null) return dg;
+		if (!Dungeon.bossLevel()) return null;
+		if (DBG && L instanceof PrisonBossLevel) dump();
+		Target t = null;
+		for (Mob m : mobs()) {
+			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
+			else if (m instanceof DwarfKing && KING2) t = king((DwarfKing) m);
+			else if (m instanceof YogDzewa && FISTS && !YOG) t = yog((YogDzewa) m);
+			if (t != null) return t;
+		}
+		return null;
+	}
+
+	/** A blow coming at the hero's cell (a beam, a leap, a bomb...): the nearest cell it misses. */
+	static Target dodge() {
+		int hp = Dungeon.hero.pos, LEN = L.length();
 		danger(0);
 		if (dzAny && dz[hp]) {   // a blow coming here: the nearest cell it misses (through the danger, if that's the only way)
 			// (on the way to plan A's objective when a step or two will do: back and forth through a shocker's sparks
@@ -129,16 +159,79 @@ final class AsBosses {
 				if (k < bk) { bk = k; best = c; } }
 			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
 		}
-		if (!Dungeon.bossLevel()) return null;
-		if (DBG && L instanceof PrisonBossLevel) dump();
-		Target t = null;
-		for (Mob m : mobs()) {
-			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
-			else if (m instanceof DwarfKing && KING2) t = king((DwarfKing) m);
-			else if (m instanceof YogDzewa && FISTS) t = yog((YogDzewa) m);
-			if (t != null) return t;
-		}
 		return null;
+	}
+
+	/** The hook before the escapes (Assist.planList's skills): a boss fight's own plan where the usual rules (fleeing
+	 *  fire, exploring, searching) would lose it. Only Yog's floor so far. */
+	static Target suggest(Target first) {
+		if (!ON || !YOG || !(L instanceof HallsBossLevel) || Dungeon.hero == null) return null;
+		return yogPlan();
+	}
+
+	// =============================================================================================================
+	// Yog-Dzewa (strategy-reference 4.5; YogDzewa, YogFist). Yog sits for good at the seat (the exit + 3 rows), his
+	// beams are shown a turn ahead (dodged), he can't be hurt while a fist lives, and a fist can't be hurt within 4 of
+	// his seat: so (1) Yog struck whenever no fist lives, (2) a fist drawn out to 6+ from the seat and fought there, (3)
+	// his summons (ripper demons strike twice a turn) killed as they come, (4) Healing drunk early (it cures the
+	// bleeding and the Bright fist's blindness too), (5) no exploring or searching on the floor: nothing's hidden.
+	// =============================================================================================================
+	static int seat() { return L.exit() + 3 * L.width(); }
+
+	static Target yogPlan() {
+		Hero h = Dungeon.hero; int hp = h.pos, yp = seat();
+		YogDzewa yog = null; for (Mob m : mobs()) if (m instanceof YogDzewa) yog = (YogDzewa) m;
+		if (yog == null || !yog.isAlive()) return null;
+		Target dg = dodge(); if (dg != null) return dg;
+		// healing: early (the fists and the demons hit hard; Healing also stops the bleeding)
+		boolean foe = false, adjFoe = false;
+		for (Mob m : mobs()) if (enemy(m) && !(m instanceof YogDzewa)) { foe |= L.distance(m.pos, hp) <= 6; adjFoe |= L.adjacent(m.pos, hp); }
+		float bleed = 0; for (Buff b : h.buffs()) if (b instanceof com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Bleeding) bleed = ((com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Bleeding) b).level();
+		PotionOfHealing heal = bag(PotionOfHealing.class);
+		if (heal != null && heal.isKnown() && (h.HP * 100 < h.HT * YOGHEAL && (foe || bleed > 0 || blind()) || bleed * 3 >= h.HP))
+			return use(heal, Potion.AC_DRINK, -1, "Yog: heal");
+		// the fists alive (seen or not: each comes with a phase, "the darkness pulls in closer")
+		boolean fistAlive = false; Mob fist = null; int fd = INF;
+		for (Mob m : mobs()) if (m instanceof YogFist && m.isAlive()) { fistAlive = true;
+			if (enemy(m) && L.distance(m.pos, hp) < fd) { fd = L.distance(m.pos, hp); fist = m; } }
+		// the nearest foe beside the hero that can be hurt (the demons first: weakest)
+		Mob o = weakestAdjacent(yog);
+		if (o != null) return new Target(o.pos, ENEMY, o instanceof YogFist ? "Yog: strike the fist" : "Yog: his summons first");
+		if (!fistAlive) {   // Yog himself: dormant till approached, open to blows whenever no fist lives
+			if (L.adjacent(yog.pos, hp)) return new Target(yog.pos, ENEMY, "Yog: strike him");
+			int st = stepTowards(yog.pos);
+			return st >= 0 ? new Target(st, GO, "Yog: to him") : null;
+		}
+		if (fist != null && !nearSeat(fist.pos)) {   // a fist out of his reach: to it (the Bright and Dark ones shoot every turn from afar)
+			boolean ranged = fist instanceof YogFist.BrightFist || fist instanceof YogFist.DarkFist;
+			if (!ranged && hunting(fist) && fd <= 3 && L.distance(hp, yp) >= 5) return wait(hp, "Yog: let the fist come");
+			int st = stepTowards(fist.pos);
+			if (st >= 0 && !(L.distance(st, yp) <= 4 && L.distance(hp, yp) > 4)) return new Target(st, GO, "Yog: to the fist");
+		}
+		// a fist by Yog, or none in sight: wait 6+ from the seat for it
+		int spot = lureSpot(fist, yp);
+		if (spot < 0 || spot == hp) return wait(hp, "Yog: wait for the fist");
+		int st = stepTowards(spot);
+		return st >= 0 ? new Target(st, GO, "Yog: draw the fist off him") : wait(hp, "Yog: wait for the fist");
+	}
+
+	static boolean nearSeat(int c) { return L.distance(c, seat()) <= 4; }
+	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
+
+	/** Where to wait for a fist: 6+ from the seat (so it's out of his reach beside the hero), the nearest such cell,
+	 *  off what helps the fist (water heals the Rotting one; the Burning one's fire can't take on water). */
+	static int lureSpot(Mob fist, int yp) {
+		int hp = Dungeon.hero.pos, best = -1, bs = INF;
+		boolean ranged = fist instanceof YogFist.BrightFist || fist instanceof YogFist.DarkFist;
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] >= INF || L.distance(c, yp) < 6 || !L.passable[c] || L.avoid[c] || danger[c] || (seenChar(c) != null && c != hp)) continue;
+			int s = dist[c] * 2;
+			if (fist instanceof YogFist.RottingFist && L.water[c]) s += 6;
+			if (fist instanceof YogFist.BurningFist && !L.water[c]) s += 3;
+			if (ranged && fist != null && new Ballistica(fist.pos, c, Ballistica.MAGIC_BOLT).collisionPos == c && L.distance(fist.pos, c) <= 6) s += 12;   // (out of its line)
+			if (s < bs) { bs = s; best = c; }
+		}
+		return best;
 	}
 
 	/** DM-300 supercharged (it sparks, and blows don't hurt it: "the boss can't be hurt"): the lit pylon is what ends
