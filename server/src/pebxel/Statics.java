@@ -57,10 +57,13 @@ final class Statics {
 	}
 
 	/** Every recorded static back as it was. */
+	static void restore() throws Exception { restore(c -> true); }
+	/** The recorded statics of the classes chosen put back as they were. */
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	static void restore() throws Exception {
+	static void restore(java.util.function.Predicate<Class<?>> which) throws Exception {
 		for (Saved s : saved) {
 			Field f = s.f; boolean fin = Modifier.isFinal(f.getModifiers());
+			if (!which.test(f.getDeclaringClass())) continue;
 			switch (s.kind) {
 				case 0: f.set(null, s.v); break;
 				case 1: { Object cur = f.get(null);
@@ -70,6 +73,64 @@ final class Statics {
 				case 2: { Object[] p = (Object[]) s.v; Collection c = (Collection) p[0]; c.clear(); c.addAll((Collection) p[1]); if (!fin) f.set(null, c); break; }
 				case 3: { Object[] p = (Object[]) s.v; Map mp = (Map) p[0]; mp.clear(); mp.putAll((Map) p[1]); if (!fin) f.set(null, mp); break; }
 				case 4: f.set(null, deserialise((byte[]) s.v)); break;
+			}
+		}
+	}
+
+	/**
+	 * The chosen classes' statics now, as far as they can be written to a file (Checkpoint): values, and the contents of
+	 * arrays, collections and maps, each thing kept only if it serialises alone. Game objects (an Item, a Mob, a Level)
+	 * don't, so they are left out: after a reload they would be stale anyway. {@link #load} puts them back after
+	 * {@link #restore}: what was left out stays as before the first game.
+	 */
+	static byte[] dump(java.util.function.Predicate<Class<?>> which) throws Exception {
+		LinkedHashMap<String, Object[]> out = new LinkedHashMap<>();
+		for (Saved s : saved) {
+			Field f = s.f;
+			if (!which.test(f.getDeclaringClass())) continue;
+			String k = f.getDeclaringClass().getName() + "#" + f.getName();
+			Object v = f.get(null);
+			if (v == null) { out.put(k, new Object[]{"V", null}); continue; }
+			if (v.getClass().isArray()) {
+				Object c = copyArray(v);
+				if (!v.getClass().getComponentType().isPrimitive()) for (int i = 0; i < Array.getLength(c); i++) { Object e = Array.get(c, i); if (e != null && serialise(e) == null) Array.set(c, i, null); }
+				if (serialise(c) != null) out.put(k, new Object[]{"A", c});
+			} else if (v instanceof Collection) {
+				ArrayList<Object> l = new ArrayList<>();
+				for (Object e : (Collection<?>) v) if (e == null || serialise(e) != null) l.add(e);
+				out.put(k, new Object[]{"C", l, v.getClass().getName()});
+			} else if (v instanceof Map) {
+				ArrayList<Object> l = new ArrayList<>();
+				for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) if ((e.getKey() == null || serialise(e.getKey()) != null) && (e.getValue() == null || serialise(e.getValue()) != null)) { l.add(e.getKey()); l.add(e.getValue()); }
+				out.put(k, new Object[]{"M", l, v.getClass().getName()});
+			} else if (!Modifier.isFinal(f.getModifiers()) && serialise(v) != null) out.put(k, new Object[]{"V", v});
+		}
+		byte[] b = serialise(out);
+		if (b == null) throw new IOException("statics would not serialise");
+		return b;
+	}
+
+	/** What {@link #dump} wrote, put back (after {@link #restore} of the same classes). */
+	@SuppressWarnings({"unchecked", "rawtypes"})
+	static void load(byte[] b) throws Exception {
+		Map<String, Object[]> in = (Map<String, Object[]>) deserialise(b);
+		for (Saved s : saved) {
+			Field f = s.f; boolean fin = Modifier.isFinal(f.getModifiers());
+			Object[] w = in.get(f.getDeclaringClass().getName() + "#" + f.getName());
+			if (w == null) continue;
+			Object cur = f.get(null);
+			switch ((String) w[0]) {
+				case "V": if (!fin) f.set(null, w[1]); break;
+				case "A": if (cur != null && cur.getClass() == w[1].getClass() && Array.getLength(cur) == Array.getLength(w[1])) System.arraycopy(w[1], 0, cur, 0, Array.getLength(cur));
+					else if (!fin) f.set(null, w[1]); break;
+				case "C": case "M": {
+					if (cur == null && !fin) { try { cur = Class.forName((String) w[2]).getDeclaredConstructor().newInstance(); f.set(null, cur); } catch (Throwable e) { break; } }
+					if (cur == null) break;
+					List<Object> l = (List<Object>) w[1];
+					if (w[0].equals("C")) { ((Collection) cur).clear(); ((Collection) cur).addAll(l); }
+					else { ((Map) cur).clear(); for (int i = 0; i + 1 < l.size(); i += 2) ((Map) cur).put(l.get(i), l.get(i + 1)); }
+					break;
+				}
 			}
 		}
 	}
