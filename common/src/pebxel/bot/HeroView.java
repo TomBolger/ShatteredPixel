@@ -41,7 +41,17 @@ public final class HeroView {
 
 	/** The hero as now. */
 	public static Fighter of(Hero h) {
-		return of(h, h.belongings.weapon(), h.belongings.armor(), 0, 0, -1);
+		Fighter f = of(h, h.belongings.weapon(), h.belongings.armor(), 0, 0, -1);
+		f.slots = Tune.SLOTS ? slots(h.pos) : 8;
+		return f;
+	}
+
+	/** The passable cells beside c (what the map shows: walls, doors, chasms are seen terrain). */
+	public static int slots(int c) {
+		com.shatteredpixel.shatteredpixeldungeon.levels.Level l = com.shatteredpixel.shatteredpixeldungeon.Dungeon.level;
+		if (l == null || c < 0 || c >= l.length()) return 8;
+		int n = 0; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int x = c + k; if (x >= 0 && x < l.length() && l.passable[x]) n++; }
+		return Math.max(1, n);
 	}
 
 	/**
@@ -132,6 +142,12 @@ public final class HeroView {
 			String n = b.getClass().getSimpleName();
 			if (n.equals("Poison")) { Object l = field(b, "left"); if (l instanceof Float) { double L = (Float) l; d += L * L / 6 + L; } }
 			else if (n.equals("Bleeding")) { Object l = field(b, "level"); if (l instanceof Float) d += 4 * (Float) l; }
+			else if (n.equals("Ooze")) {   // (Ooze.act: 1 + depth / 5 a turn below the sewers, 1 at Goo, else 1 every other turn; its turns are shown)
+				Object l = field(b, "left"); int dd = com.shatteredpixel.shatteredpixeldungeon.Dungeon.scalingDepth();
+				if (l instanceof Float) d += (Float) l * (dd > 5 ? 1 + dd / 5 : dd == 5 ? 1 : 0.5); }
+			else if (n.equals("Corrosion")) {   // (Corrosion.act: its damage a turn, +1 a turn up to depth / 2 + 2, then +0.5)
+				Object l = field(b, "left"), dm = field(b, "damage"); int cap = com.shatteredpixel.shatteredpixeldungeon.Dungeon.scalingDepth() / 2 + 2;
+				if (l instanceof Float && dm instanceof Float) { float x = (Float) dm; for (int k = 0; k < (Float) l && k < 60; k++) { d += (int) x; x += x < cap ? 1 : 0.5f; } } }
 			else if (n.equals("Burning")) { Object l = field(b, "left"); if (l instanceof Float) d += (Float) l * (4 + com.shatteredpixel.shatteredpixeldungeon.Dungeon.depth / 4.0) / 2; }
 		}
 		return d;
