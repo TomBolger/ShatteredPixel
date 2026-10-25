@@ -150,7 +150,18 @@ final class AsAbilities {
 			if ((t = layOnHands()) != null) return t;
 			if ((t = escapeAbility()) != null) return t;
 			if ((t = meal()) != null) return t;
+			// (the fight's own: before the hands' throws and zaps, which would otherwise always come first; not when the
+			// hands are about to drink Healing)
+			PotionOfHealing ph = H.belongings.getItem(PotionOfHealing.class);
+			if (ph != null && ph.isKnown() && hpf * 100 < Assist.HEALBOSS) return null;
 			if ((t = openers()) != null) return t;
+			if ((t = armorAbility()) != null) return t;
+			if ((t = combo()) != null) return t;
+			if ((t = monk()) != null) return t;
+			if ((t = weaponAbility()) != null) return t;
+			if ((t = meleeSpells()) != null) return t;
+			if ((t = snipe()) != null) return t;
+			if ((t = preparation()) != null) return t;
 			return null;
 		} catch (Throwable e) { Assist.lastError = e; return null; }
 	}
@@ -163,13 +174,6 @@ final class AsAbilities {
 			if (Assist.foul(hp) || Assist.burning()) return null;
 			Target t;
 			if (foes.isEmpty() && (t = crown()) != null) return t;
-			if ((t = combo()) != null) return t;
-			if ((t = monk()) != null) return t;
-			if ((t = weaponAbility()) != null) return t;
-			if ((t = armorAbility()) != null) return t;
-			if ((t = snipe()) != null) return t;
-			if ((t = preparation()) != null) return t;
-			if ((t = meleeSpells()) != null) return t;
 			if ((t = battery()) != null) return t;
 			if ((t = liquidWillpower()) != null) return t;
 			if ((t = pointBlank()) != null) return t;
