@@ -541,6 +541,21 @@ index 270bfa5..e2a5c78 100644
  					}
  				}
  			}
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
+index 08021b8..077a8fe 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
+@@ -361,7 +361,9 @@ public class ShopRoom extends SpecialRoom {
+ 	protected static Bag ChooseBag(Belongings pack){
+ 
+ 		//generate a hashmap of all valid bags.
+-		HashMap<Bag, Integer> bags = new HashMap<>();
++		//Pebxel: in this order (a tie goes to the first): a HashMap's order follows the bags' identity hashes, which
++		// differ from one run to the next, so the same seed's shop sold one bag or another (bot games not repeatable)
++		HashMap<Bag, Integer> bags = new java.util.LinkedHashMap<>();
+ 		if (!Dungeon.LimitedDrops.VELVET_POUCH.dropped()) bags.put(new VelvetPouch(), 1);
+ 		if (!Dungeon.LimitedDrops.SCROLL_HOLDER.dropped()) bags.put(new ScrollHolder(), 0);
+ 		if (!Dungeon.LimitedDrops.POTION_BANDOLIER.dropped()) bags.put(new PotionBandolier(), 0);
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 index ff17e01..c45646e 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
