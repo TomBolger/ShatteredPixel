@@ -213,8 +213,10 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
-	// agent O's models (pebxel.bot), each on by default (AS_Oxxx=0 turns one off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid)
-	static final boolean OFIGHT = opt("OFIGHT", true);
+	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
+	// Off by default after the merge onto main (BF, Monolith 90 games each, mean max depth: main's rules 5.19, all on 4.08;
+	// each alone: fight 4.78, gear 4.71, upgrades 4.72, identify 4.77, shop 5.19): main's newer rules beat them as they stand; to be tuned
+	static final boolean OFIGHT = opt("OFIGHT", false);
 	static final double ODEATH = Tune.DEATH, OESC = Tune.ESC, OUP = Tune.UP, OAVOID = Tune.AVOID;   // (percent: pebxel.bot.Tune, env AS_ODEATH...)
 	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
 	private static FightModel.Result oFight() {
@@ -223,7 +225,7 @@ public final class Assist {
 		return FightModel.engaged(H, fs);
 	}
 	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
-	static final boolean OGEAR = opt("OGEAR", true), OUPG = opt("OUPG", true), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", true);
+	static final boolean OGEAR = opt("OGEAR", false), OUPG = opt("OUPG", false), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", false);
 	private static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
