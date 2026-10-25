@@ -40,6 +40,10 @@ static uint32_t now_ms(void) {
   return (uint32_t)((uint64_t)mono * GAME_SPEED_NUM / GAME_SPEED_DEN);
 }
 
+#ifdef TRACE_FIGHT
+uint32_t trace_ms(void) { return now_ms(); }   // (the fight timing logs: the clock put right)
+#endif
+
 // the least heap free since the last report, and allocations that failed (scene.c g_oom)
 static uint32_t s_minfree = 0xFFFFFFFF;
 static void note_free(void) { uint32_t f = heap_bytes_free(); if (f < s_minfree) s_minfree = f; }
@@ -486,6 +490,9 @@ void scene_event(int flags) {
 }
 
 static void button(ClickRecognizerRef r, void *ctx) {
+#ifdef TRACE_FIGHT   // (fight timing on the emulator)
+  { extern uint32_t trace_ms(void); APP_LOG(APP_LOG_LEVEL_INFO, "TF %lu button %d", (unsigned long)trace_ms(), (int)ctx); }
+#endif
   lite();
   s_input_at = now_ms();
   send_button((int)ctx);

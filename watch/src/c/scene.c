@@ -470,6 +470,9 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
         read_static(o); read_dyn(o, now);
         if (g_lost) return len;
         link_after(id, after);
+#ifdef TRACE_FIGHT   // (fight timing on the emulator)
+        if ((o->kind == K_TEXT || o->kind == 10) && o->cam == g_map_cam) { extern uint32_t trace_ms(void); APP_LOG(APP_LOG_LEVEL_INFO, "TF %lu text %s", (unsigned long)trace_ms(), o->ext ? (char *)o->ext : ""); }
+#endif
         break;
       }
       // (a picture the watch doesn't have: one it lost; the rest of the message can't be read without it)
@@ -478,7 +481,11 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
       case C_STEP: { int id = u16(), d = u8(), ms = u8(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; } step_obj(g_obj[id], d, ms, now); break; }
       case C_ANIMTO: {   // an animated sprite's new animation (and flips), then its moving part
         int id = u16(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; }
-        Obj *o = g_obj[id]; o->flags = u8(); o->tx = u16(); read_dyn(o, now); break;
+        Obj *o = g_obj[id]; o->flags = u8(); o->tx = u16(); read_dyn(o, now);
+#ifdef TRACE_FIGHT   // (fight timing on the emulator)
+        { extern uint32_t trace_ms(void); APP_LOG(APP_LOG_LEVEL_INFO, "TF %lu anim %d %d", (unsigned long)trace_ms(), id, o->tx); }
+#endif
+        break;
       }
       case C_DEL: { int id = u16(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; break; } unlink_obj(id); free_obj(g_obj[id]); g_obj[id] = NULL; particles_free(id); break; }
       case C_RECIPE: { int id = u8(), n = u8(); if (p + n > end) n = end - p; recipe_set(id, p, n); p += n; break; }

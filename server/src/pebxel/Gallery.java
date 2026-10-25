@@ -38,6 +38,7 @@ public class Gallery {
 	/** Stage name -> {depth, what to do}. */
 	public static final LinkedHashMap<String, Object[]> STAGES = new LinkedHashMap<>();
 	static {
+		st("fight", 1, "fight", "");
 		st("sewers", 2, "mobs", "Rat Albino Snake Gnoll Swarm Crab Slime CausticSlime");
 		st("sewers2", 4, "mobs", "npcs.Ghost FetidRat GnollTrickster GreatCrab HermitCrab npcs.RatKing Goo");
 		st("prison", 7, "mobs", "Skeleton Thief Bandit DM100 Guard Necromancer SpectralNecromancer");
@@ -105,6 +106,7 @@ public class Gallery {
 		steps.add(Gallery::calm);
 		switch (kind) {
 			case "mobs": steps.add(() -> lineup(arg.split(" "), 2)); break;
+			case "fight": steps.add(Gallery::fight); break;
 			case "boss": steps.add(() -> lineup(arg.split(" "), 2));
 				steps.add(() -> { for (Mob m : Dungeon.level.mobs) if (m.properties().contains(com.shatteredpixel.shatteredpixeldungeon.actors.Char.Property.BOSS)) com.shatteredpixel.shatteredpixeldungeon.ui.BossHealthBar.assignBoss(m); }); break;
 			case "items": steps.add(Gallery::items); break;
@@ -190,6 +192,18 @@ public class Gallery {
 
 	static Object make(String cls) throws Exception {
 		return Class.forName(cls).getDeclaredConstructor().newInstance();
+	}
+
+	/** A gnoll beside the hero, after him, tough enough for a long fight (the emulator's fight timing: GALLERY=fight). */
+	static void fight() {
+		Dungeon.hero.HP = Dungeon.hero.HT = 1000;
+		for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) {
+			int c = Dungeon.hero.pos + d;
+			if (!Dungeon.level.passable[c] || com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) != null) continue;
+			Mob m = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll();
+			m.pos = c; m.HP = m.HT = 400; GameScene.add(m); m.state = m.HUNTING; m.aggro(Dungeon.hero);
+			return;
+		}
 	}
 
 	static void lineup(String[] names, int gap) {

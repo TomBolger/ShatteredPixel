@@ -9,6 +9,7 @@
  * Select (or a tap) on an enemy beside the hero swings at once: his attack animation plays from the press, turned to it;
  * what the blow does (a hit or a miss, the damage, the enemy's answer) only ever comes with the phone's frames.
  */
+#pragma GCC optimize ("Os")   // (the app's code, data and bss must stay under 64 KB: small beats quick here, as in scene.c)
 #include "predict.h"
 
 enum { B_UP = 1, B_DOWN, B_SELECT, B_BACK, B_LONG = 16 };   // as main.c
@@ -210,6 +211,9 @@ static bool swing_start(Obj *h, int blow, uint32_t now) {
   s_atx0 = h->tx; s_aat0 = h->at; s_ax0 = obj_dyn_raw(h, 0, now); s_ay0 = obj_dyn_raw(h, 1, now);
   s_aflip = dx < 0 ? true : dx > 0 ? false : (h->flags & F_FLIPH) != 0;   // (CharSprite.turnTo: by the columns)
   APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing");
+#ifdef TRACE_FIGHT   // (fight timing on the emulator)
+  { extern uint32_t trace_ms(void); APP_LOG(APP_LOG_LEVEL_INFO, "TF %lu swing", (unsigned long)trace_ms()); }
+#endif
   return true;
 }
 bool predict_anim(const Obj *o, uint32_t now, int *anim, int *frame, bool *fliph) {
