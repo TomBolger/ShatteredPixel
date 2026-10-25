@@ -26,7 +26,7 @@ public final class HumanTalents {
 
 	public static void newGame(long seed) {
 		long s = Long.parseLong(System.getenv().getOrDefault("SIMSEED", "0"));
-		r = new Random(s * 1_000_003L + seed * 31 + 7);
+		r = Cheat.mixed(s * 1_000_003L + seed * 31 + 7);
 		sub = null; abil = null; picks.clear();
 	}
 

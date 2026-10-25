@@ -73,8 +73,12 @@ public final class Cheat {
 	static Random r = new Random(1);
 	static boolean headDone, kitDone; static int mildDeepest, mildLvl;
 
+	/** A generator from a seed, scrambled: java.util.Random's first numbers from nearby seeds are alike (games one apart
+	 *  all drew trinkets). */
+	static Random mixed(long s) { long z = s * 0x9E3779B97F4A7C15L; z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L; z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL; return new Random(z ^ (z >>> 31)); }
+
 	public static void newGame(long seed) {
-		r = new Random(Long.parseLong(env("SIMSEED", "0")) * 1_000_003L + seed * 17 + 3);
+		r = mixed(Long.parseLong(env("SIMSEED", "0")) * 1_000_003L + seed * 17 + 3);
 		headDone = kitDone = false; mildDeepest = 0; mildLvl = -1;
 	}
 
