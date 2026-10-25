@@ -63,7 +63,7 @@ final class AsAbilities {
 	static final List<Mob> foes = new ArrayList<>(), near = new ArrayList<>(), adj = new ArrayList<>();
 	static final Map<Mob, Double> costs = new IdentityHashMap<>();
 	static double fightCost; static boolean anyStrong;
-	static float prepAt = -1; static int prepPos = -1; static Level prepLvl; static int prepHP = -1;
+	static float prepAt = -1; static int prepPos = -1, prepBans; static Level prepLvl; static int prepHP = -1;
 	static pebxel.bot.Fighter me;
 	// ---- what was tried: an entry that did nothing (no time, nowhere moved) is held back a while ----
 	static String actKey; static float actT = -1; static int actPos = -1;
@@ -74,11 +74,11 @@ final class AsAbilities {
 		H = Dungeon.hero; L = Dungeon.level;
 		if (H == null || L == null || !H.isAlive() || !Assist.setupOk(L)) return false;
 		float now = Actor.now();
-		if (prepAt == now && prepPos == H.pos && prepLvl == L && prepHP == H.HP) return true;
+		if (actKey != null) { if (actT == now && actPos == H.pos && H.ready) ban.put(actKey, now + 20); actKey = null; }   // (it did nothing: held back a while)
+		if (prepAt == now && prepPos == H.pos && prepLvl == L && prepHP == H.HP && ban.size() == prepBans) return true;
 		if (prepLvl != L) { ban.clear(); waitId = -1; }
-		prepAt = now; prepPos = H.pos; prepLvl = L; prepHP = H.HP;
+		prepAt = now; prepPos = H.pos; prepLvl = L; prepHP = H.HP; prepBans = ban.size();
 		hp = H.pos; hpf = H.HP / (float) Math.max(1, H.HT);
-		if (actKey != null) { if (actT == now && actPos == hp && H.ready) ban.put(actKey, now + 20); actKey = null; }
 		ban.values().removeIf(t -> t < now);
 		if (Statistics.foodEaten != foodSeen) { if (foodSeen >= 0) ateAt = now; foodSeen = Statistics.foodEaten; }
 		foes.clear(); near.clear(); adj.clear(); costs.clear(); fightCost = 0; anyStrong = false;
@@ -125,7 +125,20 @@ final class AsAbilities {
 	// =============================================================================================================
 
 	/** Before the hands: what can't wait for them (a death save, a heal, a meal or an opener before the blows start). */
-	static Target urgent(Target planA) {
+	static Target urgent(Target planA) { return offered(urgent0(planA), 0); }
+	static Target suggest(Target planA) { return offered(suggest0(planA), 1); }
+	/** The same entry offered again and again with no time passing (acted on, it did nothing: a weapon ability out of
+	 *  range...): held back a while. */
+	static Target offered(Target t, int hook) {
+		if (t == null || t.item == null) return t;
+		String k = key(t.item, t.action); float now = Actor.now(); int p = Dungeon.hero.pos;
+		if (k.equals(offerKey[hook]) && now == offerT[hook] && p == offerPos[hook]) { if (++offerN[hook] >= 3) { ban.put(k, now + 20); offerKey[hook] = null; return null; } }
+		else { offerKey[hook] = k; offerT[hook] = now; offerPos[hook] = p; offerN[hook] = 0; }
+		return t;
+	}
+	static final String[] offerKey = new String[2]; static final float[] offerT = new float[2]; static final int[] offerPos = new int[2], offerN = new int[2];
+
+	static Target urgent0(Target planA) {
 		if (!ON) return null;
 		try {
 			if (!prep()) return null;
@@ -143,7 +156,7 @@ final class AsAbilities {
 	}
 
 	/** After the hands: a suggestion for the hero's hands this turn, or null. planA: the list's first entry so far (may be null). */
-	static Target suggest(Target planA) {
+	static Target suggest0(Target planA) {
 		if (!ON) return null;
 		try {
 			if (!prep()) return null;
