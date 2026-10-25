@@ -48,6 +48,7 @@ final class AsArtifacts {
 	static final boolean ON = Assist.opt("ART", true);
 	static final int PRICKPCT = Assist.optInt("ARTPRICK", 60);   // the Chalice pricked while its worst prick is under this share of health
 	static final int SWAPGAIN = Assist.optInt("ARTSWAP", 2);     // a swap only for this much more worth
+	static final boolean STEALSLEEP = Assist.opt("ARTSTEAL", false);   // the armband on sleepers too (it costs the surprise blow; worn, 2 floors less in K1-art4)
 	static final int ENERGYKEEP = Assist.optInt("ARTENERGY", 12);   // alchemy energy kept back from the Toolkit
 
 	// =============================================================================================================
@@ -120,6 +121,12 @@ final class AsArtifacts {
 		for (Item i : new Item[]{ H.belongings.artifact(), H.belongings.misc(), H.belongings.ring() }) if (c.isInstance(i)) return c.cast(i);
 		return null;
 	}
+	/** A known way out the hands would use first (teleport, invisibility, terror, lullaby, mirror image). */
+	static boolean escapeAtHand() {
+		Class<?>[] esc = { ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
+		for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = H.belongings.getItem((Class<Item>) c); if (i != null && Assist.known(i) && (!(i instanceof Scroll) || !Assist.blind())) return true; }
+		return false;
+	}
 	static boolean healAtHand() { PotionOfHealing p = H.belongings.getItem(PotionOfHealing.class); return p != null && p.isKnown(); }
 	static Target use(Item it, String action, int aim, String why) { return Assist.use(it, action, aim, "art: " + why); }
 	/** A use aimed at the hero himself (Assist.followUp takes the hero's cell when obj is the cell). */
@@ -147,7 +154,7 @@ final class AsArtifacts {
 				}
 				Target c = chainsAway(); if (c != null) return c;
 				MasterThievesArmband ab = worn(MasterThievesArmband.class);
-				if (ab != null && adjFoes.size() == 1 && !Assist.boss(adjFoes.get(0)) && adjFoes.get(0).buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Cripple.class) == null && can(ab, MasterThievesArmband.AC_STEAL))
+				if (ab != null && !escapeAtHand() && adjFoes.size() == 1 && !Assist.boss(adjFoes.get(0)) && adjFoes.get(0).buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Cripple.class) == null && can(ab, MasterThievesArmband.AC_STEAL))
 					return use(ab, MasterThievesArmband.AC_STEAL, adjFoes.get(0).pos, "dying: armband, blind and cripple it to get away");
 				SandalsOfNature sn = worn(SandalsOfNature.class);
 				if (sn != null && can(sn, SandalsOfNature.AC_ROOT)) {
@@ -289,7 +296,7 @@ final class AsArtifacts {
 			if (w instanceof Weapon && w.isIdentified() && ((Weapon) w).enchantment != null) en = true;
 			if (a instanceof Armor && a.isIdentified() && ((Armor) a).glyph != null) en = true;
 			return en ? 5 : 2; }
-		if (r instanceof RingOfWealth) return d <= 10 ? 5 : 3;
+		if (r instanceof RingOfWealth) return d <= 10 ? 3 : 2;   // (5 put it over Might at depth 6, K1-art4: worn, 3.8 floors less)
 		return 4;
 	}
 
@@ -424,7 +431,7 @@ final class AsArtifacts {
 		// the armband: a blinded foe still senses the hero beside it (Level.updateFieldOfView: sense 1), so in a fight a
 		// steal is a blow lost; only from a sleeper (the surprise: half again the loot) with loot worth the try
 		MasterThievesArmband ab = worn(MasterThievesArmband.class);
-		if (ab != null && can(ab, MasterThievesArmband.AC_STEAL) && H.HP * 4 >= H.HT * 3) {
+		if (STEALSLEEP && ab != null && can(ab, MasterThievesArmband.AC_STEAL) && H.HP * 4 >= H.HT * 3) {
 			for (Mob m : Assist.mobs()) if (Assist.enemy(m) && Assist.adjacent(m.pos, hp) && m.state == m.SLEEPING && !Assist.boss(m) && !(m instanceof Mimic) && m.lootChance() >= 0.15f && H.lvl <= m.maxLvl + 2)
 				return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal from the sleeper");
 		}
@@ -434,7 +441,7 @@ final class AsArtifacts {
 			if (adj && (e == Earthroot.Seed.class || e == Starflower.Seed.class) && hunted) return self(sn, SandalsOfNature.AC_ROOT, "sandals: " + e.getEnclosingClass().getSimpleName() + " on the hero");
 			if (e == Mageroyal.Seed.class && poisoned()) return self(sn, SandalsOfNature.AC_ROOT, "sandals: mageroyal, cleanse");
 			if (e == Sungrass.Seed.class && !adj && H.HP * 2 < H.HT) return self(sn, SandalsOfNature.AC_ROOT, "sandals: sungrass, heal");
-			if (e == Icecap.Seed.class || e == Firebloom.Seed.class || e == Sorrowmoss.Seed.class || e == Stormvine.Seed.class || e == Blindweed.Seed.class || e == Fadeleaf.Seed.class) {
+			if (e == Icecap.Seed.class || e == Stormvine.Seed.class || e == Blindweed.Seed.class || e == Fadeleaf.Seed.class) {   // (not Firebloom or Sorrowmoss: their fire and gas spread back to the hero)
 				Mob t = null; int td = 99;
 				for (Mob m : Assist.mobs()) {
 					if (!Assist.enemy(m) || !Assist.hunting(m) || m instanceof NPC) continue;
@@ -504,7 +511,7 @@ final class AsArtifacts {
 		int cur = seedRank(sn.curSeedEffect);
 		Item low = null; int lr = 99; boolean keeper = false;
 		for (Item i : H.belongings) {
-			if (!(i instanceof Plant.Seed) || !sn.canUseSeed(i)) continue;
+			if (!(i instanceof Plant.Seed) || !sn.canUseSeed(i) || i instanceof Sungrass.Seed) continue;   // (a Sungrass seed planted heals now; as the sandals' root it waits for 160 grass steps of charge)
 			int r = seedRank(i.getClass());
 			if (r >= cur) keeper = true;
 			if (r < lr) { lr = r; low = i; }
@@ -521,7 +528,7 @@ final class AsArtifacts {
 		return 2;
 	}
 
-	/** Unstable Spellbook: fed known scrolls it takes that are spare; read, calm and well, when full (its random scrolls include Rage and Teleportation: not as often as it can). */
+	/** Unstable Spellbook: fed known scrolls it takes that are spare; read, calm and well, when full and the floor is done (its random scrolls include Rage and Teleportation; read as often as it could, 1.8 floors less in K1-art4). */
 	static Target spellbook() {
 		UnstableSpellbook sb = worn(UnstableSpellbook.class);
 		if (sb == null || sb.cursed || Assist.blind()) return null;
@@ -537,7 +544,7 @@ final class AsArtifacts {
 			}
 		}
 		int ch = charge(sb), cap = chargeCap(sb);
-		if (ch > 0 && ch >= cap && H.HP * 5 >= H.HT * 4 && !Assist.hungry() && can(sb, UnstableSpellbook.AC_READ)) {
+		if (ch > 0 && ch >= cap && H.HP * 5 >= H.HT * 4 && !Assist.floorLeft() && !Assist.hungry() && can(sb, UnstableSpellbook.AC_READ)) {
 			Target t = use(sb, UnstableSpellbook.AC_READ, -1, "read the spellbook");
 			for (Item i : H.belongings) if (!i.isIdentified() && (i instanceof EquipableItem || i instanceof Wand)) { t.on = i; if (i instanceof EquipableItem && ((EquipableItem) i).isEquipped(H)) break; }
 			return t;
