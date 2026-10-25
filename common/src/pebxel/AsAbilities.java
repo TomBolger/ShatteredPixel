@@ -56,7 +56,10 @@ final class AsAbilities {
 
 	static final boolean ON = Assist.opt("ABIL", true);
 	static final int STRONG = Assist.optInt("STRONG", 30);
-	static final boolean SNEAKSLEEP = Assist.opt("SNEAKSLEEP", true), SNEAKUP = Assist.opt("SNEAKUP", true), OPENERS = Assist.opt("OPENERS", true);
+	// (K2-d, 120 paired games at depth 11: sleepers struck first cost the Assassin 0.67 of a floor, off +0.33; the
+	// Duelist's Patient Strike waits were in 3 of the 4 Champion games that got worse: both off by default)
+	static final boolean PATIENT = Assist.opt("PATIENT", false);
+	static final boolean SNEAKSLEEP = Assist.opt("SNEAKSLEEP", false), SNEAKUP = Assist.opt("SNEAKUP", true), OPENERS = Assist.opt("OPENERS", true);
 	public static final String AB = "ab:";
 
 	// ---- per turn ----
@@ -370,7 +373,7 @@ final class AsAbilities {
 	 *  two steps off, is waited for rather than walked into. Twice at most for one foe. */
 	static Target holdFast(Target planA) {
 		boolean hf = H.hasTalent(Talent.HOLD_FAST) && (H.heroClass != HeroClass.WARRIOR || has(com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield.class));
-		boolean ps = H.hasTalent(Talent.PATIENT_STRIKE);
+		boolean ps = PATIENT && H.hasTalent(Talent.PATIENT_STRIKE);
 		if ((!hf && !ps) || !adj.isEmpty() || near.isEmpty() || Assist.inDanger) return null;
 		if (planA != null && (Assist.WAIT_ACT.equals(planA.action) || (planA.kind == Assist.USE && planA.cell != hp))) return null;   // (already waiting, or a shot / zap first)
 		Mob c = null;
