@@ -4,27 +4,33 @@ import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
 import com.shatteredpixel.shatteredpixeldungeon.actors.Actor;
 import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.blobs.Blob;
+import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
+import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.*;
 import com.shatteredpixel.shatteredpixeldungeon.items.Heap;
 import com.shatteredpixel.shatteredpixeldungeon.items.Item;
+import com.shatteredpixel.shatteredpixeldungeon.levels.CavesBossLevel;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Level;
 import com.shatteredpixel.shatteredpixeldungeon.levels.PrisonBossLevel;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Terrain;
+import com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica;
+import com.watabou.utils.PathFinder;
 import java.util.*;
 import pebxel.Assist.Target;
 import static pebxel.Assist.*;
 
 /**
  * The Assistant's skill: each boss's own mechanics (Goo, Tengu, DM-300, the Dwarf King, Yog) (agent K3; the strategy
- * reference's chapter 4 and the bosses' source). Two hooks: {@link #danger} adds the boss's telegraphed blows to the
+ * reference's chapter 4 and the bosses' source). Two hooks: {@link #danger} adds the bosses' telegraphed blows to the
  * cells the plan keeps off (Assist.hazards), {@link #tactics} a move of its own on a boss's floor. Only what the
- * screen shows is used: bombs and shockers lying where they were thrown, the fire's flames, a pylon lit up, a
- * summoning circle glowing, the beams' marked cells.
+ * screen shows is used: bombs and shockers lying where they were thrown, flames, the marked cells of falling rocks and
+ * of Yog's beams, a summoning circle's glow, the electrified floor, a pylon lit up, a boss shown as immune.
  */
 final class AsBosses {
 	private AsBosses() {}
 
 	static final boolean ON = opt("BOSSES", true);
+	static final boolean PYLON = opt("BPYLON", true), KING2 = opt("BKING2", true), FISTS = opt("BFISTS", true);
 
 	// =============================================================================================================
 	// the cells to keep off (worked out once a turn)
@@ -45,12 +51,33 @@ final class AsBosses {
 		dzL = l; dzAt = Actor.now(); dzPos = Dungeon.hero.pos;
 		if (dz.length != l.length()) dz = new boolean[l.length()]; else Arrays.fill(dz, false);
 		dzAny = false;
-		if (!Dungeon.bossLevel()) return;
+		boolean mine = l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.MiningLevel;
+		if (!Dungeon.bossLevel() && !mine) return;
+		rocks(l);   // (falling rocks: DM-300's, the Gnoll Geomancer's)
+		if (mine) return;
 		if (l instanceof PrisonBossLevel) tengu(l);
+		if (l instanceof CavesBossLevel) {   // the electrified floor (traps' tiles and water) while a pylon is lit
+			Blob e = l.blobs.get(CavesBossLevel.PylonEnergy.class);
+			if (e != null && e.volume > 0 && e.cur != null) for (int c = 0; c < l.length() && c < e.cur.length; c++) if (e.cur[c] > 0) mark(c);
+		}
+		for (Mob m : new ArrayList<>(l.mobs)) {
+			if (m instanceof DwarfKing) for (DwarfKing.Summoning s : m.buffs(DwarfKing.Summoning.class)) mark(s.getPos());   // (standing on a circle as it finishes: 20-40)
+			if (m instanceof YogDzewa) {   // the beams' marked cells
+				Object tc = field(m, "targetedCells");
+				if (tc instanceof List) for (Object o : (List<?>) tc) if (o instanceof Integer) for (int p : new Ballistica(m.pos, (Integer) o, Ballistica.WONT_STOP).path) mark(p);
+			}
+		}
 		if (dzAny) for (int c = 0; c < dz.length; c++) if (l.solid[c]) dz[c] = false;
 	}
 
-	static void mark(Level l, int c) { if (c >= 0 && c < dz.length) { dz[c] = true; dzAny = true; } }
+	static void mark(int c) { if (c >= 0 && c < dz.length) { dz[c] = true; dzAny = true; } }
+
+	static void rocks(Level l) {
+		for (Mob ch : new ArrayList<>(l.mobs)) for (Buff b : ch.buffs()) if (b instanceof DelayedRockFall) {   // (not Actor.chars(): see Assist.gameSafe)
+			Object p = field(b, "rockPositions");
+			if (p instanceof int[]) for (int c : (int[]) p) mark(c);
+		}
+	}
 
 	/** Tengu (strategy-reference 4.2): the floor is remade at each phase (the cell's traps go with it); his bombs (2
 	 *  steps round, 3 turns), shockers (the 3x3 round each, for good) and the fire wave's flames (each flame cell burns
@@ -68,15 +95,15 @@ final class AsBosses {
 			for (Item i : h.items) {
 				if (i instanceof Tengu.BombAbility.BombItem) {   // radius 2 by steps round walls (BombAbility.act)
 					int[] d = new int[l.length()]; Arrays.fill(d, 99); d[h.pos] = 0; ArrayDeque<Integer> q = new ArrayDeque<>(); q.add(h.pos);
-					while (!q.isEmpty()) { int c = q.poll(); mark(l, c); if (d[c] >= 2) continue;
-						for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < l.length() && Math.abs(n % W - c % W) <= 1 && !l.solid[n] && d[n] > d[c] + 1) { d[n] = d[c] + 1; q.add(n); } } }
+					while (!q.isEmpty()) { int c = q.poll(); mark(c); if (d[c] >= 2) continue;
+						for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < l.length() && Math.abs(n % W - c % W) <= 1 && !l.solid[n] && d[n] > d[c] + 1) { d[n] = d[c] + 1; q.add(n); } } }
 				} else if (i instanceof Tengu.ShockerAbility.ShockerItem) {
-					for (int k : com.watabou.utils.PathFinder.NEIGHBOURS9) mark(l, h.pos + k);
+					for (int k : PathFinder.NEIGHBOURS9) mark(h.pos + k);
 				}
 			}
 		}
 		Blob f = l.blobs.get(Tengu.FireAbility.FireBlob.class);
-		if (f != null && f.volume > 0 && f.cur != null) for (int c = 0; c < l.length() && c < f.cur.length; c++) if (f.cur[c] > 0) mark(l, c);
+		if (f != null && f.volume > 0 && f.cur != null) for (int c = 0; c < l.length() && c < f.cur.length; c++) if (f.cur[c] > 0) mark(c);
 	}
 
 	// =============================================================================================================
@@ -85,21 +112,97 @@ final class AsBosses {
 
 	/** A tactical move for this turn on a boss's floor, or null (then the usual tactics). */
 	static Target tactics() {
-		if (!ON || !Dungeon.bossLevel()) return null;
+		if (!ON) return null;
 		int hp = Dungeon.hero.pos, LEN = L.length();
-		if (L instanceof PrisonBossLevel && DBG) dump();
 		danger(0);
 		if (dzAny && dz[hp]) {   // a blow coming here: the nearest cell it misses (through the danger, if that's the only way)
 			int best = -1, bk = INF;
 			for (int c = 0; c < LEN; c++) if (dist[c] < bk && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) { bk = dist[c]; best = c; }
 			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
 		}
+		if (!Dungeon.bossLevel()) return null;
+		if (DBG && L instanceof PrisonBossLevel) dump();
+		Target t = null;
+		for (Mob m : mobs()) {
+			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
+			else if (m instanceof DwarfKing && KING2) t = king((DwarfKing) m);
+			else if (m instanceof YogDzewa && FISTS) t = yog((YogDzewa) m);
+			if (t != null) return t;
+		}
 		return null;
+	}
+
+	/** DM-300 supercharged (it sparks, and blows don't hurt it: "the boss can't be hurt"): the lit pylon is what ends
+	 *  it (strategy-reference 4.3): to it and strike it. Pylons never move: one seen is remembered. */
+	static Target dm300(DM300 dm) {
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (!dm.isSupercharged() || !dm.isAlive()) return null;
+		Mob py = null; int bd = INF;
+		for (Mob m : mobs()) if (m instanceof Pylon && m.alignment == Char.Alignment.ENEMY && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos]) && walkNear(m.pos) < bd) { bd = walkNear(m.pos); py = m; }
+		if (py == null) return null;
+		if (L.adjacent(py.pos, hp)) return new Target(py.pos, ENEMY, "boss: strike the lit pylon");
+		int c = besideStep(py.pos);
+		return c >= 0 ? new Target(c, GO, "boss: to the lit pylon") : null;
+	}
+
+	/** The Dwarf King on his throne, immune behind his barrier (phase 2): only his minions' deaths wear it down
+	 *  (strategy-reference 4.4); the minions, never him. */
+	static Target king(DwarfKing dk) {
+		int hp = Dungeon.hero.pos;
+		if (!dk.isAlive() || !dk.isInvulnerable(Hero.class)) return null;
+		Mob o = weakestAdjacent(dk);
+		if (o != null) return new Target(o.pos, ENEMY, "boss: his minions first");
+		if (L.adjacent(dk.pos, hp)) {   // beside him with nothing else to hit: off his side
+			int c = stepOff(dk.pos, 2);
+			if (c >= 0) return new Target(c, GO, "boss: off the immune king");
+		}
+		return null;
+	}
+
+	/** Yog-Dzewa: immune while a fist lives, and a fist is immune within 4 of him: draw the fist off before striking it
+	 *  (strategy-reference 4.5). */
+	static Target yog(YogDzewa yog) {
+		int hp = Dungeon.hero.pos, yp = yog.pos;
+		Mob fist = null;
+		for (Mob m : mobs()) if (m instanceof YogFist && enemy(m) && L.adjacent(m.pos, hp)) fist = m;
+		if (fist != null && fist.isInvulnerable(Hero.class)) {   // (shown: "immune")
+			int best = -1, bs = -INF;
+			for (int k = 0; k < 8; k++) { int c = hp + PathFinder.NEIGHBOURS8[k];
+				if (c < 0 || c >= L.length() || !open[c] || seenChar(c) != null || danger[c]) continue;
+				int s = L.distance(c, yp) * 4 - adjFoes(c) * 3; if (s > bs) { bs = s; best = c; } }
+			if (best >= 0 && L.distance(best, yp) > L.distance(hp, yp)) return new Target(best, GO, "boss: draw the fist off Yog");
+		}
+		if (fist == null && L.adjacent(yp, hp) && yog.isInvulnerable(Hero.class)) {
+			Mob o = weakestAdjacent(yog);
+			if (o != null) return new Target(o.pos, ENEMY, "boss: not Yog while a fist lives");
+			int c = stepOff(yp, 5);
+			if (c >= 0) return new Target(c, GO, "boss: away from immune Yog");
+		}
+		return null;
+	}
+
+	// ---- helpers ----
+	static Mob weakestAdjacent(Mob not) {
+		Mob best = null; int hp = Dungeon.hero.pos;
+		for (Mob m : mobs()) if (m != not && enemy(m) && L.adjacent(m.pos, hp) && !m.isInvulnerable(Hero.class) && !Dungeon.hero.isCharmedBy(m) && m.state != m.PASSIVE && (best == null || m.HP < best.HP)) best = m;
+		return best;
+	}
+	static int adjFoes(int c) { int n = 0; for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && L.adjacent(m.pos, c)) n++; return n; }
+	/** The walk to a free cell beside c (INF: none known). */
+	static int walkNear(int c) { int b = INF; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && dist[n] < b && (n == Dungeon.hero.pos || seenChar(n) == null) && L.passable[n]) b = dist[n]; } return b; }
+	static int besideStep(int c) { int b = -1, bd = INF; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && dist[n] < bd && dist[n] > 0 && seenChar(n) == null && L.passable[n] && !L.avoid[n]) { bd = dist[n]; b = n; } } return b; }
+	/** A free step that leaves c's side (at least d away from it, else the farthest). */
+	static int stepOff(int c, int d) {
+		int hp = Dungeon.hero.pos, best = -1, bs = -INF;
+		for (int k : PathFinder.NEIGHBOURS8) { int n = hp + k;
+			if (n < 0 || n >= L.length() || !open[n] || seenChar(n) != null || danger[n]) continue;
+			int s = Math.min(L.distance(n, c), d) * 4 - adjFoes(n) * 3; if (s > bs) { bs = s; best = n; } }
+		return best >= 0 && L.distance(best, c) > 1 ? best : -1;
 	}
 
 	static void dump() {
 		int hp = Dungeon.hero.pos, LEN = L.length();
-		StringBuilder sb = new StringBuilder("    TENGU state " + ((PrisonBossLevel) L).state() + " hp " + hp + "\n");
+		StringBuilder sb = new StringBuilder("    BOSSMAP " + (L instanceof PrisonBossLevel ? ((PrisonBossLevel) L).state() : "") + " hp " + hp + "\n");
 		int W = L.width();
 		for (int y = 0; y < L.height(); y++) { sb.append("    ");
 			for (int x = 0; x < W; x++) { int c = x + y * W; int t = L.map[c];

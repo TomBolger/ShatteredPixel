@@ -741,7 +741,7 @@ public final class Assist {
 		plansB();
 		if (mode() != 0) {
 			Target first = out.isEmpty() ? null : out.get(0);
-			if (itemsOn()) { Target hk = hands(first); if (hk != null) front(hk); }
+			if (itemsOn()) { Target hk = hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
 			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
