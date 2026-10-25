@@ -397,7 +397,7 @@ final class AsArtifacts {
 		return use(r, DriedRose.AC_SUMMON, -1, "call the ghost");
 	}
 
-	/** A foe in sight: the chains pull a shooter into reach, the armband blinds and cripples a fresh one beside the hero (at two thirds of its health or more: not one nearly dead), the
+	/** A foe in sight: the chains pull a shooter into reach, the armband blinds and cripples a fresh one beside the hero worth it (two thirds of its health left, and a strong one, a boss, or the hero below half: 29 a game on everything was too many), the
 	 *  sandals' seed at a foe (or Earthroot on the hero beside one). */
 	static Target fight() {
 		EtherealChains ec = worn(EtherealChains.class);
@@ -414,7 +414,7 @@ final class AsArtifacts {
 		}
 		MasterThievesArmband ab = worn(MasterThievesArmband.class);
 		if (ab != null && adj && can(ab, MasterThievesArmband.AC_STEAL)) {
-			for (Mob m : adjFoes) if (m.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class) == null && m.HP >= 8 && m.HP * 3 >= m.HT * 2 && !(m instanceof Mimic)) return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal, blind and cripple");   // (blinded: shown on it)
+			for (Mob m : adjFoes) if (m.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Blindness.class) == null && m.HP * 3 >= m.HT * 2 && (m.HT * 4 >= H.HT || Assist.boss(m) || H.HP * 2 < H.HT) && !(m instanceof Mimic)) return use(ab, MasterThievesArmband.AC_STEAL, m.pos, "armband: steal, blind and cripple");   // (blinded: shown on it)
 		}
 		SandalsOfNature sn = worn(SandalsOfNature.class);
 		if (sn != null && can(sn, SandalsOfNature.AC_ROOT) && sn.curSeedEffect != null) {
@@ -509,7 +509,7 @@ final class AsArtifacts {
 		return 2;
 	}
 
-	/** Unstable Spellbook: fed known scrolls it takes that are spare; read, calm and well, when full or early on a floor. */
+	/** Unstable Spellbook: fed known scrolls it takes that are spare; read, calm and well, when full (its random scrolls include Rage and Teleportation: not as often as it can). */
 	static Target spellbook() {
 		UnstableSpellbook sb = worn(UnstableSpellbook.class);
 		if (sb == null || sb.cursed || Assist.blind()) return null;
@@ -525,9 +525,7 @@ final class AsArtifacts {
 			}
 		}
 		int ch = charge(sb), cap = chargeCap(sb);
-		Level L = Dungeon.level;
-		boolean early = L.exit() <= 0 || !Assist.known[L.exit()];
-		if (ch > 0 && (ch >= cap || early) && H.HP * 5 >= H.HT * 4 && !Assist.hungry() && can(sb, UnstableSpellbook.AC_READ)) {
+		if (ch > 0 && ch >= cap && H.HP * 5 >= H.HT * 4 && !Assist.hungry() && can(sb, UnstableSpellbook.AC_READ)) {
 			Target t = use(sb, UnstableSpellbook.AC_READ, -1, "read the spellbook");
 			for (Item i : H.belongings) if (!i.isIdentified() && (i instanceof EquipableItem || i instanceof Wand)) { t.on = i; if (i instanceof EquipableItem && ((EquipableItem) i).isEquipped(H)) break; }
 			return t;
