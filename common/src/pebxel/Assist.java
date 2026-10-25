@@ -375,6 +375,7 @@ public final class Assist {
 			if (!h.ready) return false;
 			switch (t.kind) {
 				case USE: {
+					if (AsAbilities.mine(t)) return AsAbilities.act(t, player);   // (subclass buttons, spells, waits: AsAbilities)
 					if (t.item == null || t.action == null) return false;
 					if (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action)) zapped.put(t.item, Actor.now());
 					if (SPELL_GL.equals(t.action) && t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome)
@@ -741,6 +742,7 @@ public final class Assist {
 		plansB();
 		if (mode() != 0) {
 			Target first = out.isEmpty() ? null : out.get(0);
+			if (itemsOn()) { Target ur = AsAbilities.urgent(first); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
 			if (itemsOn()) { Target hk = hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
 			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
