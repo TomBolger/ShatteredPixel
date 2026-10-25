@@ -23,6 +23,7 @@ import com.shatteredpixel.shatteredpixeldungeon.items.scrolls.*;
 import com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand;
 import com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon;
 import com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor;
+import com.shatteredpixel.shatteredpixeldungeon.items.KindOfWeapon;
 import com.shatteredpixel.shatteredpixeldungeon.journal.Notes;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Level;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Terrain;
@@ -203,7 +204,48 @@ final class AsArtifacts {
 		return v;
 	}
 
-	/** What a ring of a known kind is worth at +0. */
+	/** The fight rings' worth by O's fight model (GearValue's sum: the next three floors' mix and a share of the region's
+	 *  boss, health lost per fight), as the share of that cost the ring saves, times RINGK. n: its effective level (+1 at
+	 *  +0). Cached per hero state. */
+	static final double RINGK = Assist.optInt("ARTRINGK", 40);
+	static final Map<String, Double> fightMemo = new HashMap<>();
+	static double fightWorth(Class<?> kind, int n) {
+		Hero h = H; KindOfWeapon w = h.belongings.weapon(); Armor a = h.belongings.armor();
+		String key = kind.getSimpleName() + n + ":" + h.lvl + ":" + h.STR() + ":" + Dungeon.depth + ":" + System.identityHashCode(w) + "/" + pebxel.bot.HeroView.visLevel(w) + ":" + System.identityHashCode(a) + "/" + pebxel.bot.HeroView.visLevel(a);
+		Double m = fightMemo.get(key); if (m != null) return m;
+		if (fightMemo.size() > 200) fightMemo.clear();
+		double c0 = fightCost(h, w, a, null, 0, 0), c1;
+		double extra = 0;
+		if (kind == RingOfAccuracy.class) c1 = fightCost(h, w, a, f -> f.acc *= Math.pow(1.3, n), 0, 0);
+		else if (kind == RingOfEvasion.class) c1 = fightCost(h, w, a, f -> f.eva *= Math.pow(1.125, n), 0, 0);
+		else if (kind == RingOfFuror.class) c1 = fightCost(h, w, a, f -> f.delay /= Math.pow(1.0905, n), 0, 0);
+		else if (kind == RingOfMight.class) { c1 = fightCost(h, w, a, null, n, 0); extra = 0.035 * n; }   // (and 3.5% more health a level)
+		else if (kind == RingOfTenacity.class) c1 = fightCost(h, w, a, f -> f.taken *= 1 - (1 - Math.pow(0.85, n)) * (H.subClass == HeroSubClass.BERSERKER ? 0.7 : 0.5), 0, 0);   // (less the lower the health: about half its full effect over a fight)
+		else c1 = c0;
+		double v = c0 <= 1e-6 ? 0 : RINGK * ((c0 - c1) / c0 + extra);
+		fightMemo.put(key, v);
+		return v;
+	}
+	static double fightCost(Hero h, KindOfWeapon w, Armor a, java.util.function.Consumer<pebxel.bot.Fighter> mod, int strPlus, int unused) {
+		pebxel.bot.Fighter me = pebxel.bot.HeroView.of(h, w, a, strPlus, 0, 0);
+		me.hp = me.ht; me.heals = 0;
+		if (mod != null) mod.accept(me);
+		double c = 0, W = 0; int d = Dungeon.depth;
+		for (int dd = d; dd < d + 3; dd++) for (String k : pebxel.bot.MobTable.kinds(dd)) { pebxel.bot.Fighter f = pebxel.bot.MobTable.fighter(k); if (f == null) continue; c += pebxel.bot.FightModel.duelCost(me, f); W++; }
+		c = W > 0 ? c / W : 0;
+		pebxel.bot.Fighter b = pebxel.bot.MobTable.fighter(pebxel.bot.MobTable.boss(d));
+		if (b != null) c += pebxel.bot.Tune.BOSSW * pebxel.bot.FightModel.duelCost(me, b);
+		return c;
+	}
+
+	/** What a ring of a known kind is worth (n: its effective level, +1 at +0): the fight rings by O's fight model, the
+	 *  others by the guide's table. */
+	static double ringWorth(Ring r, int n) {
+		if (r instanceof RingOfMight || r instanceof RingOfEvasion || r instanceof RingOfAccuracy || r instanceof RingOfFuror || r instanceof RingOfTenacity) return fightWorth(r.getClass(), n);
+		return ringBase(r) * (1 + 0.3 * (n - 1));
+	}
+
+	/** What a ring of a known kind is worth at +0 (the guide's table; the fight rings are measured: ringWorth). */
 	static double ringBase(Ring r) {
 		HeroClass c = H.heroClass; int d = Dungeon.depth;
 		if (r instanceof RingOfMight) return 8;
@@ -232,9 +274,8 @@ final class AsArtifacts {
 		double v;
 		if (i instanceof Ring) {
 			Ring r = (Ring) i;
-			double b = r.isKnown() ? ringBase(r) : 5;
-			int lv = r.levelKnown ? r.level() : 0;
-			v = b * (1 + 0.3 * lv);
+			int lv = r.levelKnown ? r.level() : 0, n = lv >= 0 ? lv + 1 : lv;
+			v = r.isKnown() ? ringWorth(r, n) : 5;
 			if (!r.isIdentified() && !r.isEquipped(H)) v += 1;   // (worn a level, it shows what it is)
 		} else if (i instanceof Artifact) v = artWorth((Artifact) i);
 		else return -100;
@@ -254,6 +295,7 @@ final class AsArtifacts {
 			if (Assist.declined(k.getClass(), EquipableItem.AC_EQUIP)) continue;
 			if (k instanceof Artifact && ((b.art != null && b.art.getClass() == k.getClass()) || (b.misc != null && b.misc.getClass() == k.getClass()))) continue;   // (never two alike)
 			double v = worth(k);
+			if (Assist.DBG) System.out.println("    art worth " + k.getClass().getSimpleName() + " " + Math.round(v * 10) / 10.0);
 			if (v < 2) continue;
 			KindofMisc out = null; double g;
 			if (b.free(k)) g = v;
