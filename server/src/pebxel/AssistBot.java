@@ -146,6 +146,17 @@ public class AssistBot {
 		FileUtils.setDefaultFileProperties(Files.FileType.External, dir + "/");
 		app.newPrefs(dir);
 		SPDSettings.set(app.getPreferences(SPDSettings.DEFAULT_PREFS_FILE));
+		transients();
+		Dungeon.customSeedText = "";
+		boolean daily = Dungeon.daily; Dungeon.daily = true;   // (Bones has no reset: a daily game's leave() puts it back to "none")
+		try { com.shatteredpixel.shatteredpixeldungeon.Bones.leave(); } finally { Dungeon.daily = daily; }
+		globals(false);
+		Rankings.INSTANCE.records = null;
+		for (int s = 1; s <= GamesInProgress.MAX_SLOTS; s++) GamesInProgress.setUnknown(s);
+		setStatic(Actor.class, "pebxelHashes", 0);   // (actors numbered from 1 again)
+	}
+	/** Shattered's statics that a save doesn't hold and a new JVM has fresh (a new game, and a checkpoint's reload). */
+	static void transients() throws Exception {
 		com.shatteredpixel.shatteredpixeldungeon.levels.features.Chasm.jumpConfirmed = false;
 		com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.TippedDart.lostDarts = 0;
 		com.shatteredpixel.shatteredpixeldungeon.items.trinkets.WondrousResin.forcePositive = false;
@@ -157,19 +168,7 @@ public class AssistBot {
 		setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.Char.class, "hitMissIcon", -1);
 		setStatic(com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.Flail.class, "spinBoost", 0);
 		setStatic(com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfWealth.class, "latestDropTier", 0);
-		Dungeon.customSeedText = "";
-		boolean daily = Dungeon.daily; Dungeon.daily = true;   // (Bones has no reset: a daily game's leave() puts it back to "none")
-		try { com.shatteredpixel.shatteredpixeldungeon.Bones.leave(); } finally { Dungeon.daily = daily; }
-		setStatic(Badges.class, "global", null); setStatic(Badges.class, "saveNeeded", false); Badges.loadGlobal();
-		for (com.shatteredpixel.shatteredpixeldungeon.journal.Document d : com.shatteredpixel.shatteredpixeldungeon.journal.Document.values())
-			for (String p : new ArrayList<>(d.pageNames())) d.deletePage(p);
-		for (Object c : com.shatteredpixel.shatteredpixeldungeon.journal.Catalog.values()) { zero(c, "seen", false); zero(c, "useCount", 0); }
-		for (Object c : com.shatteredpixel.shatteredpixeldungeon.journal.Bestiary.values()) { zero(c, "seen", false); zero(c, "encounterCount", 0); }
-		setStatic(com.shatteredpixel.shatteredpixeldungeon.journal.Journal.class, "saveNeeded", false);
-		Rankings.INSTANCE.records = null;
-		for (int s = 1; s <= GamesInProgress.MAX_SLOTS; s++) GamesInProgress.setUnknown(s);
 		com.shatteredpixel.shatteredpixeldungeon.ui.ActionIndicator.clearAction();
-		setStatic(Actor.class, "pebxelHashes", 0);   // (actors numbered from 1 again)
 		// (the quests' flags that Quest.reset() leaves: each is set again where its quest spawns, so only a game that read
 		// one before that would see the last game's; put back all the same, as a new JVM has them)
 		setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Wandmaker.Quest.class, "given", false);
@@ -177,11 +176,23 @@ public class AssistBot {
 		for (String n : new String[]{"type", "depth"}) setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost.Quest.class, n, 0);
 		for (String n : new String[]{"oldQuest", "alternative"}) setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Imp.Quest.class, n, false);
 	}
+	/** The profile's badges and journal (its guide pages decide what a floor drops) as its files have them: none in a
+	 *  new profile; after a checkpoint, what was saved. */
+	static void globals(boolean read) throws Exception {
+		setStatic(Badges.class, "global", null); setStatic(Badges.class, "saveNeeded", false); Badges.loadGlobal();
+		for (com.shatteredpixel.shatteredpixeldungeon.journal.Document d : com.shatteredpixel.shatteredpixeldungeon.journal.Document.values())
+			for (String p : new ArrayList<>(d.pageNames())) d.deletePage(p);
+		for (Object c : com.shatteredpixel.shatteredpixeldungeon.journal.Catalog.values()) { zero(c, "seen", false); zero(c, "useCount", 0); }
+		for (Object c : com.shatteredpixel.shatteredpixeldungeon.journal.Bestiary.values()) { zero(c, "seen", false); zero(c, "encounterCount", 0); }
+		if (read) { setStatic(com.shatteredpixel.shatteredpixeldungeon.journal.Journal.class, "loaded", false); com.shatteredpixel.shatteredpixeldungeon.journal.Journal.loadGlobal(); }
+		setStatic(com.shatteredpixel.shatteredpixeldungeon.journal.Journal.class, "saveNeeded", false);
+	}
 	static Object getStatic(Class<?> c, String n) throws Exception { java.lang.reflect.Field f = c.getDeclaredField(n); f.setAccessible(true); return f.get(null); }
 	static void setStatic(Class<?> c, String n, Object v) throws Exception { java.lang.reflect.Field f = c.getDeclaredField(n); f.setAccessible(true); f.set(null, v); }
 	@SuppressWarnings("unchecked")
 	static void zero(Object o, String n, Object v) throws Exception { java.lang.reflect.Field f = o.getClass().getDeclaredField(n); f.setAccessible(true); ((Map<Object, Object>) f.get(o)).replaceAll((k, x) -> v); }
 
+	@SuppressWarnings("unchecked")
 	static String play(HeroClass cls, long seed, int maxTurns) throws Exception {
 		Statics.restore();   // (our own classes' statics as before the first game)
 		curCls = cls; curSeed = seed;
@@ -202,8 +213,13 @@ public class AssistBot {
 
 		GamesInProgress.selectedClass = cls; GamesInProgress.curSlot = 1;
 		Dungeon.hero = null; Dungeon.daily = Dungeon.dailyReplay = false; Dungeon.initSeed(); Dungeon.seed = seed;
+		Checkpoint.taken = 0;
+		Map<String, Object> resumed = null;
+		if (Checkpoint.FROM != null) resumed = Checkpoint.resume();   // (FROM: on from a floor's checkpoint)
+		else {
 		InterlevelScene.mode = InterlevelScene.Mode.DESCEND;
 		Game.switchScene(InterlevelScene.class);
+		}
 
 		Signal.Listener<String> logL = s -> { synchronized (log) { log.addLast(s); while (log.size() > 8) log.removeFirst(); } return false; };
 		int maxD = 0, depth = 0, decisions = 0, stuckEvents = 0, sameRun = 0, picked = 0, actFails = 0, windows = 0;
@@ -216,8 +232,20 @@ public class AssistBot {
 		Window lastWnd = null; int wndFrames = 0;
 		long t0 = ms();
 		long readyF = 0, betweenF = 0, floorDecisions = 0, floorFrames = 0; float readyNow = -1;   // (the hang check counts frames in which game time stood still: no wall clock)
+		boolean ckptDue = false; long f0 = 0;
+		if (resumed != null) {   // (the bot loop as it was at the checkpoint)
+			Map<String, Object> L = resumed;
+			depth = (Integer) L.get("depth"); branch = (Integer) L.get("branch"); maxD = (Integer) L.get("maxD"); floorStart = (Float) L.get("floorStart");
+			decisions = (Integer) L.get("decisions"); stuckEvents = (Integer) L.get("stuckEvents"); picked = (Integer) L.get("picked"); actFails = (Integer) L.get("actFails"); windows = (Integer) L.get("windows");
+			floorDecisions = (Long) L.get("floorDecisions"); floorFrames = (Long) L.get("floorFrames"); f0 = (Long) L.get("f"); humanN = (Integer) L.get("humanN");
+			depthDecisions.putAll((Map<Integer, Integer>) L.get("depthDecisions")); whys.putAll((Map<String, Integer>) L.get("whys")); talentR = (Random) L.get("talentR");
+			synchronized (log) { log.clear(); log.addAll((Collection<String>) L.get("log")); } recent.clear(); recent.addAll((Collection<String>) L.get("recent"));
+			long[] k = (long[]) L.get("fk"); System.arraycopy(k, 0, fk, 0, fk.length);
+			GLog.update.remove(logL); GLog.update.add(logL);
+			System.out.printf("resumed at depth %d turn %d (checkpoint %d, %s)%n", depth, (Integer) L.get("turn"), Checkpoint.taken, Checkpoint.FROM);
+		}
 		try {
-		for (long f = 0; f < 20_000_000; f++) {
+		for (long f = f0; f < 20_000_000; f++) {
 			Lockstep.doing = "frame";
 			step();
 			if (f % 20000 == 0 && f > 0) { Window hw = Ui.topWindow(); System.out.printf("  .. frame %d depth %d %s%s decisions %d %.0fs%n", f, Dungeon.depth, Game.scene().getClass().getSimpleName(), hw == null ? "" : " window " + hw.getClass().getName(), decisions, (ms() - t0) / 1000.0); }
@@ -245,6 +273,7 @@ public class AssistBot {
 				if (depth > 0) System.out.printf("  floor %d done in %.0f turns, %d decisions%s%n", depth, Statistics.duration - floorStart, floorDecisions, watch == null ? "" : String.format(", %d watch frames, %d presses", watch.frames - floorWatchFrames, watch.presses - floorPresses));
 				if (watch != null) { floorWatchFrames = watch.frames; floorPresses = watch.presses; }
 				depth = Dungeon.depth; branch = Dungeon.branch; floorDecisions = 0; floorFrames = 0; maxD = Math.max(maxD, depth); floorStart = Statistics.duration;
+				ckptDue = Checkpoint.ON;
 				GLog.update.remove(logL); GLog.update.add(logL);
 				System.out.printf("depth %d  turn %.0f  hp %d/%d  lvl %d  str %d  %.1fs%n", depth, Statistics.duration, Dungeon.hero.HP, Dungeon.hero.HT, Dungeon.hero.lvl, Dungeon.hero.STR(), (ms() - t0) / 1000.0);
 				if (depth > maxDepth) { end = "depth limit"; break; }
@@ -277,6 +306,17 @@ public class AssistBot {
 				fk[3]++; continue;
 			}
 			readyF = f; readyNow = Actor.now();
+			if (ckptDue) {   // (CKPT: saved and reloaded on the floor's first ready turn; see Checkpoint)
+				ckptDue = false;
+				Map<String, Object> L = new HashMap<>();
+				L.put("maxD", maxD); L.put("floorStart", floorStart); L.put("decisions", decisions); L.put("stuckEvents", stuckEvents); L.put("picked", picked); L.put("actFails", actFails);
+				L.put("windows", windows); L.put("floorDecisions", floorDecisions); L.put("floorFrames", floorFrames); L.put("f", f); L.put("humanN", humanN);
+				L.put("depthDecisions", new HashMap<>(depthDecisions)); L.put("whys", new TreeMap<>(whys)); L.put("talentR", talentR);
+				synchronized (log) { L.put("log", new ArrayList<>(log)); } L.put("recent", new ArrayList<>(recent)); L.put("fk", fk.clone());
+				Checkpoint.take(L);
+				sameRun = 0; lastPos = -1; lastKey = ""; pickHeap = null; lastWnd = null; readyNow = -1;
+				continue;
+			}
 			Coverage.look(); BotWindows.turn(); BotItems.settle();
 			if (Cheat.ON && Dungeon.depth < START_DEPTH && !Dungeon.bossLevel() && Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null) {   // (tests: straight down to START_DEPTH)
 				com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr = StairsTest.stairs(false);
