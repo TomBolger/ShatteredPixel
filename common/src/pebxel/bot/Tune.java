@@ -16,7 +16,7 @@ public final class Tune {
 
 	// FightModel's hooks (Assist): P(death) thresholds in percent, the most health Healing is drunk at, rest
 	public static final double DEATH = get("ODEATH", 10), ESC = get("OESC", 30), UP = get("OUP", 25), AVOID = get("OAVOID", 25), HEALMAX = get("OHEALMAX", 70);
-	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 25) / 100, RESTHI = get("ORESTHI", 70) / 100;
+	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;
 	// GearValue: the gain needed to swap (share), the risk exponent, the curse rate of random gear, the boss's weight, a missing STR point's slowness
 	public static final double GEARNEED = get("OGNEED", 5) / 100, RISK = get("ORISK", 2), CURSE = get("OCURSE", 30) / 100, BOSSW = get("OBOSSW", 10) / 100, SLOW = get("OSLOW", 120) / 100;
 	// UpgradePlan: the weight of "now" against the region's end, the gain to read rather than hold, the Mage's staff-first count, TOE's horizon

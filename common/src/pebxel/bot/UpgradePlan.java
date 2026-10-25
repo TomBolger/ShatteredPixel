@@ -64,7 +64,7 @@ public final class UpgradePlan {
 		MagesStaff st = w0 instanceof MagesStaff ? (MagesStaff) w0 : null;
 		double z0 = st != null ? zap(st, wl0) : 0;
 		// the Mage: the staff first, to +3 (the guide; H's STAFFUP)
-		if (st != null && h.heroClass == HeroClass.MAGE && wl0 < Tune.STAFF) { last = "staff first (+" + wl0 + ")"; return st; }
+		if (st != null && wl0 < Tune.STAFF) { last = "staff first (+" + wl0 + ")"; return st; }
 		double base = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, 0, 0, d, z0);
 		double baseLate = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, (int) Math.round(Sg), dl, boss, z0);
 		List<Item> cands = new ArrayList<>();
