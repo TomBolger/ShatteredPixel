@@ -725,10 +725,10 @@ public final class RefinementTest {
         com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.Charger ch = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.Charger.class);
         ch.charges = 2;
         g = brute(near);
-        t = ab(false);
+        t = ab(true);
         check(t != null && t.item == sw && com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action) && t.cell == near, "a Duelist with charge, a strong foe beside: the weapon's ability on it: " + t);
         ch.charges = 0; ch.partialCharge = 0;
-        t = ab(false);
+        t = ab(true);
         check(t == null || !com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "no charge: no ability: " + t);
         ch.detach(); h.heroClass = cls0;
         // 3. the Berserker at full rage, low, a strong foe beside: Berserk; at full health against a weak one: not
