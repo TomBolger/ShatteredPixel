@@ -1,7 +1,7 @@
 """Converts Shattered PD's art to Pebble colours, using the same tuned mapping as the Pixel Dungeon port.
 Output: build/art/<same path>.png (one file per picture, numbered like server Assets.java)."""
 import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'watch', 'tools'))
+sys.path.insert(0, os.path.dirname(__file__))   # (convert_lib.py: Pebble PD's colour mapping, copied from the PixelDungeon- repo's watch/tools)
 from convert_lib import pebbleize, TILES, SPRITES, CHARS
 from PIL import Image
 

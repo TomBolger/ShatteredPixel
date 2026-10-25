@@ -5,3 +5,4 @@ watch/build/
 dist/
 watch/.lock-waf*
 lib
+__pycache__/
