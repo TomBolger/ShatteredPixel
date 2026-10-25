@@ -190,7 +190,7 @@ final class AsBosses {
 		for (Mob m : mobs()) if (enemy(m) && !(m instanceof YogDzewa)) { foe |= L.distance(m.pos, hp) <= 6; adjFoe |= L.adjacent(m.pos, hp); }
 		float bleed = 0; for (Buff b : h.buffs()) if (b instanceof com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Bleeding) bleed = ((com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Bleeding) b).level();
 		PotionOfHealing heal = bag(PotionOfHealing.class);
-		if (heal != null && heal.isKnown() && (h.HP * 100 < h.HT * YOGHEAL && (foe || bleed > 0 || blind()) || bleed * 3 >= h.HP))
+		if (heal != null && heal.isKnown() && (h.HP * 100 < h.HT * YOGHEAL && (foe || bleed > 0 || blind() || (boltHP >= 0 && h.HP < boltHP)) || bleed * 3 >= h.HP))
 			return use(heal, Potion.AC_DRINK, -1, "Yog: heal");
 		if (last && L.adjacent(yog.pos, hp)) return new Target(yog.pos, ENEMY, "Yog: the last blows");
 		Target dg = dodge(fistAlive ? -1 : yog.pos); if (dg != null) return dg;
@@ -204,6 +204,7 @@ final class AsBosses {
 					&& new Ballistica(m.pos, hp, Ballistica.MAGIC_BOLT).collisionPos == hp) boltFrom.put(m.id(), m.pos);   // (its bolt is drawn from where it stands: shot from the dark, it shows where)
 		}
 		boltHP = h.HP; boltAt = Actor.now();
+		if (DBG) for (Mob m : mobs()) if (m instanceof YogFist) System.out.println("    YOGDBG " + m.getClass().getSimpleName() + " at " + m.pos + " seen " + enemy(m) + " d " + L.distance(m.pos, hp) + " seat " + L.distance(m.pos, yp) + " line " + (new Ballistica(m.pos, hp, Ballistica.MAGIC_BOLT).collisionPos == hp) + " bolt " + boltFrom);
 		boltFrom.keySet().removeIf(id -> { Actor a = Actor.findById(id); return !(a instanceof YogFist) || !((YogFist) a).isAlive(); });
 		// the nearest foe beside the hero that can be hurt (the demons first: weakest)
 		Mob o = weakestAdjacent(yog);
@@ -226,33 +227,42 @@ final class AsBosses {
 			int st = stepTowards(at);
 			if (st >= 0) return new Target(st, GO, "Yog: to the fist shooting from the dark");
 		}
-		// a fist by Yog, or none in sight: wait 6+ from the seat for it
-		int spot = lureSpot(fist, yp);
+		// a fist by Yog, or none in sight: wait for it out of his reach (6+ from the seat; a Bright or Dark one shoots
+		// rather than comes while it sees the hero: out of its line, and far enough that where it first sees the hero
+		// is out of his reach)
+		int from = -1; Mob rf = fist;
+		if (fist != null) from = fist.pos;
+		else for (Map.Entry<Integer, Integer> e : boltFrom.entrySet()) { Actor a = Actor.findById(e.getKey()); if (a instanceof YogFist.BrightFist || a instanceof YogFist.DarkFist) { from = e.getValue(); rf = (Mob) a; } }
+		int spot = -1;
+		for (int r = rangedFist(rf) ? 11 : 6; r >= 6 && spot < 0; r -= 2) spot = lureSpot(rf, from, yp, r);
 		if (spot < 0 || spot == hp) return wait(hp, "Yog: wait for the fist");
 		int st = stepTowards(spot);
 		return st >= 0 ? new Target(st, GO, "Yog: draw the fist off him") : wait(hp, "Yog: wait for the fist");
+	}
+
+	static boolean rangedFist(Mob m) { return m instanceof YogFist.BrightFist || m instanceof YogFist.DarkFist; }
+
+	/** Where to wait for a fist: r+ from the seat (so it's out of his reach beside the hero), the nearest such cell,
+	 *  off what helps the fist (water heals the Rotting one; the Burning one's fire can't take on water), out of a
+	 *  Bright or Dark one's line from where it was seen or shot from. */
+	static int lureSpot(Mob fist, int from, int yp, int r) {
+		int hp = Dungeon.hero.pos, best = -1, bs = INF;
+		boolean ranged = rangedFist(fist);
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] >= INF || L.distance(c, yp) < r || !L.passable[c] || L.avoid[c] || danger[c] || (seenChar(c) != null && c != hp)) continue;
+			int s = dist[c] * 2;
+			if (fist instanceof YogFist.RottingFist && L.water[c]) s += 6;
+			if (fist instanceof YogFist.BurningFist && !L.water[c]) s += 3;
+			if (ranged && from >= 0 && L.distance(from, c) <= 7 && new Ballistica(from, c, Ballistica.MAGIC_BOLT).collisionPos == c) s += 40;   // (out of its line)
+			if (s < bs) { bs = s; best = c; }
+		}
+		return best;
 	}
 
 	static final Map<Integer, Integer> boltFrom = new HashMap<>(); static int boltHP = -1; static float boltAt; static Level boltL;
 
 	static boolean nearSeat(int c) { return L.distance(c, seat()) <= 4; }
 	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
-
-	/** Where to wait for a fist: 6+ from the seat (so it's out of his reach beside the hero), the nearest such cell,
-	 *  off what helps the fist (water heals the Rotting one; the Burning one's fire can't take on water). */
-	static int lureSpot(Mob fist, int yp) {
-		int hp = Dungeon.hero.pos, best = -1, bs = INF;
-		boolean ranged = fist instanceof YogFist.BrightFist || fist instanceof YogFist.DarkFist;
-		for (int c = 0; c < L.length(); c++) {
-			if (dist[c] >= INF || L.distance(c, yp) < 6 || !L.passable[c] || L.avoid[c] || danger[c] || (seenChar(c) != null && c != hp)) continue;
-			int s = dist[c] * 2;
-			if (fist instanceof YogFist.RottingFist && L.water[c]) s += 6;
-			if (fist instanceof YogFist.BurningFist && !L.water[c]) s += 3;
-			if (ranged && fist != null && new Ballistica(fist.pos, c, Ballistica.MAGIC_BOLT).collisionPos == c && L.distance(fist.pos, c) <= 6) s += 12;   // (out of its line)
-			if (s < bs) { bs = s; best = c; }
-		}
-		return best;
-	}
 
 	/** DM-300 supercharged (it sparks, and blows don't hurt it: "the boss can't be hurt"): the lit pylon is what ends
 	 *  it (strategy-reference 4.3): to it and strike it. Pylons never move: one seen is remembered. */
