@@ -302,8 +302,8 @@ public class AssistBot {
 			if (t == null && Cheat.ON) t = BotAlchemy.pick();
 			if (t == null && plan.isEmpty()) { Dungeon.hero.rest(false); continue; }
 			if (t == null) t = plan.get(0);
-			if (t == plan.get(0)) Sense.grade(plan);
-			if (HUMAN > 0 && t == plan.get(0) && plan.size() > 1 && ++humanN % HUMAN == 0 && (plan.get(1).kind == Assist.GO || plan.get(1).kind == Assist.PICKUP) && t.kind != Assist.ENEMY) {   // (a player who now and then takes plan B)
+			if (!plan.isEmpty() && t == plan.get(0)) Sense.grade(plan);   // (a cheat helper's pick with no plan: nothing to grade)
+			if (HUMAN > 0 && plan.size() > 1 && t == plan.get(0) && ++humanN % HUMAN == 0 && (plan.get(1).kind == Assist.GO || plan.get(1).kind == Assist.PICKUP) && t.kind != Assist.ENEMY) {   // (a player who now and then takes plan B)
 				Assist.chose(plan.get(1), t); t = plan.get(1); }
 			String key = t.kind + ":" + t.cell + ":" + t.action + ":" + (t.item == null ? "" : t.item.getClass().getSimpleName());
 			boolean still = Dungeon.hero.pos == lastPos && key.equals(lastKey) && t.kind != Assist.WAIT && !"wait".equals(t.action);
