@@ -56,6 +56,7 @@ final class AsAbilities {
 
 	static final boolean ON = Assist.opt("ABIL", true);
 	static final int STRONG = Assist.optInt("STRONG", 30);
+	static final boolean SNEAKSLEEP = Assist.opt("SNEAKSLEEP", true), SNEAKUP = Assist.opt("SNEAKUP", true), OPENERS = Assist.opt("OPENERS", true);
 	public static final String AB = "ab:";
 
 	// ---- per turn ----
@@ -415,7 +416,7 @@ final class AsAbilities {
 
 	/** A sleeper struck first is a surprise blow (the Rogue's sneak attacks; Silent Steps keeps it asleep longer). */
 	static Target sneakAttack() {
-		if (H.heroClass != HeroClass.ROGUE || !foes.isEmpty() || hpf < 0.6f) return null;
+		if (!SNEAKSLEEP || H.heroClass != HeroClass.ROGUE || !foes.isEmpty() || hpf < 0.6f) return null;
 		Mob best = null;
 		for (Mob m : Assist.mobs()) {
 			if (!Assist.enemy(m) || m.state != m.SLEEPING || Assist.boss(m) || m instanceof NPC || m.id() == Assist.vetoId) continue;
@@ -497,7 +498,7 @@ final class AsAbilities {
 			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && H.canAttack(m) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
 		} else if (SNEAK.contains(n)) {
 			if (e != null && hpf < 0.3f && losing()) { cell = away(5, false); why = "sneak away"; }
-			else if (adj.isEmpty() && H.invisible <= 0) for (Mob m : near) if (strong(m) && Assist.distance(m.pos, hp) >= 2 && (cell = beside(m, 5)) >= 0) { why = "sneak up: a surprise blow"; break; }
+			else if (SNEAKUP && adj.isEmpty() && H.invisible <= 0 && hpf > 0.6f) for (Mob m : near) if (strong(m) && Assist.distance(m.pos, hp) >= 2 && (cell = beside(m, 5)) >= 0) { why = "sneak up: a surprise blow"; break; }
 		} else if (COMBO.contains(n)) {
 			Sai.ComboStrikeTracker tr = H.buff(Sai.ComboStrikeTracker.class); int hits = tr == null ? 0 : tr.hits;
 			if (e != null && (hits >= 5 || (hits >= 3 && (st || full)))) { cell = e.pos; why = "combo strike (" + hits + ")"; }
@@ -587,7 +588,7 @@ final class AsAbilities {
 	}
 	/** A strong fight starting: the spells that set it up (Radiance, Holy Lance, Sunray, Bless, the Ward, the Weapon, the Aura). */
 	static Target openers() {
-		if (H.heroClass != HeroClass.CLERIC || near.isEmpty() || !strongFight()) return null;
+		if (!OPENERS || H.heroClass != HeroClass.CLERIC || near.isEmpty() || !strongFight()) return null;
 		Mob s = strongest(near); int ch = tomeCharge(); Target t;
 		int hostile = 0; for (Mob m : foes) if (!(m instanceof NPC)) hostile++;
 		if (H.subClass == HeroSubClass.PRIEST && (hostile >= 2 || (strong(s) && adj.isEmpty())) && (t = cast(Radiance.INSTANCE, -1, "radiance")) != null) return t;
