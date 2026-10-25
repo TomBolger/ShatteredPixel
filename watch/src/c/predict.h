@@ -4,13 +4,16 @@
 
 #define PLAN_T 12                // targets planned
 #define PLAN_S 32                // steps planned per walk (Controls.PLAN_STEPS)
+#define PLAN_H 32                // cells where a tap does something else (Controls.TAP_HOT)
 typedef struct { int16_t x, y; uint8_t k; uint8_t dir[PLAN_S]; } PlanTarget;
-typedef struct { bool on; uint16_t marker, hero, step_ms; uint8_t n, cur; PlanTarget t[PLAN_T]; } Plan;
+typedef struct { bool on, tap; uint16_t marker, hero, step_ms, hcell; uint8_t n, cur, nhot; PlanTarget t[PLAN_T]; uint16_t hot[PLAN_H]; } Plan;
 
 Plan *predict_plan(void);                              // a new plan (C_PREDICT): read it into this,
 void predict_set(void);                                // then say so
 bool predict_button(int code, uint32_t now);           // a press: true if the screen was changed ahead of the phone
 void predict_touch(void);                              // a touch: the plan no longer holds
+bool predict_tap(int x, int y, uint32_t now);          // a quick tap (screen px) on the map: true if the hero walks at once
+void predict_pass(int fresh, int w, int h, const uint8_t *d, int n);   // the ground a tap may walk (C_PASS)
 bool predict_pos(const Obj *o, int i, uint32_t now, int32_t *v);   // a picture's place while it is being predicted
 bool predict_offset(uint16_t id, uint32_t now, int32_t *dx, int32_t *dy);   // how far ahead of the phone a picture is shown
 void predict_tick(uint32_t now);                       // hand back to the phone's frames once they agree

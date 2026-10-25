@@ -217,10 +217,32 @@ static void read_dyn(Obj *o, uint32_t now) {
   if (m & 32) o->vel[2] = s16();
   if (m & 64) { o->vel[3] = s16(); o->vel[4] = s16(); }
   if (m & 128) o->vel[5] = s16();
-  o->until = (m & 0xF0) ? u8() * 10 : 0;   // the speeds stop then (ms; 0: they don't)
+  if (m & 0xF0) { int c = u8(); o->until = c < 128 ? c * 2 : (c - 128) * 20; } else o->until = 0;   // the speeds stop then (ms; 0: they don't; Link.untilCode)
   if (o->kind == K_SKIN) { o->dyn[6] = s16(); o->dyn[7] = s16(); o->vel[6] = s16(); o->vel[7] = s16(); }
   if ((o->kind == K_IMG || o->kind == K_SKIN) && (o->flags & F_ANIM)) { o->frame = u8(); o->timer = u8(); }
   o->at = now;
+}
+
+// C_STEP (Link.step): a sprite sets off from where its last movement ends to the next cell that way (d: (dx + 1) +
+// 3 (dy + 1)), there in ms; its animation goes on as it was
+static void step_obj(Obj *o, int d, int ms, uint32_t now) {
+  if (ms < 1) ms = 1;
+  int32_t x = o->dyn[0], y = o->dyn[1];
+  if (o->until) { x += (int32_t)((int64_t)o->vel[0] * o->until / 1000); y += (int32_t)((int64_t)o->vel[1] * o->until / 1000); }
+  if ((o->kind == K_IMG || o->kind == K_SKIN) && (o->flags & F_ANIM)) {
+    Anim *a = scene_anim(o->tx);
+    if (a && a->n && a->delay_ms) {   // (as draw.c works out its frame)
+      uint32_t t = (uint32_t)o->timer * a->delay_ms / 256 + (now - o->at);
+      int steps = t / a->delay_ms, fr = o->frame < a->n ? o->frame : a->n - 1;
+      fr = a->looped ? (fr + steps) % a->n : (fr + steps < a->n - 1 ? fr + steps : a->n - 1);
+      o->frame = fr; o->timer = (t % a->delay_ms) * 256 / a->delay_ms;
+    }
+  }
+  o->dyn[0] = x; o->dyn[1] = y;
+  memset(o->vel, 0, sizeof(o->vel));
+  int sp = (128000 + ms - 1) / ms;   // (rounded up: in ms, exactly a cell)
+  o->vel[0] = (d % 3 - 1) * sp; o->vel[1] = (d / 3 - 1) * sp;
+  o->until = ms; o->at = now;
 }
 
 void scene_stats(int *objs, int *tiles, int *anims, int *dyns) {
@@ -283,8 +305,14 @@ static void read_dtex(void) {
 // the fog of war's texel states where they changed, cell by cell (Link.fog): 0 in sight, 1 remembered, 2 never
 // seen, as the palette indices of a 2-bit run-time picture whose alpha draw.c reads
 static int varint(void) { int v = 0, sh = 0, c; do { c = u8(); v |= (c & 127) << sh; sh += 7; } while ((c & 128) && sh < 28); return v; }
-static void SMALL read_fog(void) {
-  int id = u8(), w = u16(), h = u16(), len = u16();
+static void SMALL read_fog(bool known) {
+  int id = u8(), w, h, len;
+  if (known) {   // C_FOGD: a fog the watch has (its size as it is)
+    len = varint();
+    DynTex *k = id >= 200 && id < 200 + MAX_DYN ? s_dyn[id - 200] : NULL;
+    if (!k || k->bits != 2) { g_lost = true; p = p + len > end ? end : p + len; return; }
+    w = k->w; h = k->h;
+  } else { w = u16(); h = u16(); len = u16(); }
   const uint8_t *stop = p + len; if (stop > end) stop = end;
   if (id < 200 || id >= 200 + MAX_DYN || w < 2 || h < 2) { p = stop; return; }
   DynTex *d = s_dyn[id - 200];
@@ -428,6 +456,7 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
       // (a picture the watch doesn't have: one it lost; the rest of the message can't be read without it)
       case C_SET: { int id = u16(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; } read_static(g_obj[id]); read_dyn(g_obj[id], now); break; }
       case C_MOVE: { int id = u16(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; } read_dyn(g_obj[id], now); break; }
+      case C_STEP: { int id = u16(), d = u8(), ms = u8(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; } step_obj(g_obj[id], d, ms, now); break; }
       case C_ANIMTO: {   // an animated sprite's new animation (and flips), then its moving part
         int id = u16(); if (id >= MAX_ID || !g_obj[id]) { g_lost = true; return len; }
         Obj *o = g_obj[id]; o->flags = u8(); o->tx = u16(); read_dyn(o, now); break;
@@ -471,7 +500,8 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
         break;
       }
       case C_DTEX: read_dtex(); break;
-      case C_FOG: read_fog(); break;
+      case C_FOG: read_fog(false); break;
+      case C_FOGD: read_fog(true); break;
       case C_ANIM: {
         int id = u16(), tex = u8(), n = u8(), delay = u16(), looped = u8();
         Anim *a = n ? salloc(sizeof(Anim) + n * 8) : NULL;
@@ -499,8 +529,21 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
           }
           if (pl->n > PLAN_T) pl->n = PLAN_T;
           if (pl->cur >= pl->n) pl->cur = 0;
+          // a tap on the map: the hero's cell, the cells where a tap does something else (bit 15: nor a way through)
+          if (u8()) {
+            pl->tap = true; pl->hcell = u16(); int n = u8();
+            for (int i = 0; i < n; i++) { int c = u16(); if (i < PLAN_H) pl->hot[i] = c; }
+            pl->nhot = n > PLAN_H ? PLAN_H : n;
+            if (n > PLAN_H) pl->tap = false;
+          }
         }
         predict_set();
+        break;
+      }
+      case C_PASS: {   // (Link.pass)
+        int fresh = u8(), w = u8(), h = u8(), n = u16();
+        if (p + n > end) n = end - p;
+        predict_pass(fresh, w, h, p, n); p += n;
         break;
       }
       default: APP_LOG(APP_LOG_LEVEL_ERROR, "bad command %d", c); return len;

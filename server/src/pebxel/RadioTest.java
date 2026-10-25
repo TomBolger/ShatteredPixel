@@ -347,7 +347,6 @@ public class RadioTest {
 			setTarget(to);
 			run(1.2);   // (the plan for it reaches the watch)
 			System.out.printf("  walk %d: %d steps%n", i, walks()[0]);
-			if (System.getenv("PLANDBG") != null) { byte[] pl = controls.plan(link);  StringBuilder sb = new StringBuilder(); for (String fn : new String[]{"onToolbar", "touching", "pending"}) { try { java.lang.reflect.Field f = Controls.class.getDeclaredField(fn); f.setAccessible(true); sb.append(fn).append('=').append(f.get(controls)).append(' '); } catch (Exception e) { sb.append(e); } } try { java.lang.reflect.Field f = Controls.class.getDeclaredField("marker"); f.setAccessible(true); Object mk = f.get(controls); java.lang.reflect.Field fi = mk.getClass().getDeclaredField("img"); fi.setAccessible(true); Object im = fi.get(mk); sb.append("img=").append(im).append(im == null ? "" : " vis=" + ((com.watabou.noosa.Gizmo) im).visible + " id=" + link.idOf((com.watabou.noosa.Gizmo) im) + " hero=" + link.idOf(Dungeon.hero.sprite) + " scene=" + com.watabou.noosa.GroupAccess.class); } catch (Exception e) { sb.append(e); } System.out.println("    " + sb); System.out.println("    plan " + pl.length + " ready " + Dungeon.hero.ready + " win " + Ui.topWindow() + " targets " + targetsNow()); }
 			walkStart();
 			button("walk", Controls.SELECT);
 			run(1.0);

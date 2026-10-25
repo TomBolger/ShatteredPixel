@@ -35,6 +35,7 @@ static int dyof(int d) { return d / 3 - 1; }
 static Obj *obj(uint16_t id) { return id < MAX_ID ? g_obj[id] : NULL; }
 static int32_t iabs(int32_t v) { return v < 0 ? -v : v; }
 
+static void walk_start(Obj *h, int k, const uint8_t *dir, uint32_t now);
 void predict_reset(void) { s_plan.on = false; s_box = s_walk = false; s_eid = NONE; }
 bool predict_active(void) { return s_box || s_walk || s_eid != NONE; }
 
@@ -155,7 +156,7 @@ bool predict_button(int code, uint32_t now) {
   bool down = (code & 15) == B_DOWN, select = code == B_SELECT;
   if (s_walk) s_wstop = true;
   if (!down && !select) { s_plan.on = false; return false; }
-  if (!s_plan.on || s_walk || !s_plan.n) { APP_LOG(APP_LOG_LEVEL_INFO, "nopredict on %d walk %d n %d", s_plan.on, s_walk, s_plan.n); s_plan.on = false; return false; }
+  if (!s_plan.on || s_walk || !s_plan.n) { s_plan.on = false; return false; }
   if (down) {
     int n = s_plan.n, c = (s_plan.cur + ((code & B_LONG) ? n - 1 : 1)) % n;
     PlanTarget *t = &s_plan.t[c];
@@ -170,9 +171,15 @@ bool predict_button(int code, uint32_t now) {
   PlanTarget *t = &s_plan.t[s_plan.cur < s_plan.n ? s_plan.cur : 0];
   Obj *h = obj(s_plan.hero);
   s_plan.on = false;                                     // (whatever Select does, the next plan comes from the phone)
-  if (!t->k || !h) { APP_LOG(APP_LOG_LEVEL_INFO, "nopredict k %d h %p", t->k, h); return false; }
+  if (!t->k || !h) return false;
+  walk_start(h, t->k, t->dir, now);
+  return true;
+}
+
+// the hero sets off along the steps given, now
+static void walk_start(Obj *h, int k, const uint8_t *dir, uint32_t now) {
   s_wid = s_plan.hero; s_wmarker = s_plan.marker; s_box = false; s_wx0 = obj_dyn(h, 0, now); s_wy0 = obj_dyn(h, 1, now);
-  s_wt = now; s_wn = t->k; memcpy(s_wdir, t->dir, s_wn); s_wstep = s_plan.step_ms ? s_plan.step_ms : 100;
+  s_wt = now; s_wn = k; memcpy(s_wdir, dir, s_wn); s_wstep = s_plan.step_ms ? s_plan.step_ms : 100;
   s_wmoved = false; s_wstop = false; s_walk = true; s_p0 = 0; s_t0 = now; s_plast = 0; s_plast_t = now; s_wplanoff = s_wdone = false; s_endp = -1;
   APP_LOG(APP_LOG_LEVEL_INFO, "predict: walk %d steps", s_wn);
   // the map follows him closely while he walks, as the phone's camera will (HeroSprite.move: panFollow at 20 a
@@ -187,6 +194,107 @@ bool predict_button(int code, uint32_t now) {
     else if (c->mode != 1) { c->mode = 1; c->follow = s_wid; c->ofx = c->ofy = 0; c->dead = 0; c->intensity = 255; c->cx = c->cy = 0; }
   }
   if (s_eid == s_wid) s_eid = NONE;
+}
+
+// ---- a tap on the map: the walk worked out here, as the phone's game will (Controls.tapPlan) ----
+// Over a radio round trip and the play-out delay, a tapped walk only began when the phone's frames came (a third of a
+// second and more); a Select began at the press, as the phone had planned its steps. A tap can be anywhere, so the
+// phone sends the ground he may walk (C_PASS, what changed, kept here: a bit a cell) and the cells where a tap does
+// something else (the plan), and the watch finds his way as Shattered does (PathFinder.find: the distances from the
+// cell tapped, then from him down them, the first lower neighbour in its order), so it is the same way, step for step.
+static uint8_t *s_pass; static uint8_t s_pw, s_ph;   // the ground, a bit a cell, row by row
+void predict_pass(int fresh, int w, int h, const uint8_t *d, int n) {
+  if (fresh || w != s_pw || h != s_ph || !s_pass) {
+    free(s_pass); s_pass = NULL; s_pw = w; s_ph = h;
+    if (w * h > 0) s_pass = calloc((w * h + 7) / 8, 1);
+    if (!s_pass) { s_pw = s_ph = 0; return; }
+  }
+  const uint8_t *e = d + n;
+  int i = 0, len = w * h;
+  while (d < e && i < len) {
+    int same = 0, sh = 0, c; do { c = d < e ? *d++ : 0; same |= (c & 127) << sh; sh += 7; } while ((c & 128) && sh < 28);
+    int flip = 0; sh = 0; do { c = d < e ? *d++ : 0; flip |= (c & 127) << sh; sh += 7; } while ((c & 128) && sh < 28);
+    i += same;
+    for (int k = 0; k < flip && i < len; k++, i++) s_pass[i >> 3] ^= 1 << (i & 7);
+  }
+}
+static bool ground(int c) { return s_pass[c >> 3] & (1 << (c & 7)); }
+
+#define TAP_R 24                 // the way is worked out in the square this far round him (Controls.TAP_R): any way of
+                                 // up to TAP_R steps lies in it, so it is the same as on the whole floor
+#define FAR 255
+bool predict_tap(int x, int y, uint32_t now) {
+  bool on = s_plan.on; s_plan.on = false;
+  if (!on || !s_plan.tap || s_walk || !s_pass || g_map_cam < 0) return false;
+  Obj *h = obj(s_plan.hero);
+  Cam *c = &g_cam[g_map_cam];
+  if (!h || !c->used || c->zoom == 0) return false;
+  // where on the map (units x8), as the phone reads it: the middle of the watch's pixel (Touches: x * 2 + 1)
+  int64_t ux = (((int64_t)(x * 8 + 4 - c->x) << 16) / c->zoom + c->sx), uy = (((int64_t)(y * 8 + 4 - c->y) << 16) / c->zoom + c->sy);
+  if (ux < 0 || uy < 0) return false;
+  int32_t mx = (int32_t)(ux >> 8), my = (int32_t)(uy >> 8);
+  int cx = mx / CELL, cy = my / CELL, fx = mx % CELL, fy = my % CELL;
+  // (near a cell's edge, the phone's camera, a little off the watch's, may read the next cell: left to the phone)
+  int m = 4096 / c->zoom; if (m < 6) m = 6;
+  if (cx >= s_pw || cy >= s_ph || fx < m || fx > CELL - m || fy < m || fy > CELL - m) return false;
+  int to = cx + cy * s_pw, from = s_plan.hcell, hx = from % s_pw, hy = from / s_pw;
+  if (!ground(to) || iabs(cx - hx) > TAP_R || iabs(cy - hy) > TAP_R) return false;
+  // a creature's or an item's sprite takes a tap within 12 of its cell's middle (CellSelector.onClick); stairs, a pot
+  for (int i = 0; i < s_plan.nhot; i++) {
+    int hc = s_plan.hot[i] & 0x7FFF, ax = (hc % s_pw) * CELL + CELL / 2, ay = (hc / s_pw) * CELL + CELL / 2;
+    if (hc == to || (iabs(mx - ax) <= 96 + m && iabs(my - ay) <= 96 + m)) return false;
+  }
+  // the distances from the cell tapped (Shattered's buildDistanceMap: the cell itself whatever it is, then the ground
+  // and the hero's own cell), level by level until they reach him
+  enum { S = 2 * TAP_R + 1 };
+  uint8_t *dist = malloc(S * S);
+  if (!dist) return false;
+  int ox = hx - TAP_R, oy = hy - TAP_R;
+  for (int wy = 0; wy < S; wy++) for (int wx = 0; wx < S; wx++) {
+    int lx = ox + wx, ly = oy + wy;
+    dist[wx + wy * S] = lx >= 0 && ly >= 0 && lx < s_pw && ly < s_ph && ground(lx + ly * s_pw) ? FAR : FAR - 1;   // (FAR - 1: no way)
+  }
+  for (int i = 0; i < s_plan.nhot; i++) if (s_plan.hot[i] & 0x8000) {
+    int hc = s_plan.hot[i] & 0x7FFF, wx = hc % s_pw - ox, wy = hc / s_pw - oy;
+    if (wx >= 0 && wy >= 0 && wx < S && wy < S) dist[wx + wy * S] = FAR - 1;
+  }
+  int wf = TAP_R + TAP_R * S, wt = (cx - ox) + (cy - oy) * S;
+  dist[wf] = FAR; dist[wt] = 0;
+  bool found = false;
+  for (int d = 0; d < FAR - 2 && !found; d++) {
+    bool any = false;
+    for (int wy = 0; wy < S; wy++) for (int wx = 0; wx < S; wx++) {
+      if (dist[wx + wy * S] != d) continue;
+      for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+        int nx = wx + dx, ny = wy + dy;
+        if ((dx || dy) && nx >= 0 && ny >= 0 && nx < S && ny < S && dist[nx + ny * S] == FAR) { dist[nx + ny * S] = d + 1; any = true; if (nx + ny * S == wf) found = true; }
+      }
+    }
+    if (!any) break;
+  }
+  int len = found ? dist[wf] : 0;
+  uint8_t dirs[PLAN_S]; int k = 0;
+  if (found && len <= TAP_R) {
+    // from him down the distances: the first lower neighbour in PathFinder's order (dir: -1, +1, -w, +w, -w-1, -w+1, +w-1, +w+1)
+    static const int8_t DX[8] = { -1, 1, 0, 0, -1, 1, -1, 1 }, DY[8] = { 0, 0, -1, 1, -1, -1, 1, 1 };
+    int sx = TAP_R, sy = TAP_R;
+    for (int step = 0; step < len && k < PLAN_S; step++) {
+      int best = -1, bd = dist[sx + sy * S];
+      for (int i = 0; i < 8; i++) {
+        int nx = sx + DX[i], ny = sy + DY[i];
+        if (nx < 0 || ny < 0 || nx >= S || ny >= S) continue;
+        int v = dist[nx + ny * S]; if (v >= FAR - 1) v = FAR;
+        if (v < bd) { bd = v; best = i; }
+      }
+      if (best < 0) { k = 0; break; }
+      dirs[k++] = (DX[best] + 1) + 3 * (DY[best] + 1);
+      sx += DX[best]; sy += DY[best];
+    }
+  }
+  free(dist);
+  if (!k) return false;
+  APP_LOG(APP_LOG_LEVEL_INFO, "predict: tap to %d,%d, %d steps", cx, cy, len);
+  walk_start(h, k, dirs, now);
   return true;
 }
 

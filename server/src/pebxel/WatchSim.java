@@ -29,6 +29,7 @@ public final class WatchSim {
 			sb.append(" | ").append(x / 8f).append(",").append(y / 8f);
 			if (k > 0) { sb.append(" walk "); for (int j = 0; j < k; j++) sb.append(u8()); }
 		}
+		if (u8() != 0) { sb.append(" | tap from ").append(u16()); int nh = u8(); sb.append(" hot"); for (int i = 0; i < nh; i++) sb.append(' ').append(u16()); }
 		return sb.toString();
 	}
 	public static int W = Screen.w, H = Screen.h;
@@ -202,6 +203,24 @@ public final class WatchSim {
 				case Link.C_NEW: { int id = u16(), after = u16(); if (objs.containsKey(id)) { unlink(id); particlesFree(id); } Obj o = new Obj(); o.st = readStatic(); o.kind = o.st[0]; readEmit(o); objs.put(id, o); readDyn(o); link(id, after); break; }
 				case Link.C_SET: { int id = u16(); Obj o = objs.get(id); o.st = readStatic(); o.kind = o.st[0]; readEmit(o); readDyn(o); break; }
 				case Link.C_MOVE: { int id = u16(); readDyn(objs.get(id)); break; }
+				case Link.C_STEP: {   // (as scene.c step_obj)
+					Obj o = objs.get(u16()); int d = u8(), ms = Math.max(1, u8());
+					int um = Math.round(o.until * 1000);
+					float x = o.dyn[Link.D_X] + (int) ((long) o.vel[Link.D_X] * um / 1000), y = o.dyn[Link.D_Y] + (int) ((long) o.vel[Link.D_Y] * um / 1000);
+					if (animated(o)) {
+						Anim a = anims.get(s16(o.st, 12) & 0xFFFF);
+						if (a != null && a.delayMs > 0) {
+							int n = a.rects.length / 4; float delay = a.delayMs / 1000f, t = o.timer * delay + (applyAt - o.at);
+							int steps = (int) (t / delay);
+							o.frame = a.looped ? (o.frame + steps) % n : Math.min(n - 1, o.frame + steps);
+							o.timer = (t - steps * delay) / delay;
+						}
+					}
+					o.dyn[Link.D_X] = (int) x; o.dyn[Link.D_Y] = (int) y;
+					Arrays.fill(o.vel, 0); int sp = (128000 + ms - 1) / ms; o.vel[Link.D_X] = (d % 3 - 1) * sp; o.vel[Link.D_Y] = (d / 3 - 1) * sp;
+					o.until = ms / 1000f; o.at = applyAt;
+					break;
+				}
 				case Link.C_ANIMTO: { int id = u16(); Obj o = objs.get(id); o.st = o.st.clone(); o.st[3] = (byte) u8(); o.st[12] = (byte) u8(); o.st[13] = (byte) u8(); readDyn(o); break; }
 				case Link.C_DEL: { int id = u16(); unlink(id); objs.remove(id); particlesFree(id); break; }
 				case Link.C_ORDER: { int id = u16(), after = u16(); unlink(id); link(id, after); break; }
@@ -237,8 +256,11 @@ public final class WatchSim {
 					while (p < end) { int n = u8(); if (n > 128) { int v = u8(); for (int i = 0; i < n - 127; i++) px[k++] = pal.length > 0 ? pal[v] : v; } else for (int i = 0; i < n; i++) { int v = u8(); px[k++] = pal.length > 0 ? pal[v] : v; } }
 					dyn.put(id, px); texCache.remove(id); dynBits.put(id, pal.length == 0 || pal.length > 16 ? 8 : pal.length <= 4 ? 2 : 4); break;
 				}
-				case Link.C_FOG: {   // (as scene.c read_fog: the fog's texel states, cell by cell where they changed)
-					int id = u8(), w = u16(), h = u16(), len = u16(), end = p + len, cw = w / 2, cells = cw * (h / 2);
+				case Link.C_FOG: case Link.C_FOGD: {   // (as scene.c read_fog: the fog's texel states, cell by cell where they changed)
+					int id = u8(), w, h, len;
+					if (c == Link.C_FOGD) { int[] k = dyn.get(id); if (k == null) throw new IllegalStateException("C_FOGD of a fog not here: " + id); len = varint(); w = k[0]; h = k[1]; }
+					else { w = u16(); h = u16(); len = u16(); }
+					int end = p + len, cw = w / 2, cells = cw * (h / 2);
 					int[] px = dyn.get(id);
 					if (px == null || px[0] != w || px[1] != h) { px = new int[2 + w * h]; px[0] = w; px[1] = h; Arrays.fill(px, 2, px.length, 0xC0); }
 					final int[] FS = {0x00, 0x40, 0xC0, 0xC0};
@@ -266,6 +288,7 @@ public final class WatchSim {
 				case Link.C_PREDICT: plans.add(readPlan()); break;
 				case Link.C_RECIPE: { int id = u8(), n = u8(); if (p + n > b.length) n = b.length - p; recipeSet(id, b, p, n); p += n; break; }
 				case Link.C_READY: p += 4; break;
+				case Link.C_PASS: { u8(); u8(); u8(); int n = u16(); p += n; break; }
 				case Link.C_SOUND: { int k = u8(), v = u8(); sounds.add(k + ":" + v); break; }
 				case Link.C_EVENT: events.add(u8()); break;
 				case Link.C_COMMIT: break;
@@ -309,7 +332,7 @@ public final class WatchSim {
 		if ((m & 32) != 0) o.vel[Link.D_A] = s16();
 		if ((m & 64) != 0) { o.vel[Link.D_SX] = s16(); o.vel[Link.D_SY] = s16(); }
 		if ((m & 128) != 0) o.vel[Link.D_ANG] = s16();
-		o.until = (m & 0xF0) != 0 ? u8() / 100f : 0;
+		o.until = (m & 0xF0) != 0 ? Link.untilOf(u8()) : 0;
 		if (o.kind == Link.K_SKIN) { o.dyn[Link.D_OX] = s16(); o.dyn[Link.D_OY] = s16(); o.vel[Link.D_OX] = s16(); o.vel[Link.D_OY] = s16(); }
 		if (animated(o)) { o.frame = u8(); o.timer = u8() / 256f; }
 		o.at = applyAt;

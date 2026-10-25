@@ -1111,20 +1111,23 @@ public class Controls {
 	/**
 	 * The plan for the watch's next press, so the target box and the hero answer at once rather than a radio
 	 * round trip later (the phone's own frames then confirm it, or the watch puts things back):
-	 * 0 = nothing to plan; else 1, marker id u16, hero id u16 (0xFFFF none), step ms / 4, n, current target, then per
-	 * target: marker x, y (s16, x8, 0x7FFF: none), steps k, k directions ((dx + 1) + 3 (dy + 1)).
+	 * 0 = the hero isn't ready (nothing to plan); else 1, marker id u16 (0xFFFF: not on the watch), hero id u16 (0xFFFF
+	 * none), step ms / 4, n, current target, then per target: marker x, y (s16, x8, 0x7FFF: none), steps k, k directions
+	 * ((dx + 1) + 3 (dy + 1)); then for a tap on the map (predict.c works out the walk it sets off on, as Hero.getCloser
+	 * would, over the ground Link.pass sent): 1 if a tap may walk (0: nothing more), the hero's cell u16, and the cells
+	 * where a tap does something else or the way is shut: count u8, each u16 (bit 15: no way through it either).
 	 */
 	public byte[] plan(Link link) {
 		Hero h = Dungeon.hero;
-		// (the marker hidden: plan A is an action of the toolbar's; a Down to a cell still moves the marker there)
-		if (!(Game.scene() instanceof GameScene) || h == null || !h.isAlive() || !h.ready || Ui.topWindow() != null
-				|| onToolbar || touching || targets.isEmpty() || marker.img == null || marker.img.parent == null) return new byte[]{0};
-		int mid = link.idOf(marker.img), hid = link.idOf(h.sprite);
-		if (mid < 0) return new byte[]{0};
+		if (!(Game.scene() instanceof GameScene) || h == null || !h.isAlive() || !h.ready || Ui.topWindow() != null) return new byte[]{0};
+		// (the targets: not while the toolbar or a finger has the buttons, nor with a press still being taken; the box
+		// hidden, off the view at the edge, Select still walks there at once)
+		boolean listed = !onToolbar && !touching && !pending && !targets.isEmpty() && marker.img != null && marker.img.parent != null;
+		int mid = listed ? link.idOf(marker.img) : -1, hid = link.idOf(h.sprite);
 		boolean aiming = aiming();
 		java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
-		int n = Math.min(targets.size(), PLAN_TARGETS);
-		b.write(1); w16(b, mid); w16(b, hid < 0 ? 0xFFFF : hid); b.write(STEP_MS / 4); b.write(n); b.write(Math.min(target, n - 1));
+		int n = listed ? Math.min(targets.size(), PLAN_TARGETS) : 0;
+		b.write(1); w16(b, mid < 0 ? 0xFFFF : mid); w16(b, hid < 0 ? 0xFFFF : hid); b.write(STEP_MS / 4); b.write(n); b.write(n == 0 ? 0 : Math.min(target, n - 1));
 		Camera cam = Camera.main; PointF rest = cam == null ? null : restCentre(cam);
 		for (int i = 0; i < n; i++) {
 			int cell = cellOf(targets.get(i));
@@ -1132,7 +1135,7 @@ public class Controls {
 			float[] xy = Marker.place(cell);
 			// (a box the view must move for, or one hidden by the HUD: no box at once; the phone's frames bring the
 			// view and the box together, rather than the box first under the HUD and the view a round trip later)
-			if (rest != null && shiftFor(cell, rest, cam) != null) { w16(b, 0x7FFF); w16(b, 0x7FFF); }
+			if (mid < 0 || (rest != null && shiftFor(cell, rest, cam) != null)) { w16(b, 0x7FFF); w16(b, 0x7FFF); }
 			else { w16(b, Math.round(xy[0] * 8)); w16(b, Math.round(xy[1] * 8)); }
 			Assist.Target t = i < plan.size() && plan.size() == targets.size() ? plan.get(i) : null;
 			boolean walks = t == null || t.kind == Assist.GO || t.kind == Assist.PICKUP || (t.kind == Assist.ENEMY && t.action == null);   // (an item's use, a wait: no walk)
@@ -1147,8 +1150,49 @@ public class Controls {
 			}
 			b.write(k); b.write(dirs, 0, k);   // (the count as written: stopped short, it used to say more steps than came)
 		}
+		tapPlan(b, link, h, aiming || hid < 0);
 		return b.toByteArray();
 	}
+	/** Cells the watch looks at round the hero for a tap's walk (predict.c TAP_R: its way is worked out in that square). */
+	static final int TAP_R = 24, TAP_HOT = 32;
+	/**
+	 * What the watch needs to walk the hero at once on a tap of the map, as the game will (CellSelector.onClick, then
+	 * Hero.handle and getCloser): the ground he may walk (Link.pass: as Hero.getCloser's, where he has been or mapped),
+	 * and the cells where a tap does something else (a monster, seen or not, as its sprite takes the tap; an item, stairs,
+	 * an alchemy pot) or shuts the way (a creature in sight, as Dungeon.findPath). Taps aimed at a thrown item or a
+	 * zap, or too many such cells round him: no walk at once (the phone's frames bring it).
+	 */
+	private void tapPlan(java.io.ByteArrayOutputStream b, Link link, Hero h, boolean no) {
+		Level lv = Dungeon.level;
+		if (no || h.rooted || h.flying || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Amok.class) != null || Char.hasProp(h, Char.Property.LARGE)) { b.write(0); return; }
+		int len = lv.length(), w = lv.width();
+		boolean[] pass = new boolean[len];
+		for (int i = 0; i < len; i++) pass[i] = lv.passable[i] && (lv.visited[i] || lv.mapped[i]);
+		h.modifyPassable(pass);
+		link.pass(lv, w, lv.height(), pass);
+		int hx = h.pos % w, hy = h.pos / w;
+		java.util.TreeMap<Integer, Boolean> hot = new java.util.TreeMap<>();
+		for (Char a : com.shatteredpixel.shatteredpixeldungeon.actors.Actor.chars()) {
+			int c = a.pos;
+			if (c >= 0 && c < len && h.fieldOfView != null && h.fieldOfView[c]) hot.put(c, true); else if (a instanceof Mob) hot.putIfAbsent(c, false);
+		}
+		for (Heap hp : lv.heaps.valueList()) hot.putIfAbsent(hp.pos, false);
+		for (int y = Math.max(0, hy - TAP_R); y <= Math.min(lv.height() - 1, hy + TAP_R); y++)
+			for (int x = Math.max(0, hx - TAP_R); x <= Math.min(w - 1, hx + TAP_R); x++) {
+				int c = x + y * w;
+				if (pass[c] && (lv.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.ALCHEMY || lv.getTransition(c) != null)) hot.putIfAbsent(c, false);
+			}
+		hot.put(h.pos, true);
+		java.io.ByteArrayOutputStream hb = new java.io.ByteArrayOutputStream(); int nh = 0;
+		for (Map.Entry<Integer, Boolean> e : hot.entrySet()) {
+			int c = e.getKey(); if (c < 0 || c >= len) continue;
+			if (Math.abs(c % w - hx) > TAP_R + 1 || Math.abs(c / w - hy) > TAP_R + 1) continue;   // (beyond what the watch looks at)
+			if (++nh > TAP_HOT) { b.write(0); return; }
+			w16(hb, c | (e.getValue() ? 0x8000 : 0));
+		}
+		b.write(1); w16(b, h.pos); b.write(nh); byte[] hh = hb.toByteArray(); b.write(hh, 0, hh.length);
+	}
+
 
 	private static void w16(java.io.ByteArrayOutputStream b, int v) { b.write(v & 255); b.write((v >> 8) & 255); }
 

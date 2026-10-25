@@ -131,7 +131,8 @@ def hero_walks(F, P, B, accs, tag):
     ends = [b[0] for b in B] + [1e18]
     for t0 in sel:
         t1 = min(e for e in ends if e > t0)
-        w = [(f[0], f[2], f[3], f[6], f[7], f[8]) for f in F if t0 - 50 <= f[0] < t1]
+        # (in whole pixels, as the screen shows them: a few eighths of a pixel's settling after a stop is not a move)
+        w = [(f[0], f[2] // 8 * 8, f[3] // 8 * 8, f[6], f[7], f[8]) for f in F if t0 - 50 <= f[0] < t1]
         pw = [(p[0], p[2], p[3]) for p in P if t0 - 50 <= p[0] < t1]
         if len(w) < 3: continue   # (pw: the phone's hero, when the run has it: the emulator's watch logs don't)
         # from the first frame he moves to the last

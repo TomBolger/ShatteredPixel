@@ -26,13 +26,13 @@ public final class Link {
 
 	// ---- commands ----
 	public static final int C_RESET = 1, C_CAM = 2, C_NEW = 3, C_SET = 4, C_DEL = 5, C_ORDER = 6,
-			C_TILES = 7, C_DTEX = 8, C_MOVE = 9, C_ANIM = 10, C_TIME = 11, C_INPUT = 12, C_LATEST = 13, C_SOUND = 14, C_COMMIT = 15, C_PREDICT = 16, C_TILES2 = 17, C_ANIMTO = 18, C_RECIPE = 19, C_FOG = 20, C_READY = 21, C_AHEAD = 22, C_EVENT = 23;
+			C_TILES = 7, C_DTEX = 8, C_MOVE = 9, C_ANIM = 10, C_TIME = 11, C_INPUT = 12, C_LATEST = 13, C_SOUND = 14, C_COMMIT = 15, C_PREDICT = 16, C_TILES2 = 17, C_ANIMTO = 18, C_RECIPE = 19, C_FOG = 20, C_READY = 21, C_AHEAD = 22, C_EVENT = 23, C_PASS = 24, C_STEP = 25, C_FOGD = 26;
 	// ---- picture kinds ----
 	public static final int K_IMG = 1, K_RECT = 2, K_NINE = 3, K_TILES = 4, K_TEXT = 5, K_SKIN = 6, K_QUADS = 7, K_SHAPE = 8, K_EMIT = 9;
 	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32;   // F_FOG: the fog of war (the watch draws it as Pebble PD does)
 	public static final int NONE = 0xFFFF;
 	/** The command format's version; the watch app sends its own in its hello. */
-	public static final int PROTOCOL = 13;   // 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
+	public static final int PROTOCOL = 14;   // 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
 
 	/** What to show on a watch whose app speaks another version of the commands. */
 	public static byte[] wrongVersion(int watch) {
@@ -119,10 +119,10 @@ public final class Link {
 	/** Forget everything the watch had (it restarted, or a new connection). */
 	public void reset() {
 		objs.clear(); shadowPrev.clear(); shadowNext.clear(); shadowHead = NONE;
-		freeIds.clear(); nextId = 0; camIds.clear(); camState.clear(); camObjs.clear(); dynTex.clear(); dynPixels.clear(); dynPal.clear(); fogStates.clear(); dynUsed.clear(); dynShrink.clear(); nextDyn = 200;
+		freeIds.clear(); nextId = 0; camIds.clear(); camState.clear(); camObjs.clear(); dynTex.clear(); dynPixels.clear(); dynPal.clear(); fogStates.clear(); fogDims.clear(); dynUsed.clear(); dynShrink.clear(); nextDyn = 200;
 		anims.clear(); animsByContent.clear(); animUsed.clear();
 		recipeIds.clear(); Arrays.fill(recipeKey, null);
-		out.reset(); marks.clear(); dropPending(); cmd(C_RESET); lastPlan = null;
+		out.reset(); marks.clear(); dropPending(); cmd(C_RESET); lastPlan = null; passLevel = null; passSent = null;
 		Sounds.take();   // (effects from while the watch was away are stale)
 		Feedback.reset();
 		for (int[] e : Sounds.state()) sound(e);
@@ -208,7 +208,8 @@ public final class Link {
 					} else if (drifted(g, o, dyn) || (tweens.get(g) != null && tweens.get(g) != o.tw && !NO_UNTIL)) {
 						// (a new movement starting is sent at once, not a frame later when it shows as a drift)
 						if (System.getenv("MOVEWHY") != null && g.getClass().getSimpleName().equals(System.getenv("MOVEWHY"))) { com.watabou.noosa.tweeners.Tweener tw2 = tweens.get(g); System.out.printf("movewhy %.3f %s tw %s was %s y %.1f%n", now, g.getClass().getSimpleName(), tw2 == null ? "-" : tw2.getClass().getSimpleName() + tw2.elapsed + "/" + tw2.interval, o.tw == null ? "-" : o.tw.getClass().getSimpleName(), dyn[D_Y] / 8); }
-						cmd(C_MOVE); u16(o.id); sendDyn(g, o, dyn); stat(g, "move", out.size() - before);
+						if (step(g, o, dyn)) stat(g, "step", out.size() - before);
+						else { cmd(C_MOVE); u16(o.id); sendDyn(g, o, dyn); stat(g, "move", out.size() - before); }
 					}
 				}
 				o.prev = dyn; o.prevAt = now;
@@ -247,6 +248,49 @@ public final class Link {
 		marks.clear();
 		bytesTotal += b.length; syncs++;
 		return b;
+	}
+
+	/**
+	 * A sprite setting off on a step from cell to cell (CharSprite.move: a PosTweener of one cell from where the watch
+	 * has it, nothing else moving): C_STEP id, direction ((dx + 1) + 3 (dy + 1)), ms the step takes from now, 5 bytes for
+	 * the 15 of a C_MOVE (the walking hero's, every step, was the biggest share of a walk's radio after the fog). The
+	 * watch takes it on from where its last movement ended, a cell that way in so many ms, its animation going on as it
+	 * was. (Its end is exact, too: a C_MOVE's stop, in tens of ms, rounded up, took the hero a pixel past his cell)
+	 */
+	private boolean step(Gizmo g, Obj o, float[] dyn) {
+		if (NO_REUSE || o.kind != K_IMG || !(g instanceof Visual)) return false;
+		com.watabou.noosa.tweeners.Tweener tw = tweens.get(g);
+		if (!(tw instanceof com.watabou.noosa.tweeners.PosTweener) || tw == o.tw) return false;
+		int leftMs = Math.round((tw.interval - tw.elapsed) * 1000);
+		if (leftMs < 20 || leftMs > 255) return false;
+		Visual v = (Visual) g;
+		if (v.speed.x != 0 || v.speed.y != 0 || v.angularSpeed != 0) return false;
+		for (int i = D_A; i < N; i++) if (o.vel[i] != 0 || Math.abs(o.dyn[i] - dyn[i]) > (i == D_A ? 0 : TOL[i])) return false;   // (the rest stays as the watch has it)
+		boolean animated = (o.stat[3] & F_ANIM) != 0;
+		if (animated && (o.anim == null || o.anim.delay <= 0 || !(g instanceof MovieClip) || NoosaAccess.curAnim((MovieClip) g) != o.anim)) return false;
+		// (from where its last movement ends, as the watch has it: not where the watch shows it as this frame plays, which
+		// depends on when it plays. A frame played late after one played on time came sooner after it than on the phone,
+		// and the hero set off on his next step two pixels short of his cell, off the way from then on)
+		if (o.until <= 0 && (o.vel[D_X] != 0 || o.vel[D_Y] != 0)) return false;
+		float tAll = now - o.sentAt;
+		int sx = (int) (o.dyn[D_X] + (long) o.vel[D_X] * Math.round(o.until * 1000) / 1000), sy = (int) (o.dyn[D_Y] + (long) o.vel[D_Y] * Math.round(o.until * 1000) / 1000);
+		if (Math.abs(sx - dyn[D_X]) > TOL[D_X] || Math.abs(sy - dyn[D_Y]) > TOL[D_Y]) return false;
+		com.watabou.utils.PointF e = ((com.watabou.noosa.tweeners.PosTweener) tw).end;
+		int dx = Math.round((e.x * 8 - sx) / 128f), dy = Math.round((e.y * 8 - sy) / 128f);
+		if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx == 0 && dy == 0) || Math.abs(e.x * 8 - (sx + dx * 128)) > 2 || Math.abs(e.y * 8 - (sy + dy * 128)) > 2) return false;
+		cmd(C_STEP); u16(o.id); u8((dx + 1) + 3 * (dy + 1)); u8(leftMs);
+		if (DEBUG_NEW && g.getClass().getSimpleName().equals("HeroSprite")) System.out.printf("HERO STEP at %.3f from %d,%d (real %.1f,%.1f) by %d,%d in %d ms, end %.1f,%.1f%n", now, sx, sy, dyn[D_X], dyn[D_Y], dx, dy, leftMs, e.x * 8, e.y * 8);
+		// what the watch will believe (scene.c step_obj)
+		if (animated) {
+			float a = o.timer + tAll; int steps = (int) (a / o.anim.delay), n = o.anim.frames.length;
+			o.frame = o.anim.looped ? (o.frame + steps) % n : Math.min(n - 1, o.frame + steps);
+			o.timer = a - steps * o.anim.delay;
+		}
+		o.dyn = o.dyn.clone(); o.dyn[D_X] = sx; o.dyn[D_Y] = sy;
+		int sp = (128000 + leftMs - 1) / leftMs;   // (rounded up: in so many ms, exactly a cell; rounded down, a step lost an eighth of a pixel)
+		o.vel = new float[N]; o.vel[D_X] = dx * sp; o.vel[D_Y] = dy * sp;
+		o.until = leftMs / 1000f; o.sentAt = now; o.tw = tw;
+		return true;
 	}
 
 	/** Two states of an animated sprite that differ only in its animation and flips (bytes 3, 12, 13). */
@@ -414,8 +458,8 @@ public final class Link {
 		// blinking (alpha jumping between levels) is not a fade: hold the new value
 		if (o.prev != null && Math.abs(dyn[D_A] - o.prev[D_A]) > 60) vel[D_A] = 0;
 		o.dyn = dyn.clone(); o.vel = vel; o.sentAt = now;
-		int untilMs = until > 0 ? Math.max(1, Math.min(255, (int) Math.ceil(until * 100))) : 0;   // 10 ms units
-		o.until = untilMs / 100f;
+		int untilMs = until > 0 ? untilCode(until) : 0;
+		o.until = untilOf(untilMs);
 		if (DEBUG_NEW && g.getClass().getSimpleName().equals("HeroSprite")) System.out.printf("HERO at %.3f x %.1f vel %.0f until %d tween %s%n", now, dyn[D_X] / 8, vel[D_X] / 8, untilMs, tw == null ? "-" : tw.getClass().getSimpleName() + " " + tw.elapsed + "/" + tw.interval);
 		int mask = 1;
 		if (dyn[D_A] != 255) mask |= 2;
@@ -451,6 +495,15 @@ public final class Link {
 	}
 
 	private static int r(float f) { return Math.round(f); }
+	/**
+	 * When speeds stop, as one byte: up to 254 ms in 2 ms (a step's 132 exactly), then up to 2.54 s in 20 ms. (In tens of ms,
+	 * rounded up, a step's stop came 8 ms late: every walk ended a pixel past the hero's cell, then crept back)
+	 */
+	static int untilCode(float s) {
+		int ms = Math.max(1, (int) Math.ceil(s * 1000 - 0.01f));
+		return ms <= 254 ? (ms + 1) / 2 : 128 + Math.min(127, (ms + 19) / 20);
+	}
+	static float untilOf(int code) { return code < 128 ? code * 2 / 1000f : (code - 128) * 20 / 1000f; }
 	static final float GUESS_HOLD = 1f;   // game seconds (one of real time; the clock ran 1.5 x real time once: 1.5)
 
 	/** A difference in water's drift goes round its texture (SkinnedBlock wraps it there; so does the watch): a
@@ -546,13 +599,13 @@ public final class Link {
 			if (Math.abs(vel[D_X]) > 30000 || Math.abs(vel[D_Y]) > 30000) vel[D_X] = vel[D_Y] = 0;
 		}
 		boolean moving = r(vel[D_X]) != 0 || r(vel[D_Y]) != 0;
-		int untilMs = moving ? Math.round(GUESS_HOLD * 100) : 0;
+		int untilMs = moving ? untilCode(GUESS_HOLD) : 0;
 		u8(moving ? 1 | 16 : 1);
 		s16o(r(dyn[D_X])); s16o(r(dyn[D_Y]));
 		if (moving) { s16o(r(vel[D_X])); s16o(r(vel[D_Y])); u8(untilMs); }
 		o.dyn = dyn.clone(); for (int i = 0; i < N; i++) o.dyn[i] = r(o.dyn[i]);
 		o.vel = new float[N]; if (moving) { o.vel[D_X] = r(vel[D_X]); o.vel[D_Y] = r(vel[D_Y]); }
-		o.until = untilMs / 100f; o.sentAt = now; o.anim = null; o.tw = null;
+		o.until = untilOf(untilMs); o.sentAt = now; o.anim = null; o.tw = null;
 	}
 
 	// ---- scene walk ----
@@ -1103,6 +1156,7 @@ public final class Link {
 	}
 	static final boolean FOG_CHECK = System.getenv("FOG_CHECK") != null, FOG_OLD = System.getenv("FOG_OLD") != null;   // (tests: FOG_OLD=1 sends it as pictures, as before)
 	private final HashMap<Integer, byte[]> fogStates = new HashMap<>();
+	private final HashMap<Integer, Integer> fogDims = new HashMap<>();   // (the fogs the watch has, by their size: C_FOG sent)
 	private void fog(int d, Pixmap p) {
 		byte[] px = Assets.pebble(p);
 		int n = px.length, w = p.getWidth(), h = p.getHeight(), cw = w / 2, ch = h / 2;
@@ -1167,7 +1221,10 @@ public final class Link {
 		}
 		fogStates.put(d, st);
 		int b0 = out.size();
-		cmd(C_FOG); u8(d); u16(w); u16(h); u16(bb.length); out.write(bb, 0, bb.length);
+		// (the watch has this fog already: its changes without its size, C_FOGD id, length varint)
+		if (fogDims.getOrDefault(d, -1) == (w << 16 | h)) { cmd(C_FOGD); u8(d); varint(out, bb.length); }
+		else { cmd(C_FOG); u8(d); u16(w); u16(h); u16(bb.length); fogDims.put(d, w << 16 | h); }
+		out.write(bb, 0, bb.length);
 		stat("fog of war", out.size() - b0);
 	}
 	private static void varint(ByteArrayOutputStream b, int v) { while (v >= 128) { b.write(v & 127 | 128); v >>>= 7; } b.write(v); }
@@ -1220,7 +1277,7 @@ public final class Link {
 			// were still held on the watch while the new floor's tile maps came in)
 			boolean oldScreen = last != null && last < sceneRound && rounds > sceneRound;
 			if (last != null && rounds - last < DYN_KEEP && !oldScreen) continue;
-			it.remove(); dynUsed.remove(d); dynPixels.remove(d); dynPal.remove(d); dynShrink.remove(d); fogStates.remove(d);
+			it.remove(); dynUsed.remove(d); dynPixels.remove(d); dynPal.remove(d); dynShrink.remove(d); fogStates.remove(d); fogDims.remove(d);
 			cmd(C_DTEX); u8(d); u16(0); u16(0); u16(0); u8(0); u16(0);
 		}
 	}
@@ -1366,6 +1423,31 @@ public final class Link {
 
 	/** A sound for the watch (Sounds): kind (0 effect, 1 music, 2 settings), value. */
 	private void sound(int[] e) { cmd(C_SOUND); out.write(e[0]); out.write(e[1]); stat("sound", 3); }
+
+	/**
+	 * The ground the hero may walk on (Controls.tapPlan), for the watch to work out a tap's walk itself: what changed
+	 * since it was last sent. C_PASS: 1 if the watch starts afresh (a new floor), w, h u8, length u16, then varints: runs
+	 * of cells alike and of cells turned over, by turns (alike first), row by row; the rest is alike.
+	 */
+	private Object passLevel; private boolean[] passSent;
+	public void pass(Object level, int w, int h, boolean[] p) {
+		boolean fresh = level != passLevel || passSent == null || passSent.length != p.length;
+		if (!fresh && Arrays.equals(p, passSent)) return;
+		ByteArrayOutputStream b = new ByteArrayOutputStream();
+		int i = 0, n = p.length;
+		while (i < n) {
+			int s = i; while (i < n && p[i] == (!fresh && passSent[i])) i++;
+			if (i >= n) break;
+			varint(b, i - s);
+			s = i; while (i < n && p[i] != (!fresh && passSent[i])) i++;
+			varint(b, i - s);
+		}
+		byte[] bb = b.toByteArray();
+		int b0 = out.size();
+		cmd(C_PASS); u8(fresh ? 1 : 0); u8(w); u8(h); u16(bb.length); out.write(bb, 0, bb.length);
+		stat("ground for taps", out.size() - b0);
+		passLevel = level; passSent = p.clone();
+	}
 
 	/** Tell the watch a touch has been applied (in this frame's changes). */
 	public void ack(int seq) { cmd(C_INPUT); out.write(seq & 255); }

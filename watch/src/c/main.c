@@ -7,7 +7,7 @@
 #include "predict.h"
 
 enum { KEY_DATA = 1, KEY_HELLO = 2, KEY_BUTTON = 3, KEY_STATS = 4, KEY_VERSION = 5, KEY_TOUCH = 6, KEY_SCREEN = 7 };
-#define PROTOCOL 13  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
+#define PROTOCOL 14  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
 enum { B_UP = 1, B_DOWN, B_SELECT, B_BACK, B_LONG = 16, B_WALKING = 32 };   // B_WALKING: pressed while a walk shows (Controls.WALKING)
 
 static Window *s_win;
@@ -505,7 +505,6 @@ static void touch(const TouchEvent *e, void *ctx) {
 #endif
   s_input_at = now;
   if (e->type != TouchEvent_PositionUpdate) lite();
-  predict_touch();
   switch (e->type) {
     case TouchEvent_Touchdown:
       s_down = true; s_drag = s_long = false; s_tx = s_lx = e->x; s_ty = s_ly = e->y; s_moved = 0;
@@ -517,7 +516,7 @@ static void touch(const TouchEvent *e, void *ctx) {
       int m = abs(e->x - s_tx) + abs(e->y - s_ty);
       if (m > s_moved) s_moved = m;
       if (!s_drag && s_moved >= (s_map ? PAN_START : TAP_SLOP)) {
-        s_drag = true;
+        s_drag = true; predict_touch();   // (a drag: the plan no longer holds)
         if (!s_map) out_msg(T_DOWN, s_tx, s_ty, false);
       }
       if (s_drag) {
@@ -530,8 +529,16 @@ static void touch(const TouchEvent *e, void *ctx) {
     case TouchEvent_Liftoff:
       long_stop();
       if (s_drag) { if (!s_map) out_msg(T_UP, e->x, e->y, false); }
-      else if (!s_down) { touch_start(e->x, e->y, now); out_msg(T_TAP, e->x, e->y, false); }   // a quick tap can come as a lone liftoff
-      else out_msg(T_TAP, s_tx, s_ty, s_long);
+      else {
+        bool lone = !s_down;   // (a quick tap can come as a lone liftoff)
+        if (lone) touch_start(e->x, e->y, now);
+        int tx = lone ? e->x : s_tx, ty = lone ? e->y : s_ty;
+        out_msg(T_TAP, tx, ty, !lone && s_long);
+        // a quick tap on the map: the walk it sets off on shown at once, as Select's (predict.c). (The map dragged and
+        // not yet answered: what the watch shows is not what the phone will read)
+        if (!(lone ? false : s_long) && s_map && s_npd == 0 && predict_tap(tx, ty, now)) kick();
+      }
+      predict_touch();
       s_down = s_drag = false;
       break;
     default: break;
