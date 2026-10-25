@@ -98,6 +98,10 @@ public final class BotWindows {
 			Gizmo b = byText(bs, Build.subclass(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
 			if (b != null) return new Answer(b, null, "the build's subclass");
 		}
+		if (kind.equals("WndChooseAbility") && !Cheat.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null) {   // (honest games: the build's armour ability)
+			Gizmo b = byText(bs, Build.ability(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
+			if (b != null) return new Answer(b, null, "the build's armour ability");
+		}
 		if (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility") || n.contains("WndSadGhost") || n.contains("WndWandmaker") || n.contains("WndImp") || n.contains("WndBlacksmith")) {
 			List<Gizmo> pos = positives(bs);
 			if (pos.isEmpty()) for (Ui.Part p : bs) if (!negative(p.text)) pos.add(p.g);   // (item pictures: no words on them)
