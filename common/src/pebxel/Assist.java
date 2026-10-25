@@ -214,9 +214,9 @@ public final class Assist {
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
 	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
-	// Off by default after the merge onto main (BF, Monolith 90 games each, mean max depth: main's rules 5.19, all on 4.08;
-	// each alone: fight 4.78, gear 4.71, upgrades 4.72, identify 4.77, shop 5.19): main's newer rules beat them as they stand; to be tuned
-	static final boolean OFIGHT = opt("OFIGHT", false);
+	// On by default (Thomas: the models are the way to a solved game; tune them, don't switch them off). Untuned after the
+	// merge they scored below main's rules (BF, Monolith 90 games each, mean max depth: rules 5.19, all on 4.08); agent MT tunes them.
+	static final boolean OFIGHT = opt("OFIGHT", true);
 	static final double ODEATH = Tune.DEATH, OESC = Tune.ESC, OUP = Tune.UP, OAVOID = Tune.AVOID;   // (percent: pebxel.bot.Tune, env AS_ODEATH...)
 	/** The fight the hero is in, as FightModel sees it (the enemies in sight beside it or after it), or null. */
 	static FightModel.Result oFight() {
@@ -225,7 +225,7 @@ public final class Assist {
 		return FightModel.engaged(H, fs);
 	}
 	// AS_OGEAR gear by GearValue, AS_OUPG upgrades by UpgradePlan, AS_OSHOP buying / selling by Trade, AS_OIDENT identify by Identify
-	static final boolean OGEAR = opt("OGEAR", false), OUPG = opt("OUPG", false), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", false);
+	static final boolean OGEAR = opt("OGEAR", true), OUPG = opt("OUPG", true), OSHOP = opt("OSHOP", true), OIDENT = opt("OIDENT", true);
 	static boolean oLosing(double pct) { FightModel.Result r = oFight(); return r != null && r.pDeath * 100 >= pct; }
 
 	// =============================================================================================================
