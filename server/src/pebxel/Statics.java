@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 final class Statics {
 	private Statics() { }
 
-	private static final Set<String> SKIP = Set.of("Gallery", "RadioTest", "Server", "Traffic", "LagTest", "Tour", "Shots", "MenuTest", "Buttons", "Statics");
+	private static final Set<String> SKIP = Set.of("Gallery", "RadioTest", "Server", "Traffic", "LagTest", "Tour", "Shots", "MenuTest", "Buttons", "Statics", "DeterminismTest");
 	private static final List<Saved> saved = new ArrayList<>();
 	static int classes;
 

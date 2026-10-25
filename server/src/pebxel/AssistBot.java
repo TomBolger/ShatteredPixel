@@ -59,31 +59,7 @@ public class AssistBot {
 	public static void main(String[] a) throws Exception {
 		boolean batch = a.length > 0 && a[0].equals("--games") && !WATCH;
 		int first = batch ? Integer.parseInt(a[1]) : 0, last = batch ? Integer.parseInt(a[2]) : 1;
-		v = System.getenv("V") != null;
-		String dir0 = ".pebxel-assistbot-" + ProcessHandle.current().pid() + System.getenv().getOrDefault("SAVETAG", "");
-		Game.version = "4.0.2"; Game.versionCode = 922;
-		Screen.set(System.getenv().getOrDefault("SCREEN", "emery"));
-		WatchGame game = new WatchGame();
-		game.drawAlways = WATCH;   // (the link needs the drawing code run: the fog and some pictures update while drawn)
-		app = new WatchApp(game, dir0, WATCH);
-		if (WATCH) app.graphics.soft.raster = false;
-		if (FAST) {   // (the default without the watch: see FAST below)
-			app.graphics.delta = Float.parseFloat(System.getenv().getOrDefault("FRAMEDT", "0.2"));
-			com.watabou.noosa.particles.Emitter.pebxelOff = !"1".equals(System.getenv("PARTICLES"));
-			app.graphics.useNoGL(); Gdx.gl = Gdx.gl20 = app.graphics.getGL20();   // (nothing is drawn: the tracking chip's clearing every frame was half a game's CPU with the quick JIT)
-		}
-		SPDSettings.set(app.getPreferences(SPDSettings.DEFAULT_PREFS_FILE));
-		FileUtils.setDefaultFileProperties(Files.FileType.External, dir0 + "/");
-		app.create();
-		Lockstep.watchdog(() -> "class " + curCls + " seed " + curSeed);
-		if (WATCH) watch = new WatchDriver(app);
-		if (WATCH && "1".equals(System.getenv("OLDLIST"))) OldTargets.install();
-		for (int i = 0; i < 5; i++) step();
-		// (any thread dying of an exception ends the game with a report: the render thread dying once left the actor
-		// thread waiting for ever, and the game hung, using no CPU, until it was cancelled)
-		Thread.setDefaultUncaughtExceptionHandler((th, ex) -> { System.out.println("UNCAUGHT in " + th.getName() + ": " + ex); ex.printStackTrace(System.out);
-			System.out.println("RESULT class " + curCls + " seed " + curSeed + ": crashed (" + ex + " in " + th.getName() + ")"); System.out.flush(); Runtime.getRuntime().halt(4); });
-		Statics.snapshot();
+		init();
 		for (int g = first; g < last; g++) {
 			HeroClass cls; long seed; int maxTurns;
 			if (batch) {
@@ -108,6 +84,35 @@ public class AssistBot {
 		}
 		try { Gdx.files.external(saveDir).deleteDirectory(); Gdx.files.local(saveDir).deleteDirectory(); Gdx.files.local(dir0).deleteDirectory(); } catch (Throwable e) { }
 		System.exit(0);
+	}
+
+	/** The headless app, set up once a JVM (DeterminismTest too), all classes loaded and our statics recorded. */
+	static void init() throws Exception {
+		v = System.getenv("V") != null;
+		dir0 = ".pebxel-assistbot-" + ProcessHandle.current().pid() + System.getenv().getOrDefault("SAVETAG", "");
+		Game.version = "4.0.2"; Game.versionCode = 922;
+		Screen.set(System.getenv().getOrDefault("SCREEN", "emery"));
+		WatchGame game = new WatchGame();
+		game.drawAlways = WATCH;   // (the link needs the drawing code run: the fog and some pictures update while drawn)
+		app = new WatchApp(game, dir0, WATCH);
+		if (WATCH) app.graphics.soft.raster = false;
+		if (FAST) {   // (the default without the watch: see FAST below)
+			app.graphics.delta = Float.parseFloat(System.getenv().getOrDefault("FRAMEDT", "0.2"));
+			com.watabou.noosa.particles.Emitter.pebxelOff = !"1".equals(System.getenv("PARTICLES"));
+			app.graphics.useNoGL(); Gdx.gl = Gdx.gl20 = app.graphics.getGL20();   // (nothing is drawn: the tracking chip's clearing every frame was half a game's CPU with the quick JIT)
+		}
+		SPDSettings.set(app.getPreferences(SPDSettings.DEFAULT_PREFS_FILE));
+		FileUtils.setDefaultFileProperties(Files.FileType.External, dir0 + "/");
+		app.create();
+		Lockstep.watchdog(() -> "class " + curCls + " seed " + curSeed);
+		if (WATCH) watch = new WatchDriver(app);
+		if (WATCH && "1".equals(System.getenv("OLDLIST"))) OldTargets.install();
+		for (int i = 0; i < 5; i++) step();
+		// (any thread dying of an exception ends the game with a report: the render thread dying once left the actor
+		// thread waiting for ever, and the game hung, using no CPU, until it was cancelled)
+		Thread.setDefaultUncaughtExceptionHandler((th, ex) -> { System.out.println("UNCAUGHT in " + th.getName() + ": " + ex); ex.printStackTrace(System.out);
+			System.out.println("RESULT class " + curCls + " seed " + curSeed + ": crashed (" + ex + " in " + th.getName() + ")"); System.out.flush(); Runtime.getRuntime().halt(4); });
+		Statics.snapshot();
 	}
 
 	/** Milliseconds since 1970 by the monotonic clock: Monolith's WSL clock jumps 75 s ahead and back about once a
@@ -165,6 +170,12 @@ public class AssistBot {
 		for (int s = 1; s <= GamesInProgress.MAX_SLOTS; s++) GamesInProgress.setUnknown(s);
 		com.shatteredpixel.shatteredpixeldungeon.ui.ActionIndicator.clearAction();
 		setStatic(Actor.class, "pebxelHashes", 0);   // (actors numbered from 1 again)
+		// (the quests' flags that Quest.reset() leaves: each is set again where its quest spawns, so only a game that read
+		// one before that would see the last game's; put back all the same, as a new JVM has them)
+		setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Wandmaker.Quest.class, "given", false);
+		for (String n : new String[]{"given", "processed"}) setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost.Quest.class, n, false);
+		for (String n : new String[]{"type", "depth"}) setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost.Quest.class, n, 0);
+		for (String n : new String[]{"oldQuest", "alternative"}) setStatic(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Imp.Quest.class, n, false);
 	}
 	static Object getStatic(Class<?> c, String n) throws Exception { java.lang.reflect.Field f = c.getDeclaredField(n); f.setAccessible(true); return f.get(null); }
 	static void setStatic(Class<?> c, String n, Object v) throws Exception { java.lang.reflect.Field f = c.getDeclaredField(n); f.setAccessible(true); f.set(null, v); }
@@ -321,6 +332,7 @@ public class AssistBot {
 				break;
 			}
 			lastPos = Dungeon.hero.pos; lastKey = key;
+			if (DeterminismTest.trace != null) DeterminismTest.trace.add(Math.round(Statistics.duration) + "/" + Actor.now() + " d" + Dungeon.depth + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + " " + key + " r" + rngState() + " " + actorState());   // (DeterminismTest)
 			BotStats.decision(t); FightCal.decision(); BotItems.decided(t);
 			whys.merge(t.why, 1, Integer::sum);
 			if (v && System.getenv("VMOBS") != null) { StringBuilder sb = new StringBuilder("    mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.HP); sb.append(" f").append(Lockstep.frames); System.out.println(sb); }
@@ -376,7 +388,21 @@ public class AssistBot {
 		GLog.update.remove(logL);
 		return end;
 	}
-	static String saveDir;
+	static String saveDir, dir0;
+	/** How many actors were made so far (Actor's numbering), and the floor's mobs in the order its set gives them. */
+	static String actorState() {
+		int h = 1; for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) h = h * 31 + m.pos * 7 + m.HP;
+		try { return "a" + getStatic(Actor.class, "pebxelHashes") + " m" + Integer.toHexString(h); } catch (Exception e) { return e.toString(); }
+	}
+	/** A hash of every random generator's state on Shattered's stack, by serialising them (no --add-opens needed). */
+	static String rngState() {
+		try {
+			java.lang.reflect.Field g = com.watabou.utils.Random.class.getDeclaredField("generators"); g.setAccessible(true);
+			java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+			synchronized (com.watabou.utils.Random.class) { try (java.io.ObjectOutputStream o = new java.io.ObjectOutputStream(b)) { for (Object r : (Collection<?>) g.get(null)) o.writeObject(r); } }
+			return Integer.toHexString(Arrays.hashCode(b.toByteArray()));
+		} catch (Throwable e) { return e.toString(); }
+	}
 	static long floorWatchFrames, floorPresses;
 	static final Map<String, Long> fkWhy = new HashMap<>(); static final boolean FRAMESBY = System.getenv("FRAMESBY") != null;
 	static final long[] fk = new long[5];   // (frames by what the bot waited for)
