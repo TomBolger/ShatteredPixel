@@ -421,7 +421,7 @@ public final class Assist {
 	/** After an item use: aim it, answer the item selector, confirm an upgrade. True if something was done. */
 	static boolean followUp(Target t, boolean player) {
 		if (Controls.aiming()) {
-			int c = t.cell >= 0 && t.cell != Dungeon.hero.pos ? t.cell : -1;
+			int c = t.cell >= 0 && (t.cell != Dungeon.hero.pos || t.obj == t.cell) ? t.cell : -1;   // (obj set to the hero's cell: aimed at himself, AsArtifacts.self)
 			if (c < 0) { if (!player) GameScene.cancelCellSelector(); return false; }   // (the player's: Down offers the cells)
 			GameScene.handleCell(c); return true;
 		}
@@ -741,7 +741,7 @@ public final class Assist {
 		plansB();
 		if (mode() != 0) {
 			Target first = out.isEmpty() ? null : out.get(0);
-			if (itemsOn()) { Target hk = hands(first); if (hk != null) front(hk); }
+			if (itemsOn()) { Target ua = AsArtifacts.urgent(first); if (ua != null) front(ua); Target hk = hands(first); if (hk != null) front(hk); }   // (AsArtifacts.urgent: an emergency artifact, the Horn before rations)
 			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;

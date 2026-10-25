@@ -65,6 +65,7 @@ public final class BotWindows {
 			if (!bs.isEmpty()) return answer(bs.get(0).g, "back did nothing: first");
 		}
 		if (sameKind > 6 || visits > 4) return answer(null, "same window again and again: back");
+		{ String want = AsArtifacts.windowAnswer(w); Gizmo b = want == null ? null : byText(bs, want); if (b != null) return answer(b, "artifact: " + want); }   // (a swap's slot, the hourglass's freeze, the chalice's yes or no: AsArtifacts)
 		// item selectors (a scroll, the alchemy, a quest asking for an item)
 		// (only a bag asks for an item: other windows keep a selector of their own for after one of their buttons,
 		// and answering it directly broke them: the Blacksmith's reforge window threw, killing the game's thread)
