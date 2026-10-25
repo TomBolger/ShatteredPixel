@@ -319,8 +319,11 @@ final class AsAbilities {
 		com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield ws = H.buff(com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield.class);
 		if (ws == null || ws.maxShield() <= 0) return null;
 		boolean bossAdj = false; for (Mob m : adj) bossAdj |= Assist.boss(m);
-		float low = H.hasTalent(Talent.DEATHLESS_FURY) ? 0.3f : 0.5f;
-		boolean go = (hpf < low && fightCost >= H.HP * 0.5) || fightCost >= H.HP * 1.2 || (bossAdj && hpf < 0.8f) || (adj.size() >= 2 && hpf < low + 0.2f);
+		// (rage decays once the fight is over and the shield is bigger the lower his health: spent in the fight it came
+		// from, once it's a hard one; with Deathless Fury it fires by itself at death, so then later)
+		boolean df = H.hasTalent(Talent.DEATHLESS_FURY);
+		boolean go = df ? (hpf < 0.35f && (strongFight() || adj.size() >= 2)) || (bossAdj && hpf < 0.6f)
+				: strongFight() || hpf < 0.6f || adj.size() >= 2 || bossAdj;
 		if (!go) return null;
 		Item c = H.belongings.armor() != null ? H.belongings.armor() : carrier();
 		return ab(c, AB + "berserk", -1, "berserk: rage at full, " + (bossAdj ? "a boss" : adj.size() >= 2 ? "surrounded" : "low"));
@@ -404,7 +407,7 @@ final class AsAbilities {
 		Mob best = null;
 		for (Mob m : Assist.mobs()) {
 			if (!Assist.enemy(m) || m.state != m.SLEEPING || Assist.boss(m) || m instanceof NPC || m.id() == Assist.vetoId) continue;
-			if (Assist.walk(m.pos) > 8 || cost(m) >= H.HP * 0.5) continue;
+			if (Assist.walk(m.pos) > 6 || cost(m) >= H.HP * (H.invisible > 0 ? 0.5 : 0.25)) continue;
 			if (best == null || Assist.walk(m.pos) < Assist.walk(best.pos)) best = m;
 		}
 		return best == null ? null : ab(carrier(), AB + "sneak", best.pos, "sneak: a sleeper, a surprise blow");
@@ -416,10 +419,10 @@ final class AsAbilities {
 
 	/** Point Blank: with 2+ points the bow beside a foe is no worse than at range: shot when it outdoes the melee blow. */
 	static Target pointBlank() {
-		int pb = H.pointsInTalent(Talent.POINT_BLANK); if (pb < 2 || adj.isEmpty()) return null;
+		int pb = H.pointsInTalent(Talent.POINT_BLANK); if (pb < 1 || adj.isEmpty()) return null;
 		SpiritBow bow = H.belongings.getItem(SpiritBow.class); if (bow == null) return null;
 		Mob e = strongest(adj);
-		double b = (bow.min() + bow.max()) / 2.0 * (pb >= 3 ? 1.25 : 1.0), m = 1.5;
+		double b = (bow.min() + bow.max()) / 2.0 * (0.5 + 0.25 * pb), m = 1.5;   // (beside: accuracy x0.5, +0.25 a point; MissileWeapon.adjacentAccFactor)
 		KindOfWeapon w = H.belongings.weapon();
 		if (w != null) { try { m = (w.min() + w.max()) / 2.0 / Math.max(0.3f, w.delayFactor(H)); } catch (Throwable x) { } }
 		if (H.subClass == HeroSubClass.SNIPER) b *= 1.2;   // (its shots pierce armour)
