@@ -114,6 +114,9 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
   return used;
 }
 
+// (taps: on the map)
+int scene_hit(int x, int y, uint32_t now) { return g_map_cam; }
+
 // ---- a frame drawn: where the hero (the map camera's followed picture) and the camera are ----
 static int s_hero = -1;
 void draw_scene(GContext *ctx, GRect bounds, uint32_t now) {
@@ -161,6 +164,12 @@ static void fire(Ev *e) {
       if (e->code & B_LONG) button_long(NULL, (void *)(intptr_t)(e->code & 15)); else button(NULL, (void *)(intptr_t)e->code);
       printf("B %.3f %d\n", (vt - 1000000000ull) / 1000.0, e->code);
       break;
+    case 'T': {   // a tap on the screen (x, y in code, len)
+      TouchEvent d = { TouchEvent_Touchdown, e->code, e->len, false }, u = { TouchEvent_Liftoff, e->code, e->len, false };
+      printf("B %.3f %d\n", (vt - 1000000000ull) / 1000.0, 5);
+      touch(&d, NULL); vt += 80000; touch(&u, NULL);
+      break;
+    }
     case 'S': printf("S %.3f %s\n", (vt - 1000000000ull) / 1000.0, e->text); break;
   }
 }
@@ -175,7 +184,7 @@ int main(int argc, char **argv) {
   static char line[1 << 20];
   while (fgets(line, sizeof line, f)) {
     char k = line[0]; long long t;
-    if (k != 'M' && k != 'B' && k != 'S' && k != 'P' && k != 'Q') continue;
+    if (k != 'M' && k != 'B' && k != 'S' && k != 'P' && k != 'Q' && k != 'T') continue;
     if (s_nev == s_cap) { s_cap = s_cap ? s_cap * 2 : 1024; s_ev = realloc(s_ev, s_cap * sizeof(Ev)); }
     Ev *e = &s_ev[s_nev]; memset(e, 0, sizeof *e);
     char *p = line + 2; t = strtoll(p, &p, 10); while (*p == ' ') p++;
@@ -183,6 +192,7 @@ int main(int argc, char **argv) {
     if (k == 'P' || k == 'Q') { line[strcspn(line, "\n")] = 0; printf("%s\n", line); continue; }   // (the phone's truth: passed on)
     if (k == 'M') { int n = strcspn(p, "\n") / 2; e->data = malloc(n); e->len = n; for (int i = 0; i < n; i++) e->data[i] = hexv(p[2 * i]) << 4 | hexv(p[2 * i + 1]); }
     else if (k == 'B') e->code = atoi(p);
+    else if (k == 'T') { e->code = strtol(p, &p, 10); e->len = strtol(p, &p, 10); }
     else { e->text = strdup(p); e->text[strcspn(e->text, "\n")] = 0; }
     s_nev++;
   }

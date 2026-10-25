@@ -92,7 +92,7 @@ def crossings(w, ox, oy):
 
 class Acc:
     def __init__(s):
-        s.steps, s.speeds, s.lag, s.cdv = [], [], [], []
+        s.steps, s.speeds, s.lag, s.cdv, s.start = [], [], [], [], []
         s.slow = s.fast = s.back_n = s.jump_n = s.cjump = s.walks = 0
         s.back_px = s.jump_px = 0.0
 
@@ -137,6 +137,7 @@ def hero_walks(F, P, B, accs, tag):
         # from the first frame he moves to the last
         mv = [i for i in range(1, len(w)) if w[i][1:3] != w[i - 1][1:3]]
         if not mv: continue
+        t_move = w[mv[0]][0]
         w = w[mv[0] - 1:mv[-1] + 1]
         w3 = [(p[0], p[1], p[2]) for p in w]
         ox, oy = w3[0][1] % CELL, w3[0][2] % CELL
@@ -146,6 +147,7 @@ def hero_walks(F, P, B, accs, tag):
         z = w[-1][5] / 256.0
         a = accs['cut' if tag == 'wstop' else 'long' if n_steps > 12 else 'short']
         a.walks += 1
+        a.start.append(t_move - t0)
         ws = [b - x for x, b in zip(cs, cs[1:])]
         a.steps += ws
         sp = []
@@ -211,12 +213,12 @@ def main():
         print('%-7s | %5.0f %5.0f %5.0f   | %7.1f %5d %5d         | %5.0f %7.0f %5d %5d (%5d)          | %5.0f %5.0f' % (name, sum(g) / len(g) if g else 0, pct(g, 0.95), max(g) if g else 0,
               sum(o['cdv']) / len(o['cdv']) if o['cdv'] else 0, o['turns'], o['cjumps'], stats(o['sh'])[1], o['moved'], o['changes'], o['late'], o['n'],
               sum(rs) / len(rs) if rs else 0, pct(rs, 0.9)) + '        | %5.0f %5.0f %5.0f' % (pct(o.get('arr', []), 0.5), pct(o.get('arr', []), 0.9), pct(o.get('arr', []), 0.95)))
-    print('%-7s | %-31s | %-24s | %-22s | %-19s | %s' % ('walks', 'steps: mean spread min max (n) stalls', 'speed: spread slow fast', 'back: n px   jumps n px', 'delay: mean spread', 'cam: dv/frame jumps'))
+    print('%-7s | %-31s | %-24s | %-22s | %-19s | %-19s | %s' % ('walks', 'steps: mean spread min max (n) stalls', 'speed: spread slow fast', 'back: n px   jumps n px', 'delay: mean spread', 'cam: dv/frame jumps', 'start (press to moving): mean max'))
     for k, a in accs.items():
         st = stats(a.steps); m = sum(a.speeds) / len(a.speeds) if a.speeds else 0; lg = stats(a.lag)
-        print('%-7s | %5.0f %5.1f %5.0f %5.0f (%3d) %3d | %5.1f%% %5d %5d       | %3d %5.0f  %3d %5.0f   | %6.0f %6.1f       | %7.1f %4d   (%d walks)' % (
+        print('%-7s | %5.0f %5.1f %5.0f %5.0f (%3d) %3d | %5.1f%% %5d %5d       | %3d %5.0f  %3d %5.0f   | %6.0f %6.1f       | %7.1f %4d   (%d walks) | %4.0f %4.0f' % (
             k, st[0], st[1], st[2], st[3], len(a.steps), sum(1 for d in a.steps if d > 1.5 * STEP), stats(a.speeds)[1] / m * 100 if m else 0, a.slow, a.fast,
-            a.back_n, a.back_px, a.jump_n, a.jump_px, lg[0], lg[1], sum(a.cdv) / len(a.cdv) if a.cdv else 0, a.cjump, a.walks))
+            a.back_n, a.back_px, a.jump_n, a.jump_px, lg[0], lg[1], sum(a.cdv) / len(a.cdv) if a.cdv else 0, a.cjump, a.walks, stats(a.start)[0], stats(a.start)[3]))
 
 if __name__ == '__main__':
     main()

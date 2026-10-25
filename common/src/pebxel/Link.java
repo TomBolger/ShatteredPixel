@@ -132,11 +132,19 @@ public final class Link {
 	public byte[] sync() { return sync(Game.elapsed); }
 
 	/** As sync(), when dt seconds passed since the last call (the link may run slower than the game). */
+	static final boolean FRAMEDBG = System.getenv("FRAMEDBG") != null;
+	private TreeMap<String, Long> fdbg;
 	public byte[] sync(float dt) {
+		if (FRAMEDBG) { fdbg = new TreeMap<>(); for (Map.Entry<String, long[]> e : stats.entrySet()) fdbg.put(e.getKey(), e.getValue()[1]); }
+		byte[] r = sync0(dt);
+		if (FRAMEDBG && r.length > 0) { StringBuilder b = new StringBuilder(String.format("FRAME %.3f %d:", now, r.length)); for (Map.Entry<String, long[]> e : stats.entrySet()) { long d = e.getValue()[1] - fdbg.getOrDefault(e.getKey(), 0L); if (d > 0) b.append(' ').append(e.getKey()).append('=').append(d); } System.out.println(b); }
+		return r;
+	}
+	private byte[] sync0(float dt) {
 		now += dt;
 		for (int[] e : Sounds.take()) sound(e);
 		// C_EVENT flags (Feedback.HURT, DEAD, LIGHT): played with this frame, the watch buzzes and lights up
-		int ev = Feedback.take(); if (ev != 0) { cmd(C_EVENT); out.write(ev); }
+		int ev = Feedback.take(); if (ev != 0) { cmd(C_EVENT); out.write(ev); stat("event", 2); }
 		Scene scene = Game.scene();
 		if (scene != null) {
 			List<Gizmo> order = new ArrayList<>();
@@ -176,6 +184,7 @@ public final class Link {
 				if (o == null) {
 					o = new Obj(); o.id = freeIds.isEmpty() ? nextId++ : freeIds.poll(); o.kind = st[0];
 					objs.put(g, o);
+					if (DEBUG_NEW && (g instanceof NinePatch || g.getClass() == Image.class)) { StringBuilder pc = new StringBuilder(); for (Gizmo q = g.parent; q != null; q = q.parent) pc.append(" < ").append(q.getClass().getName().replaceAll(".*\\.", "")); System.out.printf("NEWPIC %.3f %s %s%n", now, g.getClass().getSimpleName(), pc); }
 					if (DEBUG_NEW && g instanceof RenderedText) System.out.println("NEWTEXT " + ((RenderedText) g).text() + " in " + g.parent.getClass().getName());
 					cmd(C_NEW); u16(o.id); u16(prev); out.write(st, 0, st.length); o.stat = st;
 					sendDyn(g, o, dyn); stat(g, "new", out.size() - before);
@@ -198,6 +207,7 @@ public final class Link {
 						}
 					} else if (drifted(g, o, dyn) || (tweens.get(g) != null && tweens.get(g) != o.tw && !NO_UNTIL)) {
 						// (a new movement starting is sent at once, not a frame later when it shows as a drift)
+						if (System.getenv("MOVEWHY") != null && g.getClass().getSimpleName().equals(System.getenv("MOVEWHY"))) { com.watabou.noosa.tweeners.Tweener tw2 = tweens.get(g); System.out.printf("movewhy %.3f %s tw %s was %s y %.1f%n", now, g.getClass().getSimpleName(), tw2 == null ? "-" : tw2.getClass().getSimpleName() + tw2.elapsed + "/" + tw2.interval, o.tw == null ? "-" : o.tw.getClass().getSimpleName(), dyn[D_Y] / 8); }
 						cmd(C_MOVE); u16(o.id); sendDyn(g, o, dyn); stat(g, "move", out.size() - before);
 					}
 				}
@@ -325,7 +335,14 @@ public final class Link {
 			}
 		}
 		if (o.anim != null && g instanceof MovieClip) {
-			if (playAnim(o.anim, o.frame, o.timer, t) != NoosaAccess.curFrame((MovieClip) g)) return true;
+			// (a frame's turn falling right on this frame, the float sums of the game and the guess come out either side
+			// of it: either is right. Taken as a drift, it cost the walking hero a correction every other step)
+			int cur = NoosaAccess.curFrame((MovieClip) g);
+			if (playAnim(o.anim, o.frame, o.timer, t + 0.002f) != cur && playAnim(o.anim, o.frame, o.timer, Math.max(0, t - 0.002f)) != cur) {
+				if (System.getenv("DRIFT") != null && g.getClass().getName().replaceAll(".*\\.", "").equals(System.getenv("DRIFT")))
+					System.out.printf("drift %s anim guess %d real %d (frame %d timer %.4f t %.4f delay %.4f tAll %.4f)%n", g.getClass().getSimpleName(), playAnim(o.anim, o.frame, o.timer, t), NoosaAccess.curFrame((MovieClip) g), o.frame, o.timer, t, o.anim.delay, tAll);
+				return true;
+			}
 		}
 		return false;
 	}
@@ -695,6 +712,7 @@ public final class Link {
 				MovieClip.Animation a = g instanceof MovieClip ? NoosaAccess.curAnim((MovieClip) g) : null;
 				boolean animated = a != null && !((MovieClip) g).paused && a.delay > 0 && a.frames.length > 1;
 				// (a big glow may go smaller; the fog of war never: the watch reads it cell by cell)
+				if (g instanceof com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar) fogNow((com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar) g);
 				int tx = tex(im.texture, !(g instanceof com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar) && !skin);
 				s8(skin ? K_SKIN : K_IMG); s8(cam); s8(tx);
 				s8((im.flipHorizontal ? F_FLIPH : 0) | (im.flipVertical ? F_FLIPV : 0) | (animated ? F_ANIM : 0)
@@ -1063,6 +1081,26 @@ public final class Link {
 	 * odd: that many >> 1 more cells after it alike, even: its four texels' states >> 1 (two bits each, from the top
 	 * left, row by row). A new fog starts all never seen.
 	 */
+	/**
+	 * The fog's picture brought up to date now, as its draw would (FogOfWar.draw, in the next frame): the hero's step
+	 * sets him off and works out what he sees between frames, after this frame's draw, so his move went in one frame
+	 * and the fog it changed in the next, a frame stamp more every step. (What the fog shows is the same either way.)
+	 */
+	private static java.lang.reflect.Field fogPending; private static java.lang.reflect.Method fogUpdate;
+	private static void fogNow(com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar f) {
+		if (NO_REUSE || com.shatteredpixel.shatteredpixeldungeon.Dungeon.level == null) return;
+		try {
+			if (fogUpdate == null) {
+				Class<?> k = com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar.class;
+				fogPending = k.getDeclaredField("toUpdate"); fogPending.setAccessible(true);
+				fogUpdate = k.getDeclaredMethod("updateTexture", boolean[].class, boolean[].class, boolean[].class); fogUpdate.setAccessible(true);
+			}
+			java.util.List<?> pending = (java.util.List<?>) fogPending.get(f);
+			if (pending == null || pending.isEmpty()) return;
+			com.shatteredpixel.shatteredpixeldungeon.levels.Level L = com.shatteredpixel.shatteredpixeldungeon.Dungeon.level;
+			fogUpdate.invoke(f, L.heroFOV, L.visited, L.mapped);
+		} catch (Exception e) { }
+	}
 	static final boolean FOG_CHECK = System.getenv("FOG_CHECK") != null, FOG_OLD = System.getenv("FOG_OLD") != null;   // (tests: FOG_OLD=1 sends it as pictures, as before)
 	private final HashMap<Integer, byte[]> fogStates = new HashMap<>();
 	private void fog(int d, Pixmap p) {
@@ -1099,6 +1137,17 @@ public final class Link {
 			last = c; lastState = one ? st[t[0]] : -1;
 		}
 		byte[] bb = b.toByteArray();
+		if (System.getenv("FOGDBG") != null) {
+			int changed = 0, mixed = 0, toSight = 0, fromSight = 0;
+			for (int c = 0; c < cw * ch; c++) {
+				int x = c % cw * 2, y = c / cw * 2, t0 = y * w + x; int[] t = {t0, t0 + 1, t0 + w, t0 + w + 1};
+				boolean chg = false; for (int q : t) if (st[q] != old[q]) chg = true;
+				if (!chg) continue; changed++;
+				if (!(st[t[0]] == st[t[1]] && st[t[0]] == st[t[2]] && st[t[0]] == st[t[3]])) mixed++;
+				if (st[t[0]] == 0 && old[t[0]] != 0) toSight++; if (st[t[0]] != 0 && old[t[0]] == 0) fromSight++;
+			}
+			System.out.printf("FOG %.3f %dx%d changed %d mixed %d in %d out %d bytes %d%n", now, cw, ch, changed, mixed, toSight, fromSight, bb.length);
+		}
 		if (FOG_CHECK) {   // (tests: the watch's reading of it gives the states)
 			byte[] chk = old.clone(); int[] q = {0};
 			java.util.function.IntSupplier vi = () -> { int v = 0, sh = 0, c; do { c = bb[q[0]++] & 255; v |= (c & 127) << sh; sh += 7; } while ((c & 128) != 0); return v; };
@@ -1316,7 +1365,7 @@ public final class Link {
 	public int nowMs() { return Math.round(now * 1000); }
 
 	/** A sound for the watch (Sounds): kind (0 effect, 1 music, 2 settings), value. */
-	private void sound(int[] e) { cmd(C_SOUND); out.write(e[0]); out.write(e[1]); }
+	private void sound(int[] e) { cmd(C_SOUND); out.write(e[0]); out.write(e[1]); stat("sound", 3); }
 
 	/** Tell the watch a touch has been applied (in this frame's changes). */
 	public void ack(int seq) { cmd(C_INPUT); out.write(seq & 255); }

@@ -38,7 +38,7 @@ public final class Ahead {
 	/** Game seconds the game is ahead of real time. */
 	public float lead;
 	private boolean walking;
-	public long extra, held;   // (counts, for tests)
+	public long extra, held, stalled;   // (counts, for tests)
 
 	public Ahead(Link link, Pacer pacer) { this.link = link; this.pacer = pacer; }
 
@@ -68,6 +68,15 @@ public final class Ahead {
 		// (a walk that ended since the last frame is over before any press is taken: else the next walk, set off at
 		// once, counted as the same one, from its start)
 		if (ON) mark();
+		// A walk the radio can't keep up with: the game waits for it (the watch shows a stop at a step's end) rather than
+		// going on with its frames merged, as Pacer does for anything else: a merged frame starts a step late, and the
+		// hero leapt a cell or two at once when it played. (It lost the lead, if any: that is its time to wait)
+		if (ON && walking && pacer.busy() && link.pendingBytes() >= pacer.budget()) {
+			lead = Math.max(0, lead - dt);
+			link.aheadMs = Math.round(lead * 1000);
+			stalled++;
+			return true;
+		}
 		if (lead <= 0) return false;
 		if (walking) return false;
 		lead = Math.max(0, lead - dt);

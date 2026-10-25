@@ -147,14 +147,21 @@ static uint32_t stamp_at(const uint8_t *d) { return d[1] | d[2] << 8 | d[3] << 1
 // that press, not a round trip and the play-out delay later, which kept everything the hero saw (the fog, monsters,
 // items) that far behind him; the first of them, a round trip late, catch up at once (at most CATCH).
 // The frames after the walk play at the usual delay again (the phone waited for real time to catch up meanwhile).
+#define STALL_SLACK GAME_MS(50)   // game ms a walk's frame may come late and still play as due (a frame being drawn holds
+                                 // up the timers: the emulator's every step came 27 ms late, and each one put back was a stop)
 #define CATCH GAME_MS(200)   // game ms of a walk's start played at once, at most, when its frames came late
 #define NO_END 0xFFFFFFFFu
-typedef struct { bool on; uint32_t a0, a1; int32_t off; } Walk;   // phone stamps a0..a1 play at stamp + off
+typedef struct { bool on, join; uint32_t a0, a1; int32_t off; } Walk;   // phone stamps a0..a1 play at stamp + off (join: see due_of)
 static Walk s_wk, s_wkp;     // the newest walk, and the one before it
 static bool in_walk(const Walk *w, uint32_t st) { return w->on && (int32_t)(st - w->a0) >= 0 && (w->a1 == NO_END || (int32_t)(w->a1 - st) >= 0); }
+static Walk *walk_of(uint32_t st) { return in_walk(&s_wk, st) ? &s_wk : in_walk(&s_wkp, st) ? &s_wkp : NULL; }
 static uint32_t due_of(uint32_t st) {
   if (in_walk(&s_wk, st)) return st + s_wk.off;
   if (in_walk(&s_wkp, st)) return st + s_wkp.off;
+  // (the frames after a walk played later than the usual delay, put back below, or begun at a delay that has come down
+  // since: they go on from it, the delay coming back down slowly as after any other late message. At the usual delay
+  // they were due before the walk's end and played at once: his last step or two in a leap)
+  if (s_wk.on && s_wk.join && s_wk.a1 != NO_END && (int32_t)(st - s_wk.a1) > 0) { s_wk.join = false; if (s_wk.off > s_off) { s_off = s_wk.off; s_off_at = now_ms(); } }
   uint32_t d = st + s_off;
   // (from before the walk: played by its start at the latest)
   if (s_wk.on && (int32_t)(st - s_wk.a0) < 0 && (int32_t)(d - (s_wk.a0 + s_wk.off)) > 0) d = s_wk.a0 + s_wk.off;
@@ -170,7 +177,7 @@ static void walk_heard(uint32_t a0, uint32_t a1, uint32_t now) {
     int32_t lo = (int32_t)(now - a0) - CATCH;
     if (off < lo) off = lo;
     if (off > s_off) off = s_off;   // (never later than usual)
-    s_wk.on = true; s_wk.a0 = a0; s_wk.off = off;
+    s_wk.on = true; s_wk.join = true; s_wk.a0 = a0; s_wk.off = off;
     APP_LOG(APP_LOG_LEVEL_INFO, "walk ahead: %d ms before the usual delay (press %d, came %d)", (int)(s_off - off), (int)(s_off - (int32_t)(began - a0)), (int)(s_off - (int32_t)(now - a0)));
   }
   s_wk.a1 = a1;
@@ -220,6 +227,16 @@ static void pump(void *data) {
     if (m->pos < m->len && m->data[m->pos] == C_TIME && m->len - m->pos >= 5) {
       uint32_t due = due_of(stamp_at(m->data + m->pos));
       if ((int32_t)(due - now) > 0 && !rush) { pump_at(due, now); return; }
+      // A walk's frame that came late (the radio fell behind it) puts the rest of the walk back by as much: the hero
+      // stops at the end of his step until it comes and walks on from there. Played as late as it came, as other
+      // frames are, he leapt on to where he would have been by then: a cell or two at once. (Not while the watch
+      // shows him walking ahead, predict.c: there the phone's frames catching up don't show)
+      Walk *w = rush ? NULL : walk_of(stamp_at(m->data + m->pos));
+      if (w && (int32_t)(now - due) > STALL_SLACK && !predict_hero()) {
+#ifdef TRACE_WALK
+        APP_LOG(APP_LOG_LEVEL_INFO, "walk put back %d ms (queue %d)", (int)(now - due), s_qbytes);
+#endif
+        w->off += (int32_t)(now - due) - STALL_SLACK; due = now - STALL_SLACK; }
       // (a frame that comes late plays as at most LATE_MAX late: its pictures' guessed moves don't run on for
       // the whole of a radio hiccup)
       s_cur_at = rush ? now : (int32_t)(now - due) > LATE_MAX ? now - LATE_MAX : due;

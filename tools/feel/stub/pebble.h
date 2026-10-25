@@ -96,6 +96,10 @@ void touch_service_unsubscribe(void);
 bool touch_service_is_enabled(void);
 typedef struct { void (*will_focus)(bool); void (*did_focus)(bool); } AppFocusHandlers;
 void app_focus_service_subscribe_handlers(AppFocusHandlers h);
+typedef struct { const uint32_t *durations; uint32_t num_segments; } VibePattern;
+static inline void vibes_enqueue_custom_pattern(VibePattern p) { }
+static inline void vibes_long_pulse(void) { }
+static inline void light_enable_interaction(void) { }
 void app_event_loop(void);
 #define TRIG_MAX_RATIO 0xffff
 #define TRIG_MAX_ANGLE 0x10000

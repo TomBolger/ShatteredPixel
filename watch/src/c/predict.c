@@ -38,6 +38,7 @@ static int32_t iabs(int32_t v) { return v < 0 ? -v : v; }
 void predict_reset(void) { s_plan.on = false; s_box = s_walk = false; s_eid = NONE; }
 bool predict_active(void) { return s_box || s_walk || s_eid != NONE; }
 
+bool predict_hero(void) { return s_walk; }
 bool predict_walking(uint32_t now, uint32_t *since) { if (!s_walk || now - s_wt > GAME_MS(2000)) return false; *since = s_wt; return true; }
 void predict_touch(void) { s_plan.on = false; }
 
@@ -154,7 +155,7 @@ bool predict_button(int code, uint32_t now) {
   bool down = (code & 15) == B_DOWN, select = code == B_SELECT;
   if (s_walk) s_wstop = true;
   if (!down && !select) { s_plan.on = false; return false; }
-  if (!s_plan.on || s_walk || !s_plan.n) { s_plan.on = false; return false; }
+  if (!s_plan.on || s_walk || !s_plan.n) { APP_LOG(APP_LOG_LEVEL_INFO, "nopredict on %d walk %d n %d", s_plan.on, s_walk, s_plan.n); s_plan.on = false; return false; }
   if (down) {
     int n = s_plan.n, c = (s_plan.cur + ((code & B_LONG) ? n - 1 : 1)) % n;
     PlanTarget *t = &s_plan.t[c];
@@ -169,7 +170,7 @@ bool predict_button(int code, uint32_t now) {
   PlanTarget *t = &s_plan.t[s_plan.cur < s_plan.n ? s_plan.cur : 0];
   Obj *h = obj(s_plan.hero);
   s_plan.on = false;                                     // (whatever Select does, the next plan comes from the phone)
-  if (!t->k || !h) return false;
+  if (!t->k || !h) { APP_LOG(APP_LOG_LEVEL_INFO, "nopredict k %d h %p", t->k, h); return false; }
   s_wid = s_plan.hero; s_wmarker = s_plan.marker; s_box = false; s_wx0 = obj_dyn(h, 0, now); s_wy0 = obj_dyn(h, 1, now);
   s_wt = now; s_wn = t->k; memcpy(s_wdir, t->dir, s_wn); s_wstep = s_plan.step_ms ? s_plan.step_ms : 100;
   s_wmoved = false; s_wstop = false; s_walk = true; s_p0 = 0; s_t0 = now; s_plast = 0; s_plast_t = now; s_wplanoff = s_wdone = false; s_endp = -1;

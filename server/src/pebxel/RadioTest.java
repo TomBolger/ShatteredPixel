@@ -126,19 +126,42 @@ public class RadioTest {
 		}
 		for (Runnable r : pendingActions) { try { r.run(); } catch (Throwable e) { e.printStackTrace(); } }
 		pendingActions.clear();
+		touches.frame(link, controls, Game.elapsed);
 		app.frame(); controls.frame();
 		// (FRAME_SLEEP=ms: real time between frames, as on the phone, where the game's actor thread runs between them)
 		if (FRAME_SLEEP > 0) try { Thread.sleep(FRAME_SLEEP); } catch (InterruptedException e) { }
 		gclock += Game.elapsed;
 		ahead.beforeSync(System.nanoTime());
 		pacer.frame(Game.elapsed, true);
-		ahead.after(() -> { app.frame(); controls.frame(); gclock += Game.elapsed; }, true, System.nanoTime());
+		countStep();
+		ahead.after(() -> { app.frame(); controls.frame(); gclock += Game.elapsed; countStep(); }, true, System.nanoTime());
 		sim.advance((float) (t * Game.pebxelSpeed - sim.now)); seen();
 		if (Game.scene() instanceof InterlevelScene) { try { Thread.sleep(2); } catch (InterruptedException e) { } HandoffTest.pressOn(); }
 		peak = Math.max(peak, pacer.waiting());
 		tracePhone();
 	}
-	static int peak;
+	static void countStep() { if (Dungeon.hero != null && Dungeon.level != null && Dungeon.hero.pos != lastPos) { if (lastPos >= 0 && Dungeon.level.adjacent(lastPos, Dungeon.hero.pos)) heroSteps++; lastPos = Dungeon.hero.pos; } }
+	static int peak, lastPos = -1, heroSteps;
+	// ---- bytes per step of the hero's walks (walkStart .. walkStop): what took them, and the frames merged ----
+	static final TreeMap<String, long[]> wstats = new TreeMap<>();
+	static TreeMap<String, long[]> wsnap; static long wb0, wm0, wmg0, wst0; static int ws0; static long wbytes, wmsgs, wmerged, wstalled; static int wsteps;
+	static long stalls() { try { return ahead.getClass().getField("stalled").getLong(ahead); } catch (Exception e) { return 0; } }
+	static void walkStart() { wsnap = new TreeMap<>(); for (Map.Entry<String, long[]> e : link.stats.entrySet()) wsnap.put(e.getKey(), e.getValue().clone()); wb0 = pacer.bytes; wm0 = pacer.msgs; wmg0 = pacer.merged; wst0 = stalls(); ws0 = heroSteps; }
+	static void walkStop() {
+		for (Map.Entry<String, long[]> e : link.stats.entrySet()) {
+			long[] o = wsnap.getOrDefault(e.getKey(), new long[2]), a = wstats.computeIfAbsent(e.getKey(), x -> new long[2]);
+			a[0] += e.getValue()[0] - o[0]; a[1] += e.getValue()[1] - o[1];
+		}
+		wbytes += pacer.bytes - wb0; wmsgs += pacer.msgs - wm0; wmerged += pacer.merged - wmg0; wstalled += stalls() - wst0; wsteps += heroSteps - ws0;
+	}
+	static void walkReport() {
+		if (wsteps == 0) return;
+		System.out.printf("WALKSTEPS %d steps: %.0f B a step, %.2f messages a step, %d frames merged, %d held for the radio%n", wsteps, (double) wbytes / wsteps, (double) wmsgs / wsteps, wmerged, wstalled);
+		TreeMap<Long, String> top = new TreeMap<>();
+		for (Map.Entry<String, long[]> e : wstats.entrySet()) if (e.getValue()[1] > 0) top.put(-e.getValue()[1] * 1000 - top.size(), String.format("%-34s %5.2f a step %6.1f B a step", e.getKey(), (double) e.getValue()[0] / wsteps, (double) e.getValue()[1] / wsteps));
+		int n = 0; for (String x : top.values()) { System.out.println("    " + x); if (++n == (VERBOSE ? 25 : 8)) break; }
+		wstats.clear(); wbytes = wmsgs = wmerged = wstalled = 0; wsteps = 0;
+	}
 	static final int FRAME_SLEEP = (int) env("FRAME_SLEEP", 0);
 	/** STATS_OUT=file: every scenario's bytes by kind (depth scenario seconds count bytes kind) */
 	static java.io.PrintWriter STATS_OUT;
@@ -324,11 +347,55 @@ public class RadioTest {
 			setTarget(to);
 			run(1.2);   // (the plan for it reaches the watch)
 			System.out.printf("  walk %d: %d steps%n", i, walks()[0]);
+			if (System.getenv("PLANDBG") != null) { byte[] pl = controls.plan(link);  StringBuilder sb = new StringBuilder(); for (String fn : new String[]{"onToolbar", "touching", "pending"}) { try { java.lang.reflect.Field f = Controls.class.getDeclaredField(fn); f.setAccessible(true); sb.append(fn).append('=').append(f.get(controls)).append(' '); } catch (Exception e) { sb.append(e); } } try { java.lang.reflect.Field f = Controls.class.getDeclaredField("marker"); f.setAccessible(true); Object mk = f.get(controls); java.lang.reflect.Field fi = mk.getClass().getDeclaredField("img"); fi.setAccessible(true); Object im = fi.get(mk); sb.append("img=").append(im).append(im == null ? "" : " vis=" + ((com.watabou.noosa.Gizmo) im).visible + " id=" + link.idOf((com.watabou.noosa.Gizmo) im) + " hero=" + link.idOf(Dungeon.hero.sprite) + " scene=" + com.watabou.noosa.GroupAccess.class); } catch (Exception e) { sb.append(e); } System.out.println("    " + sb); System.out.println("    plan " + pl.length + " ready " + Dungeon.hero.ready + " win " + Ui.topWindow() + " targets " + targetsNow()); }
+			walkStart();
 			button("walk", Controls.SELECT);
 			run(1.0);
 			waitReady(12);
+			walkStop();
 		}
 		staleTargets();
+		walkReport();
+	}
+	/** As walks, by taps on the map (through Touches, as the watch's own): each walk to a cell tapped (traced as T:
+	 *  where on the watch's screen). Every other one 6 to 12 steps away, else 3 to 6. */
+	static final Touches touches = new Touches();
+	static int tseq;
+	static void twalks(int walks) {
+		Gallery.calm();
+		for (int c = 0; c < Dungeon.level.length(); c++) if (Dungeon.level.discoverable[c]) Dungeon.level.mapped[c] = true;
+		GameScene.updateFog(); settle(10);
+		Random dice = new Random(7);
+		for (int i = 0; i < walks; i++) {
+			waitReady(8);
+			Level L = Dungeon.level; int h = Dungeon.hero.pos;
+			com.watabou.utils.PathFinder.buildDistanceMap(h, com.watabou.utils.BArray.or(L.passable, L.avoid, null));
+			boolean far = i % 2 == 0;
+			List<Integer> cells = new ArrayList<>();
+			for (int c = 0; c < L.length(); c++) {
+				int d = com.watabou.utils.PathFinder.distance[c];
+				if (L.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EMPTY && Actor.findChar(c) == null && L.heaps.get(c) == null
+						&& (far ? d >= 6 && d <= 12 : d >= 3 && d <= 6) && Controls.onScreen(c)) cells.add(c);
+			}
+			if (cells.isEmpty()) { System.out.println("  no walk"); run(1); continue; }
+			int to = cells.get(dice.nextInt(cells.size()));
+			com.watabou.noosa.Camera c = com.watabou.noosa.Camera.main;
+			com.watabou.utils.PointF p = com.shatteredpixel.shatteredpixeldungeon.tiles.DungeonTilemap.tileCenterToWorld(to);
+			int x = Math.round((c.x + (p.x - c.scroll.x) * c.zoom) / 2f), y = Math.round((c.y + (p.y - c.scroll.y) * c.zoom) / 2f);
+			int cam = link.camIdOf(c), st = link.nowMs(), seq = ++tseq;
+			com.watabou.utils.PathFinder.Path path = Dungeon.findPath(Dungeon.hero, to, Dungeon.level.passable, Dungeon.hero.fieldOfView, true);
+			System.out.printf("  tap walk %d: %d steps%s%n", i, path == null ? 0 : path.size(), System.getenv("PATHS") != null && path != null ? " " + path : "");
+			walkStart();
+			trace("T %d %d %d", ms(t), x, y);
+			press("tap", () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); touches.add(new byte[]{1, (byte) seq, (byte) cam, 0, (byte) x, (byte) (x >> 8), (byte) y, (byte) (y >> 8), (byte) st, (byte) (st >> 8), (byte) (st >> 16), (byte) (st >> 24)}); });
+			run(0.4);
+			if (System.getenv("PATHS") != null) System.out.println("    after: pos " + Dungeon.hero.pos + " to " + to + " action " + Dungeon.hero.curAction + " ready " + Dungeon.hero.ready + " win " + Ui.topWindow());
+			run(0.6);
+			waitReady(12);
+			walkStop();
+		}
+		staleTargets();
+		walkReport();
 	}
 	/** The targets as the game has them again (after setTarget). */
 	static void staleTargets() {
@@ -474,7 +541,7 @@ public class RadioTest {
 				case "walk": walk(); break; case "fight": fight(); break; case "menu": menu(); break;
 				case "bag": bag(); break; case "floor": floor(); break; case "idle": idle(); break; case "sleepers": sleepers(); break;
 				case "walks": walks((int) env("WALKS", 8)); break;
-				case "wstop": wstop(6); break; case "wfight": wfight(); break;
+				case "wstop": wstop(6); break; case "twalks": twalks((int) env("WALKS", 8)); break; case "wfight": wfight(); break;
 				case "gas": gas(); break; case "zap": zap(); break;
 				default:
 					if (s.matches("d\\d+")) { depth(Integer.parseInt(s.substring(1))); break; }
