@@ -102,7 +102,7 @@ public class Touches {
 					if (p == null) { dragDx = Float.NaN; break; }
 					endTap(true);
 					dragOwner = owner(); lastY = py;
-					if (w != null && Controls.tall(w)) { scrollWindow = w; break; }
+					if (w != null && (Controls.tall(w) || w instanceof pebxel.ui.Scrolls)) { scrollWindow = w; break; }   // (a tall window moves under the finger; one that scrolls its own content, that)
 					dragDx = p[0] - px; dragDy = p[1] - py;
 					dragX = p[0]; dragY = p[1]; dragDown = true;
 					Game.inputHandler.touchDown(p[0], p[1], ID, 0);
@@ -110,7 +110,7 @@ public class Touches {
 				}
 				case 4: { // moves on
 					if (dragOwner != owner()) { cancelDrag(); break; }
-					if (scrollWindow != null) { Controls.scroll(scrollWindow, py - lastY); lastY = py; break; }
+					if (scrollWindow != null) { if (scrollWindow instanceof pebxel.ui.Scrolls) ((pebxel.ui.Scrolls) scrollWindow).scrollBy(py - lastY); else Controls.scroll(scrollWindow, py - lastY); lastY = py; break; }
 					if (!Float.isNaN(dragDx) && dragDown) { dragX = Math.round(px + dragDx); dragY = Math.round(py + dragDy); Game.inputHandler.touchDragged(dragX, dragY, ID); }
 					break;
 				}

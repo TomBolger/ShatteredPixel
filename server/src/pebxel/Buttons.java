@@ -80,6 +80,23 @@ public class Buttons {
 				com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr = StairsTest.stairs(false);
 				if (tr != null) StairsTest.jump(tr);
 			}
+			else if (p.startsWith("@lvl:")) { Dungeon.hero.lvl = Integer.parseInt(p.substring(5)); Dungeon.hero.exp = 0; wait = 2; }   // (tests: the hero at that level: talent points to spend)
+			else if (p.equals("@win")) {   // (tests: the top window's place: camera, tall, caps)
+				com.shatteredpixel.shatteredpixeldungeon.ui.Window w = Ui.topWindow(); wait = 0;
+				if (w == null) System.out.println("win: none"); else {
+					boolean caps = false; for (com.watabou.noosa.Gizmo g : com.watabou.noosa.GroupAccess.members(w)) caps |= g instanceof pebxel.ui.Caps && g.visible;
+					System.out.println("win: " + w.getClass().getSimpleName() + " cam y " + w.camera.y + " h " + w.camera.screenHeight() + " scroll " + w.camera.scroll + " tall " + Controls.tall(w) + " caps " + caps + " offset " + w.getOffset() + " clip " + java.util.Arrays.toString(pebxel.ui.Caps.clip(w.camera)) + (w instanceof pebxel.ui.WndWatchTalent ? " lines " + java.util.Arrays.toString(((pebxel.ui.WndWatchTalent) w).scrolled()) : ""));
+				}
+			}
+			else if (p.startsWith("@drag:")) {   // (tests: a finger's drag on the interface, @drag:x,y0,y1 in watch px)
+				String[] v = p.substring(6).split(","); int x = Integer.parseInt(v[0]), y0 = Integer.parseInt(v[1]), y1 = Integer.parseInt(v[2]);
+				int[][] steps = {{3, y0}, {4, (y0 + y1) / 2}, {4, y1}, {5, y1}};
+				for (int[] st : steps) {
+					touches.add(new byte[]{(byte) st[0], (byte) ++seq, (byte) 0xFF, 0, (byte) x, (byte) (x >> 8), (byte) st[1], (byte) (st[1] >> 8), 0, 0, 0, 0});
+					touches.frame(link, controls, Game.elapsed); app.frame(); controls.frame();
+				}
+			}
+			else if (p.equals("@talents")) { pebxel.ui.WndWatchHero.openTalents(); }   // (tests: the hero sheet's talent page)
 			else if (p.equals("@alchemy")) {   // (tests: only three seeds and some energy, then the alchemy screen, as at a pot)
 				Dungeon.hero.belongings.backpack.items.removeIf(it -> !(it instanceof com.shatteredpixel.shatteredpixeldungeon.items.bags.Bag));
 				for (int k = 0; k < 3; k++) new com.shatteredpixel.shatteredpixeldungeon.plants.Sungrass.Seed().collect();

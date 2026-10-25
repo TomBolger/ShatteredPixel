@@ -91,6 +91,8 @@ public class Gallery {
 			});
 			return;
 		}
+		// talents:N the hero at level N (talent points to spend), the talent page open
+		if (name.startsWith("talents:")) { int lv = Integer.parseInt(name.substring(8)); steps.add(() -> { Dungeon.hero.lvl = lv; Dungeon.hero.exp = 0; pebxel.ui.WndWatchHero.openTalents(); }); return; }
 		if (name.equals("duelist")) { steps.add(() -> { try { dress(HeroClass.DUELIST, 1); } catch (Exception e) { e.printStackTrace(); } }); return; }
 		if (name.equals("die")) {
 			free(() -> { com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat k = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat(); Dungeon.hero.HP = 1; Dungeon.fail(k); Dungeon.hero.die(k); });
@@ -376,6 +378,7 @@ public class Gallery {
 			case "hero": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndHero();
 			case "gameinfo": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndGameInProgress(1);
 			case "sadghost": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndSadGhost(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost(), 1);
+			case "subclass": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndChooseSubclass(new com.shatteredpixel.shatteredpixeldungeon.items.TengusMask(), Dungeon.hero);
 			default: return new com.shatteredpixel.shatteredpixeldungeon.windows.WndMessage(n);
 		}
 	}

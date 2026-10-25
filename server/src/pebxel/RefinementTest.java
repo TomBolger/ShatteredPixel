@@ -561,6 +561,43 @@ public final class RefinementTest {
         System.out.println("fights: gold passed over in a fight back after it (a kill, calm), a blow is no pass, foes seen coming past a dead end's door waited for (till they had time to come), the hands' item flies from the bag / its slot: ok");
     }
 
+    /** A tier-2 point spent with the watch's buttons alone (Thomas: "I can't spend tier 2 talents. The description takes
+     *  up the whole screen and there's no button to apply the talent point or way to scroll"): the talent page, Down to
+     *  a tier-2 talent with a long description, Select opens it, Down reads it, Select upgrades it by one. */
+    static void talentSpent(WatchApp app) throws Exception {
+        Hero h = Dungeon.hero; oc = new Controls();
+        int lvl = h.lvl; h.lvl = 9; h.exp = 0;
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent t = com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.RECALL_INSCRIPTION;
+        LinkedHashMap<com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent, Integer> was = h.talents.get(1), tier2 = new LinkedHashMap<>();
+        tier2.put(t, 0); for (Map.Entry<com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent, Integer> e : was.entrySet()) if (tier2.size() < was.size()) tier2.put(e.getKey(), e.getValue());
+        h.talents.set(1, tier2);
+        while (Ui.topWindow() != null) { Ui.topWindow().hide(); frames(app, 1); }
+        pebxel.ui.WndWatchHero.openTalents(); frames(app, 3);
+        Window page = Ui.topWindow();
+        Field tf = com.shatteredpixel.shatteredpixeldungeon.ui.TalentButton.class.getDeclaredField("talent"); tf.setAccessible(true);
+        for (int i = 0; i < 20 && !(oc.focused() instanceof com.shatteredpixel.shatteredpixeldungeon.ui.TalentButton && tf.get(oc.focused()) == t); i++) { oc.button(Controls.DOWN); frames(app, 1); }
+        check(oc.focused() instanceof com.shatteredpixel.shatteredpixeldungeon.ui.TalentButton && tf.get(oc.focused()) == t, "Down reaches the tier-2 talent");
+        oc.button(Controls.SELECT); frames(app, 3);
+        check(Ui.topWindow() instanceof pebxel.ui.WndWatchTalent, "Select opens the watch's talent window: " + Ui.topWindow());
+        pebxel.ui.WndWatchTalent w = (pebxel.ui.WndWatchTalent) Ui.topWindow();
+        check(w.scrolled()[2] > w.scrolled()[1], "a long description (it scrolls)");
+        for (int i = 0; i < 3; i++) { oc.button(Controls.DOWN); frames(app, 1); }
+        check(w.scrolled()[0] > 0 && Ui.topWindow() == w, "Down scrolls the description, the window stays");
+        oc.button(Controls.SELECT); frames(app, 3);
+        check(h.pointsInTalent(t) == 1, "Select upgrades the talent by one: " + h.pointsInTalent(t));
+        check(Ui.topWindow() == page, "back on the talent page");
+        // the same by finger: a tap opens it (at the top, its button in sight), a drag scrolls it, a tap on the button spends
+        com.watabou.noosa.Gizmo tb = null; for (Ui.Part p : Ui.parts(page)) if (p.g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.TalentButton && tf.get(p.g) == t) tb = p.g;
+        oc.touched(); Ui.press(tb); frames(app, 3);
+        w = (pebxel.ui.WndWatchTalent) Ui.topWindow();
+        w.scrollBy(-200); check(w.scrolled()[0] > 0, "a drag scrolls the description");
+        Ui.press(w.focused()); frames(app, 3);
+        check(h.pointsInTalent(t) == 2, "a tap on the button upgrades it again: " + h.pointsInTalent(t));
+        while (Ui.topWindow() != null) { Ui.topWindow().hide(); frames(app, 1); }
+        h.talents.set(1, was); h.lvl = lvl; oc = null;
+        System.out.println("talents: a tier-2 point spent with Down and Select (and by finger), the description scrolled: ok");
+    }
+
     public static void main(String[] args) {
         try { run(); } catch (Throwable e) { e.printStackTrace(); System.exit(1); }
     }
@@ -583,6 +620,7 @@ public final class RefinementTest {
         }
         check(Game.scene() instanceof GameScene, "game ready");
         while (Ui.topWindow() != null) Ui.topWindow().hide();
+        if (System.getenv("FITONLY") != null) { Gallery.calm(); oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); talentSpent(app); System.exit(0); }   // (quick: the windows only)
         Gallery.calm(); Hero h = Dungeon.hero; h.belongings.backpack.items.clear();
         h.HP = 40; h.HT = 100; h.buff(Hunger.class).satisfy(1000);
         WatchSettings.assist(2); Assist.reset();
@@ -610,6 +648,7 @@ public final class RefinementTest {
         options();
         fights(app);
         oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); oc = null;
+        talentSpent(app);
         chestFromBeside();
 
         Link link = new Link(new Assets()); Controls controls = new Controls(); Touches touches = new Touches();

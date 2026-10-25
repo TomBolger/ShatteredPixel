@@ -18,7 +18,8 @@ import java.util.function.Supplier;
  * Every kind of window, with long content, against the screen (Thomas: "several menus open taller than the whole
  * screen, giving them no top and no bottom"): one that fits lies inside the view; a taller one (it scrolls) keeps its
  * frame's top and bottom at the view's ends (pebxel.ui.Caps), at the top of its scroll, the foot and between, and a
- * tabbed one its tabs in sight. Called by RefinementTest (Emery, and SCREEN=gabbro). Prints a line per window.
+ * tabbed one its tabs in sight, and each of a tall one's buttons framed whole at some press of Down. Called by
+ * RefinementTest (Emery, and SCREEN=gabbro; FITONLY=1 runs only this). Prints a line per window.
  */
 public final class WindowFit {
 	static final String LONG = "The Dungeon lies right beneath the City, its upper levels actually constitute the City's sewer system. "
@@ -26,6 +27,16 @@ public final class WindowFit {
 			+ "The city sends guard patrols down here to try and maintain safety for those above, but they are slowly failing. "
 			+ "This place is dangerous, but at least the evil magic at work here is weak, and the _treasures_ are many. "
 			+ "Many adventurers have come before you; few came back, and none of them spoke of the deepest floors.";
+
+	/** The longest talent descriptions at tiers 1 to 4. */
+	static final com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent[] LONG_TALENTS = {
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.CACHED_RATIONS, com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.RECALL_INSCRIPTION,
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.AURA_OF_PROTECTION, com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.BEAMING_RAY};
+	static boolean upgraded;
+	static final WndInfoTalent.TalentButtonCallback UPGRADE = new WndInfoTalent.TalentButtonCallback() {
+		@Override public String prompt() { return "Upgrade Talent"; }
+		@Override public void call() { upgraded = true; }
+	};
 
 	public static void check(Runnable frame, Controls oc) {
 		Item weapon = Dungeon.hero.belongings.weapon;
@@ -56,6 +67,18 @@ public final class WindowFit {
 		wins.put("wandmaker", () -> new WndWandmaker(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Wandmaker(), new com.shatteredpixel.shatteredpixeldungeon.items.quest.CorpseDust()));
 		wins.put("blacksmith", () -> new WndBlacksmith(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith(), Dungeon.hero));
 		wins.put("shop item", () -> new WndTradeItem(longItem, null));
+		// a talent's description with the Upgrade button under it (the longest at each tier: Thomas: "I can't spend tier 2
+		// talents. The description takes up the whole screen and there's no button")
+		for (int k = 0; k < LONG_TALENTS.length; k++) {
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent t = LONG_TALENTS[k];
+			wins.put("talent t" + (k + 1) + " " + t.name().toLowerCase() + " (long)", () -> new WndInfoTalent(t, 0, UPGRADE));
+		}
+		wins.put("subclass choice", () -> new WndChooseSubclass(new com.shatteredpixel.shatteredpixeldungeon.items.TengusMask(), Dungeon.hero));
+		wins.put("subclass info", () -> new WndInfoSubclass(HeroClass.CLERIC, com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.PALADIN));
+		wins.put("armor ability choice", () -> new WndChooseAbility(new com.shatteredpixel.shatteredpixeldungeon.items.KingsCrown(), Dungeon.hero.belongings.armor, Dungeon.hero));
+		wins.put("armor ability info", () -> new WndInfoArmorAbility(HeroClass.CLERIC, new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany()));
+		wins.put("journal entry (long)", () -> new WndJournalItem(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.get(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.JOURNAL), "A journal entry", LONG + " " + LONG));
+		wins.put("talent no button (long)", () -> new WndInfoTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.RECALL_INSCRIPTION, 1, null));
 		int tall = 0;
 		for (Map.Entry<String, Supplier<Window>> e : wins.entrySet()) {
 			while (Ui.topWindow() != null) { Ui.topWindow().hide(); frame.run(); }
@@ -74,6 +97,7 @@ public final class WindowFit {
 			String file = e.getKey().replaceAll("[^a-z]+", "_");
 			if (shots != null) try { RefinementTest.pic(shots, file); } catch (Exception x) { throw new RuntimeException(x); }
 			edges(w, name, oc);
+			if (w instanceof pebxel.ui.WndWatchTalent) talent((pebxel.ui.WndWatchTalent) w, name, oc, frame, vt, vb);
 			if (!Controls.tall(w)) {
 				check(pebxel.ui.Caps.clip(c) == null, name + ": fits, no caps");
 				check(c.y >= vt - 2 && c.y + c.screenHeight() <= vb + 2, name + ": fits, inside the view (" + c.y + ".." + (c.y + c.screenHeight()) + " of " + vt + ".." + vb + ")");
@@ -96,10 +120,56 @@ public final class WindowFit {
 					check(ty >= vt && tb <= vb + 1, name + ": its tabs in sight (" + ty + ".." + tb + ")");
 				}
 			}
-			System.out.println("  fit: " + name + ": " + (int) (c.screenHeight() / 2) + " px tall, scrolls inside its frame");
+			int n = reach(w, name, oc, frame);
+			System.out.println("  fit: " + name + ": " + (int) (c.screenHeight() / 2) + " px tall, scrolls inside its frame, " + n + " buttons reached with Down");
 		}
 		while (Ui.topWindow() != null) { Ui.topWindow().hide(); frame.run(); }
 		System.out.println("windows fit the screen or scroll inside a whole frame: ok (" + wins.size() + " kinds, " + tall + " tall, " + Screen.w + "px)");
+	}
+
+	/** A tall window's buttons (on its own camera) each framed whole on the screen at some press of Down from its top,
+	 *  then Select's (Thomas: "there's no button to apply the talent point or way to scroll"). Returns how many. */
+	static int reach(Window w, String name, Controls oc, Runnable frame) {
+		java.util.List<Component> want = new java.util.ArrayList<>();
+		java.util.List<Component> tabs = w instanceof WndTabbed ? tabs(w) : java.util.Collections.emptyList();   // (held at the frame's foot)
+		for (Ui.Part p : Controls.buttons(w)) if (p.g.camera() == w.camera && !tabs.contains(p.g)) want.add((Component) p.g);
+		Controls.scroll(w, 100000); frame.run();
+		Component first = oc.focused();
+		if (first != null && Controls.reach(w, first) <= (Controls.viewBottom(w) - Controls.viewTop(w)) / 4f) Controls.keepInView(w, first);   // (as it opens: Controls.frame)
+		java.util.Set<Component> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (int i = 0; i < 80 && seen.size() < want.size() && Ui.topWindow() == w; i++) {
+			frame.run();
+			Component f = oc.focused();
+			if (f != null && want.contains(f) && Controls.visible(w, f)) seen.add(f);
+			oc.button(Controls.DOWN);
+		}
+		if (seen.size() < want.size()) {
+			StringBuilder why = new StringBuilder();
+			int[] a = Controls.area(w);
+			for (Component k : want) if (!seen.contains(k)) why.append(" ").append(label(k)).append(" at ").append(w.camera.y + (k.top() - w.camera.scroll.y) * w.camera.zoom).append("..").append(w.camera.y + (k.bottom() - w.camera.scroll.y) * w.camera.zoom);
+			check(false, name + ": every button framed whole on the screen with Down (" + seen.size() + " of " + want.size() + "; area " + a[0] + ".." + a[1] + ";" + why + ")");
+		}
+		return seen.size();
+	}
+
+	/** The watch's talent window: inside the view, its button whole at the foot and Select's, the text scrolled to its
+	 *  end with Down (and back with Up). */
+	static void talent(pebxel.ui.WndWatchTalent w, String name, Controls oc, Runnable frame, int vt, int vb) {
+		Camera c = w.camera;
+		Component b = w.focused();
+		if (b != null) {
+			float by = c.y + (b.bottom() - c.scroll.y) * c.zoom;
+			check(by <= vb && c.y + (b.top() - c.scroll.y) * c.zoom >= vt, name + ": its button whole on the screen (" + by + " of " + vb + ")");
+			frame.run();
+			check(oc.focused() == b, name + ": Select presses its button");
+		}
+		int[] s = w.scrolled();
+		if (s[2] <= s[1]) return;
+		for (int i = 0; i < 20 && w.scrolled()[0] + s[1] < s[2]; i++) { oc.button(Controls.DOWN); frame.run(); }
+		check(w.scrolled()[0] + s[1] == s[2], name + ": Down reads to the last line (" + java.util.Arrays.toString(w.scrolled()) + ")");
+		for (int i = 0; i < 20 && w.scrolled()[0] > 0; i++) { oc.button(Controls.UP); frame.run(); }
+		check(w.scrolled()[0] == 0, name + ": Up back to the first line");
+		System.out.println("  fit: " + name + ": " + s[2] + " lines, " + s[1] + " at a time");
 	}
 
 	/**

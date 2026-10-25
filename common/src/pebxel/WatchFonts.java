@@ -65,6 +65,7 @@ public final class WatchFonts {
 
 	/** Pixels above the capital letters in the watch font (the watch draws text that much higher). */
 	public static int capTop(int font) { return m(font).capTop; }
+	public static int base(int font) { return m(font).base; }
 
 	/**
 	 * A libGDX font for Shattered's text code, at the phone's scale (zoom x watch pixels).
