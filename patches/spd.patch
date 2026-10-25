@@ -992,6 +992,25 @@ index 50e626c..8d28992 100644
  	
  	private StatsTab stats;
  	private TalentsTab talents;
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndInfoTalent.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndInfoTalent.java
+index 00aba28..dce3829 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndInfoTalent.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndInfoTalent.java
+@@ -39,8 +39,14 @@ public class WndInfoTalent extends Window {
+ 	private static final int WIDTH_MIN = 120;
+ 	private static final int WIDTH_MAX = 220;
+ 
++	//pebxel: what it shows, for the watch's own talent window (pebxel.ui.WndWatchTalent)
++	public final Talent talent;
++	public final int points;
++	public final TalentButtonCallback buttonCallback;
++
+ 	public WndInfoTalent(Talent talent, int points, TalentButtonCallback buttonCallback){
+ 		super();
++		this.talent = talent; this.points = points; this.buttonCallback = buttonCallback;
+ 
+ 		int width = WIDTH_MIN;
+ 
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndScoreBreakdown.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndScoreBreakdown.java
 index de5af72..b077a97 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndScoreBreakdown.java

@@ -267,13 +267,27 @@ public class Controls {
 			// a window taller than the screen scrolls half a screen at a time towards the next button
 			int next = bs.isEmpty() ? -1 : b == UP ? (focus + bs.size() - 1) % bs.size() : (focus + 1) % bs.size();
 			if (w != null && tall(w)) {
+				// the framed button not reached yet (out of sight the way the press goes): that one first (Down from a
+				// long text's top went on to the second button, the first never framed)
+				if (next >= 0 && focus < bs.size()) {
+					Component cur = (Component) bs.get(focus).g;
+					float ct = w.camera.y + (cur.top() - w.camera.scroll.y) * w.camera.zoom;
+					int[] in = area(w);
+					if (!visible(w, cur) && (b == DOWN ? ct > in[0] : ct < in[0])) next = focus;
+				}
 				Component n = next < 0 ? null : (Component) bs.get(next).g;
 				boolean wraps = next >= 0 && (b == DOWN ? next < focus : next > focus);
-				if (n == null || (!wraps && !visible(w, n))) {
+				// (a lone button in sight scrolls too: Up read nothing back above the only button once it was in view)
+				if (n == null || (!wraps && (!visible(w, n) || next == focus))) {
 					scroll(w, (b == DOWN ? -1 : 1) * (viewBottom(w) - viewTop(w)) / 2);
 					if (n == null || !visible(w, n)) return;   // keep reading; the button comes into view later
 				}
-				if (wraps) scroll(w, b == DOWN ? 100000 : -100000);
+				if (wraps) {
+					scroll(w, b == DOWN ? 100000 : -100000);
+					// round to the other end: a button there only a little out of sight shown whole (the game slot's
+					// Continue, cut by the frame's foot once Down came round to it)
+					if (!visible(w, n) && reach(w, n) <= (viewBottom(w) - viewTop(w)) / 4f) keepInView(w, n);
+				}
 			}
 			if (next >= 0) focus = next;
 			return;
@@ -341,6 +355,13 @@ public class Controls {
 	/** (tests) The yellow box round the framed button: its group, and its x, y, w, h there. */
 	Object[] highlight() { return frame.box(); }
 
+	/** (tests) The button Select would press in the top window. */
+	Component focused() {
+		Window w = Ui.topWindow(); if (w == null) return null;
+		if (w instanceof pebxel.ui.Navigable) return ((pebxel.ui.Navigable) w).focused();
+		List<Ui.Part> bs = buttons(w); return bs.isEmpty() || focusOwner != w ? null : (Component) bs.get(Math.max(0, Math.min(bs.size() - 1, focus))).g;
+	}
+
 	/** Pebble PD's red exit tag. */
 	static class CloseTag extends com.shatteredpixel.shatteredpixeldungeon.ui.Button {
 		private final Window w;
@@ -374,17 +395,17 @@ public class Controls {
 
 	/** Is the component fully on screen (window camera units -> phone pixels; the camera starts at the frame's edge,
 	 *  above the content's 0: left out, a button at a tall window's foot counted as shown while cut off)? */
-	private static boolean visible(Window w, Component c) {
+	static boolean visible(Window w, Component c) {
 		float top = w.camera.y + (c.top() - w.camera.scroll.y) * w.camera.zoom, bottom = w.camera.y + (c.bottom() - w.camera.scroll.y) * w.camera.zoom;
 		int[] in = area(w);
-		return top >= in[0] && bottom <= in[1];
+		return top >= in[0] - 2 && bottom <= in[1] + 2;   // (a watch pixel either way: a round screen's last button, a phone pixel into the frame's foot at the scroll's end, was never framed)
 	}
 
 	/** Where a window's buttons can be seen whole (phone px: top, bottom): a tall one's between its frame's held ends. */
 	static int[] area(Window w) { return tall(w) ? pebxel.ui.Caps.inner(w) : new int[]{viewTop(w), viewBottom(w)}; }
 
 	/** How far (phone px) a tall window would have to scroll to show the component whole. */
-	private static float reach(Window w, Component c) {
+	static float reach(Window w, Component c) {
 		float top = w.camera.y + (c.top() - w.camera.scroll.y) * w.camera.zoom, bottom = w.camera.y + (c.bottom() - w.camera.scroll.y) * w.camera.zoom;
 		int[] in = area(w);
 		return Math.max(0, Math.max(bottom - in[1], in[0] - top));
@@ -410,7 +431,7 @@ public class Controls {
 	}
 
 	/** Keep a tall window inside its ends and its framed button on screen. */
-	private static void keepInView(Window w, Component c) {
+	static void keepInView(Window w, Component c) {
 		if (!tall(w)) return;
 		scroll(w, 0);
 		if (c != null && !visible(w, c)) {
@@ -1052,6 +1073,9 @@ public class Controls {
 			else if (w == null && Dungeon.hero != null && Dungeon.hero.ready) pick = null;
 		}
 		Group menu = w != null ? w : !(Game.scene() instanceof GameScene) ? Game.scene() : null;
+		// (a window a tap opened starts at its top too: one left where Shattered put it, centred, showed the middle of
+		// a long talent with neither its name nor its Upgrade button)
+		if (touching && menu != null && focusOwner != menu) { focusOwner = menu; focus = 0; if (w != null && tall(w)) scroll(w, 100000); }
 		if (touching) { frame.hide(); if (menu != null) { marker.hide(); return; } }
 		else if (menu != null) {
 			if (w != null && decided) windowSince = true;

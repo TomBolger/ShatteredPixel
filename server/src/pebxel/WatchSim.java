@@ -874,14 +874,17 @@ public final class WatchSim {
 	}
 
 	private final HashMap<Integer, BufferedImage> fontPics = new HashMap<>();
+	private boolean outline;
 
 	/** Text the way the watch draws it: Pebble's Gothic glyphs (captured from the watch), capitals at y. */
 	private void text(float x, float y, byte[] s) {
 		int font = s[2] & 127, len = s[10] & 255;
+		// only a line whole inside its camera's height, as the watch draws (draw.c BODY: capitals' top to under the baseline)
+		if (!outline && (Math.round(y) + 1 < clipY0 || Math.round(y) + WatchFonts.base(font) - WatchFonts.capTop(font) + 2 > clipY1 + 1)) return;
 		if ((s[2] & 128) != 0) {
 			// outlined: black copies around it first (as the watch does)
 			byte[] k = s.clone(); k[2] = (byte) font; for (int i = 3; i < 9; i++) k[i] = 0;
-			text(x - 1, y, k); text(x + 1, y, k); text(x, y - 1, k); text(x, y + 1, k);
+			outline = true; text(x - 1, y, k); text(x + 1, y, k); text(x, y - 1, k); text(x, y + 1, k); outline = false;
 		}
 		String str = new String(s, 11, len, StandardCharsets.UTF_8).replace("_", "");
 		BufferedImage pic = fontPics.computeIfAbsent(font, f -> {

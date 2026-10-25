@@ -293,12 +293,17 @@ static void fb_give(void) { if (s_bmp) graphics_release_frame_buffer(s_ctx, s_bm
 // the phone picks the font (server WatchFonts) and lays the text out with its exact letter widths
 static const char *FONTS[] = {FONT_KEY_GOTHIC_09, FONT_KEY_GOTHIC_14, FONT_KEY_GOTHIC_14_BOLD, FONT_KEY_GOTHIC_18, FONT_KEY_GOTHIC_18_BOLD, FONT_KEY_GOTHIC_24, FONT_KEY_GOTHIC_24_BOLD};
 static const int8_t CAP_TOP[] = {3, 5, 5, 7, 7, 10, 10};   // pixels above the capitals in each font
+static const int8_t BODY[] = {7, 10, 10, 12, 12, 15, 15};   // capitals' top to just under the baseline
+static int fi0(Obj *o) { return (o->w & 0x7F) < 7 ? (o->w & 0x7F) : 1; }
 
 static void draw_text(Obj *o) {
   const char *s = o->ext; if (!s || !*s) return;
   int alpha = obj_dyn(o, 2, s_now);
   if (alpha < 64) return;
   int32_t x = scx(obj_dyn(o, 0, s_now)) >> 3, y = scy(obj_dyn(o, 1, s_now)) >> 3;
+  // only a line whole inside its camera's height (Pebble's text isn't cut to it: a tall window's lines, cut to the space
+  // between its frame's ends, were drawn over the frame and under it)
+  if (y + 1 < s_cy0 || y + BODY[fi0(o)] > s_cy1 + 1) return;
   // SPD marks highlighted words with _underscores_; draw the text without them
   char buf[64]; int n = 0;
   for (const char *c = s; *c && n < 63; c++) if (*c != '_') buf[n++] = *c;
