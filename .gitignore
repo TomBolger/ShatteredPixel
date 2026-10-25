@@ -6,3 +6,4 @@ dist/
 watch/.lock-waf*
 lib
 __pycache__/
+sim/out/
