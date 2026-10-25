@@ -35,7 +35,7 @@ final class AsBosses {
 	// =============================================================================================================
 	// the cells to keep off (worked out once a turn)
 	// =============================================================================================================
-	static boolean[] dz = new boolean[0]; static boolean dzAny;
+	static boolean[] dz = new boolean[0], soon = new boolean[0]; static boolean dzAny;
 	private static Level dzL; private static float dzAt = -1; private static int dzPos = -1;
 	private static Object tenguState; private static Level stateL;
 
@@ -49,7 +49,7 @@ final class AsBosses {
 
 	static void compute(Level l) {
 		dzL = l; dzAt = Actor.now(); dzPos = Dungeon.hero.pos;
-		if (dz.length != l.length()) dz = new boolean[l.length()]; else Arrays.fill(dz, false);
+		if (dz.length != l.length()) { dz = new boolean[l.length()]; soon = new boolean[l.length()]; } else { Arrays.fill(dz, false); Arrays.fill(soon, false); }
 		dzAny = false;
 		boolean mine = l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.MiningLevel;
 		if (!Dungeon.bossLevel() && !mine) return;
@@ -99,6 +99,7 @@ final class AsBosses {
 						for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < l.length() && Math.abs(n % W - c % W) <= 1 && !l.solid[n] && d[n] > d[c] + 1) { d[n] = d[c] + 1; q.add(n); } } }
 				} else if (i instanceof Tengu.ShockerAbility.ShockerItem) {
 					mark(h.pos);   // (its own cell every turn; round it the sparks shown: Tengu.ShockerAbility.ShockerBlob)
+					for (int k : PathFinder.NEIGHBOURS8) { int n = h.pos + k; if (n >= 0 && n < soon.length) soon[n] = true; }   // (lit every other turn)
 				}
 			}
 		}
@@ -124,7 +125,7 @@ final class AsBosses {
 			if (obj == hp) obj = -1;
 			int best = -1, bk = INF;
 			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
-				int k = obj >= 0 && dist[c] <= 2 ? dist[c] + 4 * L.distance(c, obj) : 100 + dist[c] * 8;
+				int k = (dist[c] == 1 ? (obj >= 0 ? L.distance(c, obj) : 0) : 100 + dist[c] * 8) + (soon[c] ? 4 : 0);   // (out of a shocker's ring, not to its other half)   // (a step at a time: the game's own walk of two might cut through the lit ones)
 				if (k < bk) { bk = k; best = c; } }
 			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
 		}
