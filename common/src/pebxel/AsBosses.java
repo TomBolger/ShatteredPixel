@@ -206,6 +206,7 @@ final class AsBosses {
 		boltHP = h.HP; boltAt = Actor.now();
 		if (DBG) for (Mob m : mobs()) if (m instanceof YogFist) System.out.println("    YOGDBG " + m.getClass().getSimpleName() + " at " + m.pos + " seen " + enemy(m) + " d " + L.distance(m.pos, hp) + " seat " + L.distance(m.pos, yp) + " line " + (new Ballistica(m.pos, hp, Ballistica.MAGIC_BOLT).collisionPos == hp) + " bolt " + boltFrom);
 		boltFrom.keySet().removeIf(id -> { Actor a = Actor.findById(id); return !(a instanceof YogFist) || !((YogFist) a).isAlive(); });
+		if (last) { int st = stepTowards(yog.pos); if (st >= 0 && L.distance(st, yog.pos) < L.distance(hp, yog.pos)) return new Target(st, GO, "Yog: to him, past his summons"); }   // (his summons come every 3 turns: they never end)
 		// the nearest foe beside the hero that can be hurt (the demons first: weakest)
 		Mob o = weakestAdjacent(yog);
 		if (o != null) return new Target(o.pos, ENEMY, o instanceof YogFist ? "Yog: strike the fist" : "Yog: his summons first");
