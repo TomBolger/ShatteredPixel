@@ -46,6 +46,8 @@ public class Controls {
 	/** With the button: pressed while the watch showed the hero walking (main.c: a walk worked out ahead plays there
 	 *  after it is over here). It stops the walk, as in Pebble PD: nothing more (Back and long presses do theirs too). */
 	public static final int WALKING = 32;
+	/** Above the button's own bits: the watch's number for the press (u8), told back with its answer (Link.C_ANSWER). */
+	public static final int SEQ = 256;
 
 	// ---- what the frame is around ----
 	private final Frame frame = new Frame();
@@ -228,7 +230,7 @@ public class Controls {
 	private boolean touching;
 
 	public void button(int code) {
-		if (link != null) link.pressed();   // (the frames that answer it play as they come: Link.C_ANSWER)
+		if (link != null) link.pressed(code / SEQ & 255);   // (the frames that answer it play as they come: Link.C_ANSWER)
 		touching = false; fingerLast = false;
 		boolean held = (code & LONG) != 0;
 		int b = code & 15;
@@ -1214,6 +1216,10 @@ public class Controls {
 		Mob m = (Mob) ch;
 		if (m.alignment != Char.Alignment.ENEMY || m.heroShouldInteract() || m.invisible > 0 || h.fieldOfView == null || !h.fieldOfView[cell]
 				|| !lv.adjacent(h.pos, cell) || !h.canAttack(m) || h.isCharmedBy(m) || lv.map[cell] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.ALCHEMY) return -1;
+		// (an enemy in view he hasn't noticed yet (it came while he stood ready): his next action is dropped for it,
+		// Hero.act's checkVisibleMobs, so no blow)
+		java.util.List<Mob> seen = h.getVisibleEnemies();
+		for (Mob o : lv.mobs) if (o.alignment == Char.Alignment.ENEMY && o.pos >= 0 && h.fieldOfView[o.pos] && !seen.contains(o)) return -1;
 		int w = lv.width(), dx = cell % w - h.pos % w, dy = cell / w - h.pos / w;
 		return (dx + 1) + 3 * (dy + 1);
 	}

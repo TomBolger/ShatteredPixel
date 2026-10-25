@@ -41,6 +41,11 @@ static int32_t iabs(int32_t v) { return v < 0 ? -v : v; }
 static void walk_start(Obj *h, int k, const uint8_t *dir, uint32_t now);
 static bool swing_start(Obj *h, int blow, uint32_t now);
 static bool s_atk;               // the hero's swing shown (swing_start)
+static bool s_alate;             // given up on: the phone's swing, if it comes after all, is shown standing
+static bool s_aswung;            // a swing shown at the press just made: its number next (predict_sent)
+static int s_aseq;               // the press's number
+static bool s_aans, s_ain; static uint32_t s_aa0;   // the phone's answer to it: heard (from that frame), playing
+static uint32_t s_hat;           // the frame just played: its pictures' time
 void predict_reset(void) { s_plan.on = false; s_box = s_walk = s_atk = false; s_eid = NONE; }
 bool predict_active(void) { return s_box || s_walk || s_atk || s_eid != NONE; }
 
@@ -95,7 +100,12 @@ static int32_t s_plag;           // how far behind the phone its frames play now
 static uint32_t s_heard;         // the newest of the phone's frames played: when it was due here (its time on the phone,
                                  // in the watch's: a backlog played at once after a radio hold-up is still from then)
 static uint32_t s_heard_now;     // when the phone's last frame was played (watch time)
-void predict_heard(uint32_t due, uint32_t now) { s_heard = due; s_heard_now = now; }
+static void swing_tick(uint32_t now);
+void predict_heard(uint32_t due, uint32_t now, uint32_t stamp, uint32_t at) {
+  s_heard = due; s_heard_now = now; s_hat = at;
+  if (s_aans && (int32_t)(stamp - s_aa0) >= 0) s_ain = true;
+  if (s_atk) swing_tick(now);   // (frame by frame: what each one told)
+}
 void predict_lag(int32_t ms) { s_plag = ms < 0 ? 0 : ms; }
 static int32_t raw_prog(int32_t rx, int32_t ry);
 static int32_t s_endp = -1;      // the phone said its hero is ready again here (C_READY): the walk ends here
@@ -171,6 +181,8 @@ static void walk_at(uint32_t now, int32_t *x, int32_t *y) { prog_at(shown_prog(n
 bool predict_button(int code, uint32_t now) {
   bool down = (code & 15) == B_DOWN, select = code == B_SELECT;
   if (s_walk) s_wstop = true;
+  if (code & 32) return false;   // (main.c's B_WALKING: the phone takes it as the stop of the walk shown, Controls.button)
+  if (s_alate) s_atk = false;   // (a late swing of the phone's not looked for any more)
   if (!down && !select) { s_plan.on = false; return false; }
   if (!s_plan.on || s_walk || !s_plan.n) { s_plan.on = false; return false; }
   if (down) {
@@ -195,20 +207,23 @@ bool predict_button(int code, uint32_t now) {
 
 // ---- a blow: the hero's swing from the press (his attack animation, as CharSprite.attack: turned to the enemy) ----
 // The phone's frames bring the rest. Its own swing, a radio round trip later, isn't shown again. The swing shown stops
-// at its blow (the frame before the last: the weapon out) until the phone's swing gets there too (at most HOLD_MS
-// more), so its outcome, which the phone works out as its swing ends, follows the blow as in Shattered rather than
-// a third of a second after the hero stood back; then the last frame (he stands as before) until the phone's swing is
-// over, and the phone's frames have him. If the phone does something else (the enemy had gone: he walks there), the
-// swing stops at once and the phone's frames show that.
+// at its blow (the frame before the last: the weapon out) until the phone's swing has begun (at most HOLD_MS more):
+// the phone works out the blow's outcome as its swing starts (CharSprite.pebxelStrikeAtStart), so the enemy's flash
+// and the damage number come with it, and the swing here goes on as they do; then the last frame (he stands as before)
+// until the phone's swing is over, and the phone's frames have him. If the phone does something else (the enemy had
+// gone: he walks there), the swing stops at once and the phone's frames show that. If the phone's swing never came in
+// time, the swing here is over, and one that comes later (before the next press) isn't played again: he stands.
 #define HOLD_MS GAME_MS(250)
-static uint16_t s_aid, s_aanim, s_atx0; static uint32_t s_at, s_aat0; static int32_t s_ax0, s_ay0; static bool s_aflip, s_aseen;
-static bool s_arel;              // the blow's frame let go: the phone's swing got past it, or HOLD_MS went by
+static uint16_t s_aid, s_aanim; static uint32_t s_at; static int32_t s_ax0, s_ay0; static bool s_aflip, s_aseen;
+static bool s_arel;              // the blow's frame let go: the phone's swing began, or HOLD_MS went by
+// where a sprite comes to rest: its motion's end (a step still sliding on here isn't something else done)
+static int32_t rest(const Obj *o, int i) { return obj_dyn_raw(o, i, o->until ? o->at + o->until : o->at); }
 static bool swing_start(Obj *h, int blow, uint32_t now) {
   Anim *a = scene_anim(s_plan.atk);
   if (!a || !a->n || !(h->flags & F_ANIM)) return false;
   int d = blow & 15, dx = d % 3 - 1;
-  s_atk = true; s_aid = s_plan.hero; s_aanim = s_plan.atk; s_at = now; s_aseen = false; s_arel = false;
-  s_atx0 = h->tx; s_aat0 = h->at; s_ax0 = obj_dyn_raw(h, 0, now); s_ay0 = obj_dyn_raw(h, 1, now);
+  s_atk = s_aswung = true; s_aseq = -1; s_aid = s_plan.hero; s_aanim = s_plan.atk; s_at = now; s_aseen = s_arel = s_alate = s_aans = s_ain = false;
+  s_ax0 = rest(h, 0); s_ay0 = rest(h, 1);
   s_aflip = dx < 0 ? true : dx > 0 ? false : (h->flags & F_FLIPH) != 0;   // (CharSprite.turnTo: by the columns)
   APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing");
 #ifdef TRACE_FIGHT   // (fight timing on the emulator)
@@ -216,14 +231,17 @@ static bool swing_start(Obj *h, int blow, uint32_t now) {
 #endif
   return true;
 }
+void predict_sent(int seq) { if (s_aswung) { s_aswung = false; s_aseq = seq; } }
+// the answer to the press swung at, by its number (Link.pressed)
+void predict_answer(uint32_t a0, int seq) { if (!s_aans && seq == s_aseq) { s_aans = true; s_aa0 = a0; } }
 bool predict_anim(const Obj *o, uint32_t now, int *anim, int *frame, bool *fliph) {
-  if (!s_atk || o != obj(s_aid)) return false;
+  if (!s_atk || o != obj(s_aid) || (s_alate && !s_aseen)) return false;
   Anim *a = scene_anim(s_aanim);
   if (!a || !a->n) return false;
   int fr = a->delay_ms ? (int)((now - s_at) / a->delay_ms) : 0, last = a->n - 1;
   if (!s_arel && a->delay_ms && now - s_at >= (uint32_t)a->delay_ms * last + HOLD_MS) s_arel = true;
   if (!s_arel && last > 1 && fr > last - 1) fr = last - 1;
-  *anim = s_aanim; *frame = fr < last ? fr : last; *fliph = s_aflip;
+  *anim = s_aanim; *frame = fr < last && !s_alate ? fr : last; *fliph = s_aflip;
   return true;
 }
 static void swing_tick(uint32_t now) {
@@ -231,20 +249,25 @@ static void swing_tick(uint32_t now) {
   const char *why = NULL;
   if (!h) why = "gone";
   else {
-    bool phone = h->tx == s_aanim && (h->flags & F_ANIM) && (h->tx != s_atx0 || h->at != s_aat0);   // the phone's own swing plays
+    // the phone's own swing plays: told in a frame of the phone's answer to the press (an earlier swing, still coming
+    // or told again, isn't it)
+    bool phone = h->tx == s_aanim && (h->flags & F_ANIM) && (s_aseen || (s_ain && h->at == s_hat));
     if (phone) {
       s_aseen = true;
-      // (where the phone's swing is: at its last frame, the blow shown here is let go)
+      // (where the phone's swing is: a frame on (its blow struck, the damage number with it), the blow here is let go)
       Anim *a = scene_anim(h->tx);
-      if (a && a->n && a->delay_ms) { uint32_t t = (uint32_t)h->timer * a->delay_ms / 256 + (now - h->at); if (h->frame + t / a->delay_ms >= (uint32_t)a->n - 1) s_arel = true; }
+      if (a && a->delay_ms && (uint32_t)h->frame * a->delay_ms + (uint32_t)h->timer * a->delay_ms / 256 + (now - h->at) >= a->delay_ms) s_arel = true;
     }
     else if (s_aseen) why = "over";   // (over there too: its frames from here)
-    else if (h->tx != s_atx0 || iabs(obj_dyn_raw(h, 0, now) - s_ax0) > 8 || iabs(obj_dyn_raw(h, 1, now) - s_ay0) > 8) why = "cut short";   // (it did something else)
+    // (it did something else: he walks. Not his animation changing: the phone's last swing, still playing at the
+    // press, ending isn't that)
+    else if (iabs(rest(h, 0) - s_ax0) > 8 || iabs(rest(h, 1) - s_ay0) > 8) why = "cut short";
     // never swung there: its frames from well after the press come without it (at the latest after WAIT_MS)
-    else if ((s_heard - s_at < 0x80000000u && s_heard - s_at > (uint32_t)s_plag + GAME_MS(400)) || now - s_at > WAIT_MS) why = "not confirmed";
+    else if (!s_alate && ((s_heard - s_at < 0x80000000u && s_heard - s_at > (uint32_t)s_plag + GAME_MS(400)) || now - s_at > WAIT_MS)) { s_alate = true; why = "not confirmed"; }
     if (!why && now - s_at > 2 * WAIT_MS) why = "too long";
   }
-  if (why) { s_atk = false; APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing %s, %d ms after the press", why, (int)(now - s_at)); }
+  // (not confirmed: still looked out for, late)
+  if (why) { s_atk = why[0] == 'n'; APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing %s, %d ms after the press", why, (int)(now - s_at)); }
 }
 
 // the hero sets off along the steps given, now

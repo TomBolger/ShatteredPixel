@@ -23,6 +23,9 @@ public class WatchGame extends ShatteredPixelDungeon {
 		com.watabou.noosa.Game.pebxelSpeed = 1f;
 		// but not walking: a step takes Pebble PD's 133 ms of real time (STEP), each one easy to follow, as Thomas approved
 		com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.setMoveInterval(STEP);
+		// a blow's outcome as its swing starts, not as it ends: on the watch it comes with the swing shown at the press
+		// (predict.c), not half a second after it (Thomas, 2026-10-25: "shouldn't affect gameplay at all")
+		com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikeAtStart = System.getenv("PEBXEL_STRIKE_AT_END") == null;
 		Sounds.install();
 		// the story on the loading screen in pages that fit
 		com.shatteredpixel.shatteredpixeldungeon.scenes.InterlevelScene.pebxelPages = pebxel.ui.StoryPages::split;

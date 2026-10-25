@@ -456,7 +456,8 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
       case C_TIME: p += 4; break;
       case C_LATEST: p += 4; break;
       case C_READY: p += 4; break;   // (read as the message arrived: main.c enqueue)
-      case C_AHEAD: case C_ANSWER: p += 8; break;   // (likewise)
+      case C_AHEAD: p += 8; break;   // (likewise)
+      case C_ANSWER: p += 9; break;
       case C_RESET: scene_reset(); break;
       case C_CAM: read_cam(now); break;
       case C_NEW: {

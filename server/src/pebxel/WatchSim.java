@@ -123,7 +123,7 @@ public final class WatchSim {
 			float lat = now - stamp(msg, 0) / 1000f;
 			int t5 = msg.length >= 10 && msg[5] == Link.C_READY ? 10 : 5;
 			if (msg.length >= t5 + 9 && msg[t5] == Link.C_AHEAD) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4), false); t5 += 9; }
-			if (msg.length >= t5 + 9 && msg[t5] == Link.C_ANSWER) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4), true); t5 += 9; }
+			if (msg.length >= t5 + 10 && msg[t5] == Link.C_ANSWER) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4), true); t5 += 10; }
 			float old = msg.length >= t5 + 5 && msg[t5] == Link.C_TIME ? now - stamp(msg, t5) / 1000f : lat;
 			if (!haveOff || lat < base) base = lat; else base += (lat - base) / 32;
 			float need = Math.max(0, Math.min(LATE_MAX, old - base));
@@ -202,7 +202,8 @@ public final class WatchSim {
 			switch (c) {
 				case Link.C_TIME: p += 4; break;
 				case Link.C_LATEST: p += 4; break;
-				case Link.C_AHEAD: case Link.C_ANSWER: p += 8; break;
+				case Link.C_AHEAD: p += 8; break;
+				case Link.C_ANSWER: p += 9; break;
 				case Link.C_RESET: a0 = p0 = -1; objs.clear(); head = Link.NONE; dyn.clear(); anims.clear(); Arrays.fill(cams, null); parts.clear(); Arrays.fill(recipes, null); fogTex = -1; break;
 				case Link.C_CAM: {
 					int id = u8(); Cam k = new Cam(); k.x = s16(); k.y = s16(); k.w = s16(); k.h = s16(); k.zoom = u16(); k.sx = s16(); k.sy = s16();

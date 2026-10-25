@@ -23,7 +23,7 @@ import java.util.List;
  *   server -> bridge: 'D' + one AppMessage worth of link commands
  *   bridge -> server: 'A' the watch took the last message, 'N' it didn't (refused, lost: Pacer sends it again),
  *                     'H' + u16 size: the watch (re)started,
- *                     'B' + u8 button code, 'T' + 12 bytes: a touch (see Touches)
+ *                     'B' + u8 button code (+ u8 the watch's number for the press), 'T' + 12 bytes: a touch (see Touches)
  */
 public class Server {
 	static WatchApp app;
@@ -186,7 +186,7 @@ public class Server {
 								}
 								System.out.println("watch says hello, messages up to " + size + " bytes");
 								pacer.hello(size); connected = true; break;
-							case 'B': synchronized (buttons) { buttons.add(f[1] & 255); } break;
+							case 'B': synchronized (buttons) { buttons.add((f[1] & 255) | (f.length > 2 ? (f[2] & 255) * Controls.SEQ : 0)); } break;
 							case 'T': touches.add(java.util.Arrays.copyOfRange(f, 1, f.length)); break;
 						}
 					}

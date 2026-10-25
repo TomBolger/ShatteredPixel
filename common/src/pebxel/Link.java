@@ -33,7 +33,7 @@ public final class Link {
 	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32;   // F_FOG: the fog of war (the watch draws it as Pebble PD does)
 	public static final int NONE = 0xFFFF;
 	/** The command format's version; the watch app sends its own in its hello. */
-	public static final int PROTOCOL = 15;   // 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
+	public static final int PROTOCOL = 16;   // 16: C_ANSWER names the press it answers (the watch's number for it, sent with a button too); 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
 
 	/** What to show on a watch whose app speaks another version of the commands. */
 	public static byte[] wrongVersion(int watch) {
@@ -1429,7 +1429,7 @@ public final class Link {
 		remember();
 		if (b.length == 0) return;
 		pendNewest = Math.round(now * 1000);
-		if (answerArmed) { answerArmed = false; answerFrom = pendNewest; answerTo = -1; }
+		if (answerArmed) { answerArmed = false; answerFrom = pendNewest; answerTo = -1; answerSeq = armedSeq; }
 		int base = pend.size();
 		for (int mk : lastMarks) pendMarks.add(base + mk);
 		pend.write(b, 0, b.length);
@@ -1553,10 +1553,11 @@ public final class Link {
 		int[] rd = Pacer.OLD ? null : ready; ready = null;
 		// C_AHEAD from, to (u32 ms; to 0xFFFFFFFF: not over yet): these frames are a walk worked out ahead (Ahead), after that
 		boolean wk = walkFrom >= 0 && !Pacer.OLD;
-		// C_ANSWER from, to (as C_AHEAD): these frames answer a press (the watch plays them as they come)
+		// C_ANSWER from, to (as C_AHEAD), the press's number (u8): these frames answer a press (the watch plays them as they
+		// come; a blow shown at the press knows the phone's swing for it by that, predict.c)
 		if (answerFrom >= 0 && answerTo < 0 && nowMs() - answerFrom >= ANSWER_MAX) answerTo = nowMs();
 		boolean an = answerFrom >= 0 && !wk && !Pacer.OLD;
-		int head = 5 + (rd != null ? 5 : 0) + (wk ? 9 : 0) + (an ? 9 : 0);
+		int head = 5 + (rd != null ? 5 : 0) + (wk ? 9 : 0) + (an ? 10 : 0);
 		// (running ahead: the frames due soon in a message of their own, ahead of the rest. In one with the walk's
 		// next second they came that much later, past their time: the hero stood a moment, then hurried on)
 		int soon = -1;
@@ -1571,7 +1572,7 @@ public final class Link {
 			if (out.isEmpty() && wk) {
 				b[at] = (byte) C_AHEAD; put32(b, at + 1, walkFrom); put32(b, at + 5, walkTo < 0 ? -1 : walkTo); at += 9;
 			}
-			if (out.isEmpty() && an) { b[at] = (byte) C_ANSWER; put32(b, at + 1, answerFrom); put32(b, at + 5, answerTo < 0 ? -1 : answerTo); at += 9; }
+			if (out.isEmpty() && an) { b[at] = (byte) C_ANSWER; put32(b, at + 1, answerFrom); put32(b, at + 5, answerTo < 0 ? -1 : answerTo); b[at + 9] = (byte) answerSeq; at += 10; }
 			System.arraycopy(pk, 0, b, at, pk.length);
 			out.add(b);
 		}
@@ -1588,11 +1589,12 @@ public final class Link {
 	// top of the radio's own time. The frames that answer a press (a blow's outcome, the enemy's answer) play as they
 	// come instead: from the first frame noted after the press until the hero is ready again (at most ANSWER_MAX).
 	// (Not a walk: that is C_AHEAD's)
-	private boolean answerArmed;
+	private boolean answerArmed; private int armedSeq, answerSeq;
 	private int answerFrom = -1, answerTo = -1;
 	static final int ANSWER_MAX = 2000;   // game ms
-	/** A press from the watch was just applied (Controls.button, a tap): the next frame noted answers it. */
-	public void pressed() { if (!Pacer.OLD && walkFrom < 0) answerArmed = true; }   // (a press on a walk stops it: C_AHEAD's)
+	/** A press from the watch was just applied (Controls.button, a tap; seq: the watch's number for it): the next frame
+	 *  noted answers it. */
+	public void pressed(int seq) { if (!Pacer.OLD && walkFrom < 0) { answerArmed = true; armedSeq = seq; } }   // (a press on a walk stops it: C_AHEAD's)
 
 	// ---- walks worked out ahead (Ahead) ----
 	/** How far the game clock is ahead of real time (ms): C_LATEST gives the clock as it would be without that. */

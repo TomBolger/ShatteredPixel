@@ -202,6 +202,7 @@ public class Gallery {
 			if (!Dungeon.level.passable[c] || com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) != null) continue;
 			Mob m = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll();
 			m.pos = c; m.HP = m.HT = 400; GameScene.add(m); m.state = m.HUNTING; m.aggro(Dungeon.hero);
+			Dungeon.observe(); Dungeon.hero.checkVisibleMobs();   // (seen, as one that came on its own turn: else the next press is dropped for it)
 			return;
 		}
 	}

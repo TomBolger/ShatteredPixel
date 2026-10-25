@@ -1,4 +1,5 @@
 // Shattered PD on the watch: the game runs on the phone; this app shows its screen and sends the buttons.
+#pragma GCC optimize ("Os")   // (the app's code, data and bss must stay under 64 KB, as scene.c: nothing here is hot, draw.c is)
 #include <pebble.h>
 #include "scene.h"
 #include "art.h"
@@ -7,7 +8,7 @@
 #include "predict.h"
 
 enum { KEY_DATA = 1, KEY_HELLO = 2, KEY_BUTTON = 3, KEY_STATS = 4, KEY_VERSION = 5, KEY_TOUCH = 6, KEY_SCREEN = 7 };
-#define PROTOCOL 15  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
+#define PROTOCOL 16  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
 enum { B_UP = 1, B_DOWN, B_SELECT, B_BACK, B_LONG = 16, B_WALKING = 32 };   // B_WALKING: pressed while a walk shows (Controls.WALKING)
 
 static Window *s_win;
@@ -272,7 +273,7 @@ static void pump(void *data) {
     }
     int used = scene_apply(m->data + m->pos, m->len - m->pos, s_cur_at);
     m->pos = used > 0 ? m->pos + used : m->len;
-    predict_heard(s_cur_due, now);
+    predict_heard(s_cur_due, now, s_cur_stamp, s_cur_at);
     note_free();
     if (g_dirty) { g_dirty = false; kick(); }
     if (m->pos >= m->len) { s_q = m->next; if (!s_q) s_qtail = NULL; s_qbytes -= m->len; free(m); }
@@ -291,7 +292,7 @@ static void enqueue(const uint8_t *data, int len, uint32_t now) {
     int t5 = 5;
     if (len >= 10 && data[5] == C_READY) { predict_ready((int16_t)(data[6] | data[7] << 8), (int16_t)(data[8] | data[9] << 8)); t5 = 10; }
     if (len >= t5 + 9 && data[t5] == C_AHEAD) { walk_ahead = t5; t5 += 9; }
-    int answer = 0; if (len >= t5 + 9 && data[t5] == C_ANSWER) { answer = t5; t5 += 9; }
+    int answer = 0; if (len >= t5 + 10 && data[t5] == C_ANSWER) { answer = t5; t5 += 10; }
     int32_t old = len >= t5 + 5 && data[t5] == C_TIME ? (int32_t)(now - stamp_at(data + t5)) : lat;
     // the quickest lately: down at once, up slowly (the phone's clock may fall behind, when it stalls)
     if (!s_have_off || lat < s_base) s_base = lat; else s_base += (lat - s_base) / 32;
@@ -303,7 +304,7 @@ static void enqueue(const uint8_t *data, int len, uint32_t now) {
     s_have_off = true;
     off_move(now);
     if (walk_ahead) walk_heard(stamp_at(data + walk_ahead), stamp_at(data + walk_ahead + 4), now);
-    if (answer) answer_heard(stamp_at(data + answer), stamp_at(data + answer + 4), now);
+    if (answer) { answer_heard(stamp_at(data + answer), stamp_at(data + answer + 4), now); predict_answer(stamp_at(data + answer), data[answer + 9]); }
   }
   Msg *m = malloc(sizeof(Msg) + len);
   // short of memory: the pictures' cache gives some back (it can decode them again; a message can't be had again)
@@ -330,7 +331,7 @@ static void dropped(AppMessageResult r, void *ctx) { APP_LOG(APP_LOG_LEVEL_WARNI
 static bool fresh_start(const uint8_t *d, int len) {
   int k = len >= 10 && d[0] == C_LATEST && d[5] == C_READY ? 5 : 0;   // (look past a C_READY, a C_AHEAD)
   if (len >= 14 + k && d[0] == C_LATEST && d[5 + k] == C_AHEAD) k += 9;
-  if (len >= 14 + k && d[0] == C_LATEST && d[5 + k] == C_ANSWER) k += 9;
+  if (len >= 15 + k && d[0] == C_LATEST && d[5 + k] == C_ANSWER) k += 10;
   return (len >= 1 && d[0] == C_RESET) || (len >= 11 + k && d[0] == C_LATEST && d[5 + k] == C_TIME && d[10 + k] == C_RESET);
 }
 
@@ -399,7 +400,8 @@ static void tq_send(void) {
 #endif
   DictionaryIterator *it;
   if (app_message_outbox_begin(&it) != APP_MSG_OK) { tq_later(50); return; }
-  if (s_tq[0].b[0] == T_BUTTON) dict_write_int32(it, KEY_BUTTON, s_tq[0].b[4]);   // the phone library reads signed numbers most easily
+  // (a button with its number above it, Controls.SEQ: the phone tells it back with the answer, C_ANSWER)
+  if (s_tq[0].b[0] == T_BUTTON) dict_write_int32(it, KEY_BUTTON, s_tq[0].b[4] | s_tq[0].b[1] << 8);   // the phone library reads signed numbers most easily
   else dict_write_data(it, KEY_TOUCH, s_tq[0].b, 12);
   if (app_message_outbox_send() == APP_MSG_OK) { s_sending = true; s_sent_at = now_ms(); }
   else tq_later(50);
@@ -429,14 +431,14 @@ static int s_tcam = -1;
 static uint32_t s_tstamp;
 static void put16(uint8_t *p, int v) { p[0] = v; p[1] = v >> 8; }
 
-static void out_msg(int kind, int x, int y, bool lng) {
+static int out_msg(int kind, int x, int y, bool lng) {   // (its number; -1: dropped)
   TMsg *last = s_ntq > (s_sending ? 1 : 0) ? &s_tq[s_ntq - 1] : NULL;   // (the one out can't change any more)
   if (last && last->b[0] == kind && (kind == T_PAN || kind == T_MOVE)) {   // still waiting: fold into it
     if (kind == T_PAN) { x += (int16_t)(last->b[4] | last->b[5] << 8); y += (int16_t)(last->b[6] | last->b[7] << 8); }
   } else if (s_ntq == TQ && last && last->b[0] == T_MOVE && kind == T_UP) {
     // full (the radio is held up): the lift-off takes the place of the move waiting before it (it ends there anyway)
   } else {
-    if (s_ntq == TQ) { APP_LOG(APP_LOG_LEVEL_WARNING, "send queue full: %d dropped", kind); return; }
+    if (s_ntq == TQ) { APP_LOG(APP_LOG_LEVEL_WARNING, "send queue full: %d dropped", kind); return -1; }
     last = &s_tq[s_ntq++]; memset(last->b, 0, 12); last->b[1] = ++s_seq;
   }
   uint8_t *b = last->b;
@@ -448,13 +450,21 @@ static void out_msg(int kind, int x, int y, bool lng) {
     else if (s_npd < 8) s_pd[s_npd++] = (PanDelta){ b[1], x, y };
   }
   tq_send();
+  return b[1];
 }
 
 // Is the hero shown on a walk the phone has finished already? (one it worked out ahead, C_AHEAD: its end is known and its
 // last frames are still to play here). A press then stops him all the same (Controls.button), rather than being taken
 // as a new one once the phone waits for real time to catch up. (While the phone's hero is still walking, it stops him)
 static bool walk_shown(void) { return s_q && s_wk.on && !s_wk.answer && s_wk.a1 != NO_END && (int32_t)(s_cur_stamp - s_wk.a0) >= 0 && (int32_t)(s_wk.a1 - s_cur_stamp) > 0; }   // (s_q: its frames wait to play)
-static void send_button(int code) { out_msg(T_BUTTON, code | (walk_shown() ? B_WALKING : 0), 0, false); }
+// a press: shown ahead (predict.c: nothing for one the phone takes as a walk's stop, B_WALKING), then sent (its number
+// to predict.c: the phone tells it back with its answer)
+static void press(int code) {
+  code |= walk_shown() ? B_WALKING : 0;
+  bool k = predict_button(code, s_input_at);
+  predict_sent(out_msg(T_BUTTON, code, 0, false));
+  if (k) kick();   // shown at once; the phone's frames confirm it later
+}
 
 // the map follows the finger at once; the phone's own scroll takes over when it has applied the drag
 static void pan_preview(void) {
@@ -495,15 +505,13 @@ static void button(ClickRecognizerRef r, void *ctx) {
 #endif
   lite();
   s_input_at = now_ms();
-  send_button((int)ctx);
-  if (predict_button((int)ctx, s_input_at)) kick();   // shown at once; the phone's frames confirm it later
+  press((int)ctx);
 }
 
 static void button_long(ClickRecognizerRef r, void *ctx) {
   lite();
   s_input_at = now_ms();
-  send_button((int)ctx | B_LONG);
-  if (predict_button((int)ctx | B_LONG, s_input_at)) kick();
+  press((int)ctx | B_LONG);
 }
 
 // ---- touch (as in Pebble PD: under 40 px of movement is a tap, held 500 ms a long one; 24 px drags the map) ----
@@ -565,10 +573,11 @@ static void touch(const TouchEvent *e, void *ctx) {
         bool lone = !s_down;   // (a quick tap can come as a lone liftoff)
         if (lone) touch_start(e->x, e->y, now);
         int tx = lone ? e->x : s_tx, ty = lone ? e->y : s_ty;
-        out_msg(T_TAP, tx, ty, !lone && s_long);
         // a quick tap on the map: the walk it sets off on shown at once, as Select's (predict.c). (The map dragged and
         // not yet answered: what the watch shows is not what the phone will read)
-        if (!(lone ? false : s_long) && s_map && s_npd == 0 && predict_tap(tx, ty, now)) kick();
+        bool lg = !lone && s_long, k = !lg && s_map && s_npd == 0 && predict_tap(tx, ty, now);
+        predict_sent(out_msg(T_TAP, tx, ty, lg));
+        if (k) kick();
       }
       predict_touch();
       s_down = s_drag = false;

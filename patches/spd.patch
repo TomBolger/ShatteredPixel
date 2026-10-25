@@ -820,7 +820,7 @@ index 86c9dfb..f7b4602 100644
  		maxZoom = defaultZoom * 2;
  
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/CharSprite.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/CharSprite.java
-index a1f73f2..feec05a 100644
+index a1f73f2..eb56f93 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/CharSprite.java
 +++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/CharSprite.java
 @@ -21,6 +21,7 @@
@@ -831,7 +831,41 @@ index a1f73f2..feec05a 100644
  import com.shatteredpixel.shatteredpixeldungeon.Assets;
  import com.shatteredpixel.shatteredpixeldungeon.Dungeon;
  import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
-@@ -833,7 +834,7 @@ public class CharSprite extends MovieClip implements Tweener.Listener, MovieClip
+@@ -260,7 +261,24 @@ public class CharSprite extends MovieClip implements Tweener.Listener, MovieClip
+ 	public synchronized void attack( int cell, Callback callback ) {
+ 		animCallback = callback;
+ 		turnTo( ch.pos, cell );
+-		play( attack );
++		//Pebxel: struck as the swing starts (pebxelStrikeAtStart): a new swing even with the last one still going
++		pebxelStruck = false;
++		pebxelStrikeDue = pebxelStrikeAtStart && callback == null;
++		play( attack, pebxelStrikeDue );
++	}
++
++	//Pebxel: the watch app (pebxel.WatchGame): a blow's outcome (onAttackComplete) worked out on the frame its swing
++	// starts rather than when the swing ends, so that it reaches the watch with the watch's own swing. The same calls,
++	// in the same order, and the same game time; only sooner in real time. Off: as Shattered.
++	public static boolean pebxelStrikeAtStart;
++	public static volatile int pebxelStrikes;   //(blows struck so far: the link waits a frame for the damage number)
++	private boolean pebxelStrikeDue, pebxelStruck;
++	private synchronized void pebxelStrike() {
++		if (!pebxelStrikeDue) return;
++		pebxelStrikeDue = false;
++		pebxelStruck = true;
++		pebxelStrikes++;
++		ch.onAttackComplete();
+ 	}
+ 	
+ 	public void operate( int cell ) {
+@@ -573,6 +591,7 @@ public class CharSprite extends MovieClip implements Tweener.Listener, MovieClip
+ 	
+ 	@Override
+ 	public void update() {
++		if (pebxelStrikeDue && ch != null) pebxelStrike();
+ 		if (paused && ch != null && curAnim != null && !curAnim.looped && !finished){
+ 			listener.onComplete(curAnim);
+ 			finished = true;
+@@ -833,7 +852,7 @@ public class CharSprite extends MovieClip implements Tweener.Listener, MovieClip
  				if (ch != null) ch.onMotionComplete();
  
  				GameScene.sortMobSprites();
@@ -840,6 +874,16 @@ index a1f73f2..feec05a 100644
  			}
  
  		}
+@@ -851,7 +870,8 @@ public class CharSprite extends MovieClip implements Tweener.Listener, MovieClip
+ 			if (anim == attack) {
+ 				
+ 				idle();
+-				ch.onAttackComplete();
++				if (pebxelStruck) pebxelStruck = false;   //Pebxel: (struck as it started)
++				else ch.onAttackComplete();
+ 				
+ 			} else if (anim == operate) {
+ 				
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/TenguSprite.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/TenguSprite.java
 index 64f3a6b..81d022c 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/sprites/TenguSprite.java

@@ -29,7 +29,10 @@ import java.util.*;
  *   and camera each frame (P real-ms game-ms x y scrollx scrolly, x8), for replaying through the watch's own C code
  *   (tools/feel: the motion as the watch shows it, step by step)
  * Scenarios with the watch's own buttons (the watch shows them ahead of the phone, predict.c): walks (long and short,
- * over a known floor), wfight (Select at the nearest enemy; FIGHTS=n blows, default 12).
+ * over a known floor), wfight (Select at the nearest enemy; FIGHTS=n blows, default 12; PACE=s between blows, default 1;
+ * BLOWS=1: each blow, the phone's side and whether the hero swung (tools/feel/blows.py); NEWFOE=1: the gnolls put in
+ * unseen by the hero, so his next action is dropped (Hero.checkVisibleMobs): the watch mustn't swing then; BLOWT=1: the
+ * phone's swing and the radio's sends a blow).
  */
 public class RadioTest {
 	static double env(String k, double d) { String v = System.getenv(k); return v == null ? d : Double.parseDouble(v); }
@@ -58,6 +61,7 @@ public class RadioTest {
 	static long nacks, drops;
 
 	static void radioSend(byte[] m) {
+		if (blowWatch && System.getenv("BLOWT") != null) System.out.printf("    sent %d B at %d%n", m.length, ms(t));
 		double transit = half() + m.length / RATE;
 		if (m.length + 8 > INBOX) { events.add(new Ev(t + 2 * half(), ANSWER_FAIL, m)); nacks++; return; }
 		double r = dice.nextDouble();
@@ -103,7 +107,7 @@ public class RadioTest {
 				c == null ? 0 : Math.round(c.scroll.x * 8), c == null ? 0 : Math.round(c.scroll.y * 8));
 	}
 	/** A press of the watch's own (the watch replay shows it ahead of the phone, as predict.c does). */
-	static void button(String what, int code) { trace("B %d %d", ms(t), code); press(what, () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); controls.button(code); }); }
+	static void button(String what, int code) { int seq = ++tseq & 255; trace("B %d %d", ms(t), code); press(what, () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); controls.button(code | seq * Controls.SEQ); }); }
 	static void scene(String name) { trace("S %d %s", ms(t), name); }
 
 	static void seen() {
@@ -128,6 +132,11 @@ public class RadioTest {
 		pendingActions.clear();
 		touches.frame(link, controls, Game.elapsed);
 		app.frame(); controls.frame();
+		if (blowWatch && blowAt > 0 && Dungeon.hero != null && Dungeon.hero.sprite != null && "attack".equals(animOf(Dungeon.hero.sprite))) {
+			if (!blowSwung && System.getenv("BLOWT") != null) System.out.printf("    swing on the phone at %d (press %d), time %s%n", ms(t), blowAt, Actor.now());
+			blowSwung = true;
+		}
+		if (blowWatch && System.getenv("BLOWT") != null && Actor.now() != blowNow) { blowNow = Actor.now(); System.out.printf("    game time %s at %d%n", blowNow, ms(t)); }
 		// (FRAME_SLEEP=ms: real time between frames, as on the phone, where the game's actor thread runs between them)
 		if (FRAME_SLEEP > 0) try { Thread.sleep(FRAME_SLEEP); } catch (InterruptedException e) { }
 		gclock += Game.elapsed;
@@ -189,7 +198,7 @@ public class RadioTest {
 			}
 			int to = i % 2 == 0 ? away : home;
 			// (traced as a press of "5": the watch replay counts it as a walk, one it can't show ahead, as a tap)
-			trace("B %d %d", ms(t), 5);
+			trace("B %d %d", ms(t), 5); ++tseq;   // (main.c numbers it)
 			press("walk", () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); if (Ui.topWindow() != null) Ui.topWindow().hide(); if (Dungeon.hero.handle(to)) Dungeon.hero.next(); });
 			run(1.6);
 		}
@@ -467,8 +476,11 @@ public class RadioTest {
 				mobs.add(m);
 			}
 			if (mobs.isEmpty()) break;
+			// (the hero sees them, as when they come into view on the monsters' turn, before his own: else his next action
+			// is dropped for the new foe (Hero.checkVisibleMobs: interrupt). NEWFOE=1: not, the watch mustn't swing then)
+			if (System.getenv("NEWFOE") == null) { Dungeon.observe(); Dungeon.hero.checkVisibleMobs(); }
 			staleTargets();   // (the enemies first, as when they come into view)
-			run(0.4);
+			run(env("PACE", 1.0) < 1.0 ? 0.05 : 0.4);
 			if (System.getenv("PLANS") != null) { System.out.println("  plan: " + (sim.plans.isEmpty() ? "-" : sim.plans.get(sim.plans.size() - 1)) + " plan A " + (targetsNow().isEmpty() ? "-" : targetsNow().get(0)) + " hero " + Dungeon.hero.pos); }
 			// (DODGE=1: every other blow, the enemy steps away as the press is made: the watch swung at the plan it had)
 			if (System.getenv("DODGE") != null && i % 2 == 1 && !targetsNow().isEmpty()) {
@@ -488,13 +500,52 @@ public class RadioTest {
 				int cam = link.camIdOf(c), st = link.nowMs(), seq = ++tseq;
 				trace("T %d %d %d", ms(t), x, y);
 				press("tap", () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); touches.add(new byte[]{1, (byte) seq, (byte) cam, 0, (byte) x, (byte) (x >> 8), (byte) y, (byte) (y >> 8), (byte) st, (byte) (st >> 8), (byte) (st >> 16), (byte) (st >> 24)}); });
-			} else button("attack", Controls.SELECT);
+			} else {
+				// (each blow: the phone's side at the press, and whether the hero swung; BLOWS=1 prints them)
+				// (with the watch's number for it, as main.c's, Controls.SEQ)
+				final int seq = ++tseq & 255;
+				trace("B %d %d", ms(t), Controls.SELECT);
+				final int k = i; blowAt = 0; final long bt = ms(t);
+				press("attack", () -> {
+					trace("Q %d %d", ms(t), Math.round(gclock * 1000));
+					com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
+					blowAt = ms(t); blowSwung = false;
+					blowWas = "ready " + h.ready + " act " + (h.curAction == null ? "-" : h.curAction.getClass().getSimpleName()) + " anim " + animOf(h.sprite) + " targets " + targetsNow() + " cur " + targetNow();
+					float n0 = Actor.now(); int p0 = h.pos;
+					controls.button(Controls.SELECT | seq * Controls.SEQ);
+					HeroActionPeek.of(h);
+					blowWas += " now " + n0 + " pos " + p0 + " target " + HeroActionPeek.what + " -> act " + (h.curAction == null ? "-" : h.curAction.getClass().getSimpleName()) + " ready " + h.ready;
+				});
+				blowWatch = true;
+				run(env("PACE", 1.0));   // (PACE=s: the next blow that soon, if the watch lets the hero act by then)
+				blowWatch = false;
+				blows++; if (!blowSwung) blowMissed++;
+				if (System.getenv("BLOWS") != null || !blowSwung) System.out.printf("  blow %d at %d (pressed %d): %s%s; after: now %s pos %d ready %s%n", k, blowAt, bt, blowSwung ? "swung" : "NO SWING", " (" + blowWas + ")", Actor.now(), Dungeon.hero.pos, Dungeon.hero.ready);
+				continue;
+			}
 			run(1.0);
 		}
+		System.out.printf("BLOWS %d, the hero didn't swing at %d%n", blows, blowMissed);
 		Gallery.calm();
 		for (Mob m : Dungeon.level.mobs.toArray(new Mob[0])) { m.destroy(); if (m.sprite != null) m.sprite.killAndErase(); }
 	}
 
+	static final class HeroActionPeek {
+		static String what;
+		static void of(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h) {
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction a = h.curAction;
+			if (a instanceof com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack) { com.shatteredpixel.shatteredpixeldungeon.actors.Char c = ((com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroAction.Attack) a).target; what = c.getClass().getSimpleName() + "@" + c.pos + " hp " + c.HP + " alive " + c.isAlive() + " id " + c.id(); }
+			else what = a == null ? "-" : a.getClass().getSimpleName() + " dst " + a.dst;
+		}
+	}
+	static boolean blowWatch, blowSwung; static float blowNow; static long blowAt; static String blowWas = ""; static int blows, blowMissed;
+	static java.lang.reflect.Field curAnimF, attackF;
+	static String animOf(com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite s) {
+		try {
+			if (curAnimF == null) { curAnimF = com.watabou.noosa.MovieClip.class.getDeclaredField("curAnim"); curAnimF.setAccessible(true); attackF = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.class.getDeclaredField("attack"); attackF.setAccessible(true); }
+			Object a = curAnimF.get(s); return a == null ? "-" : a == attackF.get(s) ? "attack" : "other";
+		} catch (Exception e) { throw new RuntimeException(e); }
+	}
 	/** Idle beside sleeping monsters (their "Zz" pulses). */
 	static void sleepers() {
 		Gallery.calm();

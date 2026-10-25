@@ -98,13 +98,20 @@ public final class Pacer {
 			// (the radio free, and only this frame's changes waiting, a few: they wait for the next frame. In a fight what
 			// happens comes in pairs a frame apart (a blow, then its damage number; Shattered shows texts a frame later):
 			// sent at once, the second waited a whole round trip behind the first, 150 ms and more)
-			if (first && LINGER && !walking && link.pendingBytes() < LINGER_MAX) lingered++;
-			else if (out == null && retryAt == 0 && queue.isEmpty() && !restart && link.pending()) {
-				queue.addAll(link.take(OLD ? maxMsg : Math.min(maxMsg, CAP)));
-				next();
+			// (and a blow struck this frame, as its swing starts (CharSprite.pebxelStrikeAtStart): its damage number
+			// comes the frame after (FloatingText: on the render thread's next turn), it waits for that too)
+			int st = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikes; boolean struck = st != strikes; strikes = st;
+			if ((first || struck && lingerRun < 2) && LINGER && !walking && link.pendingBytes() < LINGER_MAX) { lingered++; lingerRun++; }
+			else {
+				lingerRun = 0;
+				if (out == null && retryAt == 0 && queue.isEmpty() && !restart && link.pending()) {
+					queue.addAll(link.take(OLD ? maxMsg : Math.min(maxMsg, CAP)));
+					next();
+				}
 			}
 		}
 	}
+	private int strikes, lingerRun;
 
 	/** In place of whatever waits: this one message (a notice on an empty screen), then nothing until hello(). */
 	public synchronized void replace(byte[] msg) {

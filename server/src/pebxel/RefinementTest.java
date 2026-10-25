@@ -467,6 +467,39 @@ public final class RefinementTest {
     }
     static void gone(com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m) { m.destroy(); if (m.sprite != null) m.sprite.killAndErase(); Dungeon.level.updateFieldOfView(Dungeon.hero, Dungeon.level.heroFOV); }
     static Assist.Target entry(java.util.List<Assist.Target> l, int kind, int obj) { for (Assist.Target t : l) if (t.kind == kind && objOf(t) == obj) return t; return null; }
+    /** Watch mode: a melee blow's outcome (Hero.onAttackComplete) is worked out as the swing starts, while its animation
+     *  still plays (CharSprite.pebxelStrikeAtStart: the watch gets it with its own swing); off, as Shattered: after. */
+    static void strikeAtStart(WatchApp app) throws Exception {
+        Hero h = Dungeon.hero; com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level;
+        Field cur = com.watabou.noosa.MovieClip.class.getDeclaredField("curAnim"); cur.setAccessible(true);
+        Field atk = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.class.getDeclaredField("attack"); atk.setAccessible(true);
+        for (boolean early : new boolean[]{true, false}) {
+            com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikeAtStart = early;
+            for (int f = 0; f < 600 && !h.ready; f++) { app.frame(); Thread.sleep(1); }
+            int c = -1;
+            for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) if (L.passable[h.pos + d] && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(h.pos + d) == null) { c = h.pos + d; break; }
+            check(c >= 0, "a cell beside the hero for the blow");
+            com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll g = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll();
+            g.pos = c; g.HP = g.HT = 1000; GameScene.add(g); g.state = g.HUNTING;
+            Dungeon.observe(); h.checkVisibleMobs();
+            float t0 = now();
+            check(h.ready && h.handle(c), "the hero takes the blow");
+            h.next();
+            boolean swung = false, during = false, after = false;
+            for (int f = 0; f < 300; f++) {
+                app.frame(); Thread.sleep(2);
+                boolean a = cur.get(h.sprite) == atk.get(h.sprite);
+                swung |= a;
+                if (swung && h.attackTarget() == null) { if (a) during = true; else after = true; break; }
+            }
+            check(swung, "the hero swung (early " + early + ", ready " + h.ready + ", action " + h.curAction + ", time " + t0 + " -> " + now() + ")");
+            check(early ? during : after && !during, early ? "watch mode: the blow's outcome comes while the swing still plays" : "Shattered's way: the outcome as the swing ends");
+            for (int f = 0; f < 600 && !h.ready; f++) { app.frame(); Thread.sleep(1); }
+            g.destroy(); g.sprite.killAndErase(); Dungeon.observe(); h.checkVisibleMobs();
+        }
+        com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikeAtStart = true;
+        System.out.println("strike at start: a blow's outcome as the swing starts in watch mode, as it ends without: ok");
+    }
     static void fights(WatchApp app) throws Exception {
         com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero; int pos0 = h.pos, W = L.width();
         float t00 = now();
@@ -647,6 +680,7 @@ public final class RefinementTest {
         places();
         options();
         fights(app);
+        strikeAtStart(app);
         oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); oc = null;
         talentSpent(app);
         chestFromBeside();

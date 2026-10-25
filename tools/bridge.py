@@ -88,7 +88,7 @@ def main():
             if not INBOX: inbox[0] = data[KEY_HELLO]
             later(lambda: to_server(b'H', struct.pack('>HB', data[KEY_HELLO], data.get(5, 1))), up)
             print('watch hello', data[KEY_HELLO], 'version', data.get(5, 1))
-        if KEY_BUTTON in data: b = data[KEY_BUTTON] & 255; later(lambda: to_server(b'B', bytes([b])), up); print('button', data[KEY_BUTTON])
+        if KEY_BUTTON in data: b = data[KEY_BUTTON]; later(lambda: to_server(b'B', bytes([b & 255, b >> 8 & 255])), up); print('button', data[KEY_BUTTON])
         if 6 in data: t = bytes(data[6]); later(lambda: to_server(b'T', t), up); print('touch', t.hex())
     am.register_handler('appmessage', on_msg)
 
