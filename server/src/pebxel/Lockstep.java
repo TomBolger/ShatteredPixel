@@ -76,13 +76,14 @@ public final class Lockstep {
 
 	/** Seeds the base random generator (once, before the game starts), when SIMSEED is set. */
 	public static void seed(long gameSeed) {
+		com.watabou.utils.Random.pebxelVisualReset();   // (as in a new JVM: the last game's particles drew from it)
 		String s = System.getenv("SIMSEED");
 		if (s == null || s.isEmpty()) return;
 		com.watabou.utils.Random.pebxelSource = new java.util.Random(Long.parseLong(s) * 1_000_003L + gameSeed);
 		com.watabou.utils.Random.resetGenerators();
 	}
 
-	public static void frame(WatchApp app) { Actor.pebxelLockstep = true; com.watabou.utils.Random.pebxelVisuals = true; Game.pebxelCreated = Lockstep::settle; app.frame(); frames++; settle(); }
+	public static void frame(WatchApp app) { Actor.pebxelLockstep = true; com.watabou.utils.Random.pebxelVisuals = true; com.watabou.utils.Random.pebxelStable = true; Game.pebxelCreated = Lockstep::settle; app.frame(); frames++; settle(); }
 
 	/** Waits (without the wall clock) until the actor thread and any floor building are idle. */
 	public static void settle() {
