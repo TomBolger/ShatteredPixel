@@ -29,7 +29,7 @@ import java.util.*;
  *   and camera each frame (P real-ms game-ms x y scrollx scrolly, x8), for replaying through the watch's own C code
  *   (tools/feel: the motion as the watch shows it, step by step)
  * Scenarios with the watch's own buttons (the watch shows them ahead of the phone, predict.c): walks (long and short,
- * over a known floor), wfight (Select at the nearest enemy).
+ * over a known floor), wfight (Select at the nearest enemy; FIGHTS=n blows, default 12).
  */
 public class RadioTest {
 	static double env(String k, double d) { String v = System.getenv(k); return v == null ? d : Double.parseDouble(v); }
@@ -453,7 +453,7 @@ public class RadioTest {
 	static void wfight() {
 		Gallery.calm();
 		List<Mob> mobs = new ArrayList<>();
-		for (int i = 0; i < 12; i++) {
+		for (int i = 0, n = (int) env("FIGHTS", 12); i < n; i++) {
 			mobs.removeIf(m -> !m.isAlive());
 			while (mobs.size() < 2) {
 				int cell = -1;

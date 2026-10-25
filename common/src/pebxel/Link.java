@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import com.shatteredpixel.shatteredpixeldungeon.effects.FloatingText;
 
 /**
  * Mirrors Shattered PD's live scene (everything it would draw) onto the watch.
@@ -26,13 +27,13 @@ public final class Link {
 
 	// ---- commands ----
 	public static final int C_RESET = 1, C_CAM = 2, C_NEW = 3, C_SET = 4, C_DEL = 5, C_ORDER = 6,
-			C_TILES = 7, C_DTEX = 8, C_MOVE = 9, C_ANIM = 10, C_TIME = 11, C_INPUT = 12, C_LATEST = 13, C_SOUND = 14, C_COMMIT = 15, C_PREDICT = 16, C_TILES2 = 17, C_ANIMTO = 18, C_RECIPE = 19, C_FOG = 20, C_READY = 21, C_AHEAD = 22, C_EVENT = 23, C_PASS = 24, C_STEP = 25, C_FOGD = 26;
+			C_TILES = 7, C_DTEX = 8, C_MOVE = 9, C_ANIM = 10, C_TIME = 11, C_INPUT = 12, C_LATEST = 13, C_SOUND = 14, C_COMMIT = 15, C_PREDICT = 16, C_TILES2 = 17, C_ANIMTO = 18, C_RECIPE = 19, C_FOG = 20, C_READY = 21, C_AHEAD = 22, C_EVENT = 23, C_PASS = 24, C_STEP = 25, C_FOGD = 26, C_ANSWER = 27, C_FLASH = 28;
 	// ---- picture kinds ----
-	public static final int K_IMG = 1, K_RECT = 2, K_NINE = 3, K_TILES = 4, K_TEXT = 5, K_SKIN = 6, K_QUADS = 7, K_SHAPE = 8, K_EMIT = 9;
+	public static final int K_IMG = 1, K_RECT = 2, K_NINE = 3, K_TILES = 4, K_TEXT = 5, K_SKIN = 6, K_QUADS = 7, K_SHAPE = 8, K_EMIT = 9, K_FLOAT = 10;
 	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32;   // F_FOG: the fog of war (the watch draws it as Pebble PD does)
 	public static final int NONE = 0xFFFF;
 	/** The command format's version; the watch app sends its own in its hello. */
-	public static final int PROTOCOL = 14;   // 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
+	public static final int PROTOCOL = 15;   // 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
 
 	/** What to show on a watch whose app speaks another version of the commands. */
 	public static byte[] wrongVersion(int watch) {
@@ -51,14 +52,17 @@ public final class Link {
 		int id, kind; byte[] stat; int[] tiles; int tilesKey, tilesDims;
 		float[] dyn = new float[N], vel = new float[N];   // see D_* below
 		float sentAt, until;                                 // speeds last until (0: no end)
+		boolean sent;                                        // its moving part was sent (the watch has its place)
 		com.watabou.noosa.tweeners.Tweener tw;              // the movement/fade those speeds came from
 		float[] prev; float prevAt;                          // last frame's real values, for speeds
 		MovieClip.Animation anim; int frame; float timer;   // animation the watch is playing
+		byte[] flash;                                        // the state of a flash the watch was told of (C_FLASH)
 	}
 
 	private final IdentityHashMap<Gizmo, Obj> objs = new IdentityHashMap<>();
 	static final boolean DEBUG_NEW = System.getenv("DEBUG_NEW") != null, DEBUG_RECIPES = System.getenv("DEBUG_RECIPES") != null;
-	static final boolean NO_UNTIL = System.getenv("NOUNTIL") != null;   // for comparing (LagTest)
+	static final boolean NO_UNTIL = System.getenv("NOUNTIL") != null;
+	static final boolean NOKEEP = System.getenv("NOKEEP") != null;   // (RadioTest: moves with their place always)   // for comparing (LagTest)
 	static final boolean NO_REUSE = System.getenv("NOREUSE") != null || Pacer.OLD;   // (RadioTest: as it was)
 	/** Movements, fades and growths in progress this round, by picture: they say exactly where it is heading and when it arrives. */
 	private final IdentityHashMap<Gizmo, com.watabou.noosa.tweeners.Tweener> tweens = new IdentityHashMap<>();
@@ -122,7 +126,7 @@ public final class Link {
 		freeIds.clear(); nextId = 0; camIds.clear(); camState.clear(); camObjs.clear(); dynTex.clear(); dynPixels.clear(); dynPal.clear(); fogStates.clear(); fogDims.clear(); dynUsed.clear(); dynShrink.clear(); nextDyn = 200;
 		anims.clear(); animsByContent.clear(); animUsed.clear();
 		recipeIds.clear(); Arrays.fill(recipeKey, null);
-		out.reset(); marks.clear(); dropPending(); cmd(C_RESET); lastPlan = null; passLevel = null; passSent = null;
+		out.reset(); marks.clear(); dropPending(); cmd(C_RESET); lastPlan = null; lastOnPlan = null; passLevel = null; passSent = null;
 		Sounds.take();   // (effects from while the watch was away are stale)
 		Feedback.reset();
 		for (int[] e : Sounds.state()) sound(e);
@@ -190,6 +194,17 @@ public final class Link {
 					link(o.id, prev);
 				} else {
 					if (!Objects.equals(shadowPrev.get(o.id), prev)) { cmd(C_ORDER); u16(o.id); u16(prev); unlink(o.id); link(o.id, prev); }
+					// a creature flashing white as it is hit (CharSprite.flash, 50 ms): C_FLASH id, ms; the watch puts it
+					// back itself, so its colour as it was stays what the watch has (two C_SETs of 37 bytes a blow, both
+					// in the frame of the blow and the one after: the frames a fight waits for)
+					if (o.flash != null && !Arrays.equals(st, o.flash)) o.flash = null;
+					if (!NO_REUSE && g instanceof com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite && !Arrays.equals(st, o.stat) && colourOnly(st, o.stat)) {
+						int fl = flashMs((com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite) g, st, o.stat);
+						if (fl > 0) {
+							if (o.flash == null) { cmd(C_FLASH); u16(o.id); u8(fl); stat(g, "flash", 4); o.flash = st; }
+							st = o.stat;
+						}
+					}
 					if (!Arrays.equals(st, o.stat) && !(colourOnly(st, o.stat) && now - o.sentAt < COLOUR_GAP)) {
 						if (System.getenv("WHY") != null && g.getClass().getSimpleName().equals(System.getenv("WHY"))) {
 							StringBuilder w = new StringBuilder("why " + (st.length > 2 && st[0] != K_RECT ? assets.paths.get(Math.max(0, (st[2] & 255) - 1)) : "") + " bytes");
@@ -229,7 +244,16 @@ public final class Link {
 				// frame plays a while later
 				if (pl.length > 1 && lastPlan != null && lastPlan.length == 1 && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.sprite != null)
 					ready = new int[]{Math.round(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.sprite.x * 8), Math.round(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.sprite.y * 8)};
-				lastPlan = pl; cmd(C_PREDICT); out.write(pl, 0, pl.length); stat("press plan", pl.length + 1);
+				// (the hero ready again, the answer to the press that set him going is over: C_ANSWER)
+				if (pl.length > 1 && lastPlan != null && lastPlan.length == 1 && answerFrom >= 0 && answerTo < 0) answerTo = Math.max(answerFrom, nowMs());
+				lastPlan = pl;
+				// the same plan as the last one the watch had (in a fight: none while the hero acts, then the same one
+				// again): 2 bytes, the watch kept it (90 or so, twice every blow)
+				if (pl.length > 1 && Arrays.equals(pl, lastOnPlan) && !NO_REUSE) { cmd(C_PREDICT); u8(2); stat("press plan", 2); }
+				else {
+					if (System.getenv("PLANDBG") != null) { StringBuilder x = new StringBuilder("PLAN " + nowMs() + " "); for (byte y : pl) x.append(String.format("%02x", y & 255)); System.out.println(x); }
+					cmd(C_PREDICT); out.write(pl, 0, pl.length); stat("press plan", pl.length + 1); if (pl.length > 1) lastOnPlan = pl;
+				}
 			}
 		}
 		if (out.size() == 0) { marks.clear(); return new byte[0]; }
@@ -299,12 +323,25 @@ public final class Link {
 		return true;
 	}
 
+	/** A creature's sprite flashing white (CharSprite.flash: its colour added in full, for flashTime): ms of it left, else 0. */
+	private static Field flashField;
+	private static int flashMs(com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite g, byte[] st, byte[] was) {
+		int c = colourAt(st[0]);
+		if (c < 0 || (st[c + 3] & 255) != 255 || (st[c + 4] & 255) != 255 || (st[c + 5] & 255) != 255) return 0;
+		if ((was[c + 3] & 255) == 255 && (was[c + 4] & 255) == 255 && (was[c + 5] & 255) == 255) return 0;
+		try {
+			if (flashField == null) { flashField = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.class.getDeclaredField("flashTime"); flashField.setAccessible(true); }
+			float t = flashField.getFloat(g);
+			return t <= 0 ? 0 : Math.max(1, Math.min(255, Math.round(t * 1000)));
+		} catch (Exception e) { return 0; }
+	}
+
 	/** A picture that only pulses in colour is updated at most this often (seconds). */
 	static final float COLOUR_GAP = 0.25f;
 
 	/** Where the 7 colour bytes start in each kind's unchanging part. */
 	private static int colourAt(int kind) {
-		switch (kind) { case K_IMG: case K_SKIN: return 20; case K_RECT: return 14; case K_NINE: return 24; case K_TILES: return 9; case K_TEXT: return 3; case K_QUADS: return -1; case K_SHAPE: return -1; }
+		switch (kind) { case K_IMG: case K_SKIN: return 20; case K_RECT: return 14; case K_NINE: return 24; case K_TILES: return 9; case K_TEXT: case K_FLOAT: return 3; case K_QUADS: return -1; case K_SHAPE: return -1; }
 		return -1;
 	}
 
@@ -404,9 +441,9 @@ public final class Link {
 	 * Water adds its offset and speed; an animation adds its frame and timer.
 	 */
 	private void sendDyn(Gizmo g, Obj o, float[] dyn) {
-		if (!(g instanceof Visual) || emitDescs.containsKey(g)) { emitDyn(g, o, dyn); return; }
+		Visual v = g instanceof FloatingText ? floatWord(g) : g instanceof Visual ? (Visual) g : null;
+		if (v == null || emitDescs.containsKey(g)) { emitDyn(g, o, dyn); return; }
 		float[] vel = new float[N];
-		Visual v = (Visual) g;
 		// guessing a speed from the last two places suits things moving in the dungeon; on the interface (a focus box
 		// jumping from cell to cell) it sends the box sailing on past its place until corrected: there, no guess
 		if (o.prev != null && now > o.prevAt && v.camera() == Camera.main && !JUMPS.contains(g)) {
@@ -416,7 +453,7 @@ public final class Link {
 		// damage numbers and the like (FloatingText) rise a tile a second while they last: say so from the start
 		// (guessed from their last two places, it came out wrong when one appeared and after each push up the stack:
 		// two or three corrections each, the biggest share of a fight's radio time)
-		if (g.parent instanceof com.shatteredpixel.shatteredpixeldungeon.effects.FloatingText && !NO_REUSE)
+		if ((g.parent instanceof FloatingText || g instanceof FloatingText) && !NO_REUSE)
 			vel[D_Y] = -com.shatteredpixel.shatteredpixeldungeon.tiles.DungeonTilemap.SIZE * 8;
 		// motion SPD integrates itself is exact; use it (acceleration is left to corrections)
 		if (v.speed.x != 0 || v.speed.y != 0) { vel[D_X] = v.speed.x * 8; vel[D_Y] = v.speed.y * 8; }
@@ -447,6 +484,9 @@ public final class Link {
 			}
 		}
 		for (int i = 0; i < N; i++) if (Math.abs(vel[i]) > 30000) vel[i] = 0;  // a jump, not a movement
+		// a health bar's length (and fade) jumps to the new level: no speed (guessed from two frames, it sent each bar
+		// shrinking on, and a correction a frame later: half the bytes of a blow's frames). Its place follows its creature
+		if (g.parent instanceof com.shatteredpixel.shatteredpixeldungeon.ui.HealthBar && tw == null && !NO_REUSE) vel[D_SX] = vel[D_SY] = vel[D_A] = 0;
 		// the little icons over monsters (a sleeper's "Zz") pulse and step in whole pixels: no speed is better than one
 		// guessed from two frames (wrong a moment later, and corrected several times a second for as long as they show)
 		if (g instanceof com.shatteredpixel.shatteredpixeldungeon.effects.EmoIcon && !NO_REUSE) Arrays.fill(vel, 0);
@@ -455,11 +495,13 @@ public final class Link {
 		if (until == 0 && !NO_REUSE) for (int i = 0; i < D_OX; i++) if (r(vel[i]) != 0) { until = GUESS_HOLD; break; }
 		// blinking (alpha jumping between levels) is not a fade: hold the new value
 		if (o.prev != null && Math.abs(dyn[D_A] - o.prev[D_A]) > 60) vel[D_A] = 0;
-		o.dyn = dyn.clone(); o.vel = vel; o.sentAt = now;
+		// (standing still where the watch has it, as it believes: its place is left out, 4 bytes; scene.c keeps it)
+		boolean keep = o.sent && !NO_REUSE && !NOKEEP && o.vel[D_X] == 0 && o.vel[D_Y] == 0 && r(vel[D_X]) == 0 && r(vel[D_Y]) == 0 && r(dyn[D_X]) == o.dyn[D_X] && r(dyn[D_Y]) == o.dyn[D_Y];
+		o.dyn = dyn.clone(); o.vel = vel; o.sentAt = now; o.sent = true;
 		int untilMs = until > 0 ? untilCode(until) : 0;
 		o.until = untilOf(untilMs);
 		if (DEBUG_NEW && g.getClass().getSimpleName().equals("HeroSprite")) System.out.printf("HERO at %.3f x %.1f vel %.0f until %d tween %s%n", now, dyn[D_X] / 8, vel[D_X] / 8, untilMs, tw == null ? "-" : tw.getClass().getSimpleName() + " " + tw.elapsed + "/" + tw.interval);
-		int mask = 1;
+		int mask = keep ? 0 : 1;
 		if (dyn[D_A] != 255) mask |= 2;
 		if (dyn[D_SX] != 256 || dyn[D_SY] != 256) mask |= 4;
 		if (dyn[D_ANG] != 0) mask |= 8;
@@ -468,7 +510,7 @@ public final class Link {
 		if (r(vel[D_SX]) != 0 || r(vel[D_SY]) != 0) mask |= 64 | 4;
 		if (r(vel[D_ANG]) != 0) mask |= 128 | 8;
 		u8(mask);
-		s16o(r(dyn[D_X])); s16o(r(dyn[D_Y]));
+		if ((mask & 1) != 0) { s16o(r(dyn[D_X])); s16o(r(dyn[D_Y])); }
 		if ((mask & 2) != 0) u8(Math.max(0, Math.min(255, r(dyn[D_A]))));
 		if ((mask & 4) != 0) { s16o(r(dyn[D_SX])); s16o(r(dyn[D_SY])); }
 		if ((mask & 8) != 0) s16o(r(dyn[D_ANG]));
@@ -633,6 +675,7 @@ public final class Link {
 			// ends with revive(), which clears "started", so autoKill never fires. On Yog's floor a fight left 2000
 			// of them in the scene; sent as pictures they filled the watch's 1024 ids and 150 KB of its heap.)
 			if (g instanceof com.watabou.noosa.particles.Emitter && !((com.watabou.noosa.particles.Emitter) g).on && ((com.watabou.noosa.particles.Emitter) g).countLiving() == 0) continue;
+			if (g instanceof FloatingText && !NO_REUSE && floatWord(g) != null) { order.add(g); continue; }   // (K_FLOAT)
 			if (g instanceof Group) {
 				Particles.Desc d = NO_REUSE ? null : particles.describe(g);
 				if (d != null) { walk((Group) g, order, d.recipe.cls); emitDescs.put(g, d); order.add(g); continue; }
@@ -683,6 +726,7 @@ public final class Link {
 
 	/** The unchanging part of how a picture looks (first byte = kind), or null to skip it; fills dyn. */
 	private byte[] state(Gizmo g, float[] dyn) {
+		if (g instanceof FloatingText) return floatState(g, dyn);
 		if (!(g instanceof Visual) || emitDescs.containsKey(g)) return emitState(g, dyn);
 		Visual v = (Visual) g;
 		Camera c = v.camera();
@@ -793,6 +837,46 @@ public final class Link {
 			s8(c(q[9])); s8(c(q[10])); s8(c(q[11])); s8(c(q[13])); s8(c(q[14])); s8(c(q[15])); s8(c(q[16]));
 			dyn[D_X] = 0; dyn[D_Y] = 0; dyn[D_A] = Math.max(0, Math.min(255, q[12] * 255));
 		}
+		return sb.toByteArray();
+	}
+
+	// ---- damage numbers and the like (FloatingText): one picture, K_FLOAT ----
+	// A word and its icon rising together and fading, shown in every fight: as two pictures (the icon an image, the
+	// number a text) they cost 70 bytes each, and two corrections each as they faded, a third of a blow's bytes.
+	// K_FLOAT: as K_TEXT (camera, font, colour, the text), then the icon's texture (0: none) and, with one, where it is
+	// from the text (s16 x8), its size (u8 x8), its part of the texture (4 s16). Its moving part is the text's; the
+	// icon goes with it, as see-through as the text.
+	private static RenderedText floatWord(Gizmo g) {
+		RenderedText w = null;
+		for (Gizmo m : GroupAccess.members((Group) g)) {
+			if (m == null || !m.exists || !m.visible || !(m instanceof RenderedText)) continue;
+			String t = ((RenderedText) m).text();
+			if (t == null || t.trim().isEmpty()) continue;
+			if (w != null) return null;   // (more than a word: as its parts)
+			w = (RenderedText) m;
+		}
+		return w;
+	}
+	private static Image floatIcon(Gizmo g) {
+		for (Gizmo m : GroupAccess.members((Group) g)) if (m instanceof Image && !(m instanceof RenderedText) && m.exists && m.visible) return (Image) m;
+		return null;
+	}
+	private byte[] floatState(Gizmo g, float[] dyn) {
+		RenderedText w = floatWord(g);
+		Camera c = w == null ? null : w.camera();
+		if (c == null) return null;
+		float[] m = NoosaAccess.matrix(w);
+		dyn[D_X] = m[12] * 8; dyn[D_Y] = m[13] * 8; dyn[D_A] = Math.max(0, Math.min(255, w.am * 255)); dyn[D_SX] = dyn[D_SY] = 256;
+		sb.reset();
+		s8(K_FLOAT); s8(cam(c)); s8(WatchFonts.forSize(Math.round(fontSize(w) * m[5]))); color(w);
+		byte[] txt = w.text().getBytes(StandardCharsets.UTF_8);
+		int n = Math.min(255, txt.length); s8(n); sb.write(txt, 0, n);
+		Image ic = floatIcon(g);
+		if (ic == null || ic.texture == null) { s8(0); return sb.toByteArray(); }
+		s8(tex(ic.texture, true));
+		s16(Math.round(ic.x * 8 - dyn[D_X])); s16(Math.round(ic.y * 8 - dyn[D_Y]));
+		s8(Math.min(255, Math.round(ic.width * ic.scale.x * 8))); s8(Math.min(255, Math.round(ic.height * ic.scale.y * 8)));
+		texRect(NoosaAccess.frame(ic), ic.texture);
 		return sb.toByteArray();
 	}
 
@@ -1345,6 +1429,7 @@ public final class Link {
 		remember();
 		if (b.length == 0) return;
 		pendNewest = Math.round(now * 1000);
+		if (answerArmed) { answerArmed = false; answerFrom = pendNewest; answerTo = -1; }
 		int base = pend.size();
 		for (int mk : lastMarks) pendMarks.add(base + mk);
 		pend.write(b, 0, b.length);
@@ -1398,7 +1483,19 @@ public final class Link {
 
 	/** The plan for the watch's next press (Controls.plan), and the last one sent. */
 	public java.util.function.Function<Link, byte[]> planner;
-	private byte[] lastPlan;
+	private byte[] lastPlan, lastOnPlan;
+
+	/** The watch's number for a sprite's attack animation (sent first if the watch hasn't it), for the plan: the watch
+	 *  plays it at the press (predict.c). -1: none. */
+	private static Field attackField;
+	public int attackAnim(com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite s) {
+		try {
+			if (attackField == null) { attackField = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.class.getDeclaredField("attack"); attackField.setAccessible(true); }
+			MovieClip.Animation a = (MovieClip.Animation) attackField.get(s);
+			if (a == null || s.texture == null || a.delay <= 0 || a.frames.length < 2) return -1;
+			return anim(a, tex(s.texture, true), s.texture);
+		} catch (Exception e) { return -1; }
+	}
 	private int[] ready;   // the hero ready again, where he stands (x8), for the head of the next message
 
 	/** A picture's number on the watch (-1: not there). */
@@ -1456,7 +1553,10 @@ public final class Link {
 		int[] rd = Pacer.OLD ? null : ready; ready = null;
 		// C_AHEAD from, to (u32 ms; to 0xFFFFFFFF: not over yet): these frames are a walk worked out ahead (Ahead), after that
 		boolean wk = walkFrom >= 0 && !Pacer.OLD;
-		int head = 5 + (rd != null ? 5 : 0) + (wk ? 9 : 0);
+		// C_ANSWER from, to (as C_AHEAD): these frames answer a press (the watch plays them as they come)
+		if (answerFrom >= 0 && answerTo < 0 && nowMs() - answerFrom >= ANSWER_MAX) answerTo = nowMs();
+		boolean an = answerFrom >= 0 && !wk && !Pacer.OLD;
+		int head = 5 + (rd != null ? 5 : 0) + (wk ? 9 : 0) + (an ? 9 : 0);
 		// (running ahead: the frames due soon in a message of their own, ahead of the rest. In one with the walk's
 		// next second they came that much later, past their time: the hero stood a moment, then hurried on)
 		int soon = -1;
@@ -1471,22 +1571,35 @@ public final class Link {
 			if (out.isEmpty() && wk) {
 				b[at] = (byte) C_AHEAD; put32(b, at + 1, walkFrom); put32(b, at + 5, walkTo < 0 ? -1 : walkTo); at += 9;
 			}
+			if (out.isEmpty() && an) { b[at] = (byte) C_ANSWER; put32(b, at + 1, answerFrom); put32(b, at + 5, answerTo < 0 ? -1 : answerTo); at += 9; }
 			System.arraycopy(pk, 0, b, at, pk.length);
 			out.add(b);
 		}
 		if (wk && walkTo >= 0) walkFrom = walkTo = -1;   // (all its frames have gone)
+		if (an && answerTo >= 0) answerFrom = answerTo = -1;
 		return out;
 	}
 
 	/** Forget what was waiting (the watch starts over). */
-	public void dropPending() { pend.reset(); pendMarks.clear(); ready = null; walkFrom = walkTo = -1; }
+	public void dropPending() { pend.reset(); pendMarks.clear(); ready = null; walkFrom = walkTo = -1; answerArmed = false; answerFrom = answerTo = -1; }
+
+	// ---- the answer to a press (C_ANSWER) ----
+	// The watch plays the phone's frames a steady while behind (main.c: the radio brings them in bursts), some 200 ms on
+	// top of the radio's own time. The frames that answer a press (a blow's outcome, the enemy's answer) play as they
+	// come instead: from the first frame noted after the press until the hero is ready again (at most ANSWER_MAX).
+	// (Not a walk: that is C_AHEAD's)
+	private boolean answerArmed;
+	private int answerFrom = -1, answerTo = -1;
+	static final int ANSWER_MAX = 2000;   // game ms
+	/** A press from the watch was just applied (Controls.button, a tap): the next frame noted answers it. */
+	public void pressed() { if (!Pacer.OLD && walkFrom < 0) answerArmed = true; }   // (a press on a walk stops it: C_AHEAD's)
 
 	// ---- walks worked out ahead (Ahead) ----
 	/** How far the game clock is ahead of real time (ms): C_LATEST gives the clock as it would be without that. */
 	public int aheadMs;
 	private int walkFrom = -1, walkTo = -1;
 	/** The hero set off on a walk the game carries on by itself: its frames from the last one noted are marked for the watch. */
-	public void walkStart() { walkFrom = nowMs(); walkTo = -1; }
+	public void walkStart() { walkFrom = nowMs(); walkTo = -1; answerArmed = false; answerFrom = answerTo = -1; }
 	/** ...and it is over, in the last frame noted. */
 	public void walkEnd() {
 		if (walkFrom >= 0) walkTo = nowMs();

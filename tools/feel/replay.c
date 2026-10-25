@@ -119,6 +119,8 @@ int scene_hit(int x, int y, uint32_t now) { return g_map_cam; }
 
 // ---- a frame drawn: where the hero (the map camera's followed picture) and the camera are ----
 static int s_hero = -1;
+bool predict_anim(const Obj *o, uint32_t now, int *anim, int *frame, bool *fliph) __attribute__((weak));
+bool predict_planned(void) __attribute__((weak));
 void draw_scene(GContext *ctx, GRect bounds, uint32_t now) {
   if (g_map_cam >= 0) {
     Cam *c = &g_cam[g_map_cam];
@@ -127,6 +129,23 @@ void draw_scene(GContext *ctx, GRect bounds, uint32_t now) {
     printf("F %.3f %u %d %d %d %d %d %d %d %d\n", (vt - 1000000000ull) / 1000.0, now,
            h ? (int)obj_dyn(h, 0, now) : 0, h ? (int)obj_dyn(h, 1, now) : 0, h ? (int)obj_dyn_raw(h, 0, now) : 0, h ? (int)obj_dyn_raw(h, 1, now) : 0,
            (int)(c->sx / 256), (int)(c->sy / 256), c->zoom, c->mode);
+    // (fights, fight.py) the hero's animation as drawn (predict.c's swing at the press, if any), and the damage
+    // numbers in view (text on the map), whenever they change
+    if (h && (h->flags & F_ANIM)) {
+      static int la = -1, lf = -1, lfl = -1; int an = h->tx, fr = h->frame, fl = h->flags & F_FLIPH, pr = 0;
+      Anim *a = scene_anim(an);
+      if (a && a->n && a->delay_ms) { uint32_t t = (uint32_t)h->timer * a->delay_ms / 256 + (now - h->at); int st = t / a->delay_ms, f0 = fr < a->n ? fr : a->n - 1; fr = a->looped ? (f0 + st) % a->n : (f0 + st < a->n - 1 ? f0 + st : a->n - 1); }
+      if (predict_anim) { int pa, pf; bool pfl; if (predict_anim(h, now, &pa, &pf, &pfl)) { an = pa; fr = pf; fl = pfl ? F_FLIPH : 0; pr = 1; a = scene_anim(an); } }
+      if (an != la || fr != lf || fl != lfl) { la = an; lf = fr; lfl = fl; printf("H %.3f %d %d %d %d %d %d\n", (vt - 1000000000ull) / 1000.0, an, fr, a ? a->n : 0, a ? a->looped : 0, fl, pr); }
+    }
+    // (the plan in hand: the hero ready again, a press shown at once)
+    static int lp = -1; int pl = predict_planned ? predict_planned() : 0;
+    if (pl != lp) { lp = pl; printf("R %.3f %d\n", (vt - 1000000000ull) / 1000.0, pl); }
+    // (a text new since the last frame drawn: D time and how many show)
+    static uint8_t was[MAX_ID]; uint8_t is[MAX_ID] = {0}; int n = 0, fresh = 0;
+    for (int id = g_head; id != NONE; id = g_obj[id]->next) { Obj *o = g_obj[id]; if (o->cam == g_map_cam && (o->kind == K_TEXT || o->kind == 10) && obj_dyn_raw(o, 2, now) >= 30) { n++; is[id] = 1; if (!was[id]) fresh++; } }
+    if (fresh) printf("D %.3f %d\n", (vt - 1000000000ull) / 1000.0, n);
+    memcpy(was, is, sizeof was);
   }
   vt += (uint64_t)(DRAW_MS * 1000);
 }

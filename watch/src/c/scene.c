@@ -50,9 +50,11 @@ static void free_obj(Obj *o) {
 int8_t g_map_cam = -1;
 static int s_fog_tex = -1;       // the fog of war's run-time picture (scene_in_sight)
 int32_t g_pan_x, g_pan_y;
+#define MAX_FLASH 4
+static struct { uint16_t id; uint32_t end; } s_fl[MAX_FLASH];   // (C_FLASH: see flash_set)
 
 void scene_reset(void) {
-  g_map_cam = -1; g_lost = false;
+  g_map_cam = -1; g_lost = false; memset(s_fl, 0, sizeof s_fl);
   particles_reset(); recipes_reset();
   for (int i = 0; i < MAX_ID; i++) { free_obj(g_obj[i]); g_obj[i] = NULL; }
   for (int i = 0; i < MAX_ANIM; i++) { free(s_anim[i]); s_anim[i] = NULL; }
@@ -104,7 +106,7 @@ static void SMALL read_emit(Obj *o) {   // an emitter (Link.emitState): the watc
 // the unchanging part of a picture
 static void read_static(Obj *o) {
   int kind = u8();
-  if (kind != o->kind || kind == K_TEXT || kind == K_QUADS) { free(o->ext); o->ext = NULL; }
+  if (kind != o->kind || kind == K_TEXT || kind == K_FLOAT || kind == K_QUADS) { free(o->ext); o->ext = NULL; }
   o->kind = kind; o->cam = u8();
   switch (kind) {
     case K_IMG: case K_SKIN:
@@ -153,7 +155,7 @@ static void read_static(Obj *o) {
     case K_SHAPE:   // a disc or a band (round screens): kind, Pebble colour, radii, bearings, slant
       o->flags = u8(); o->tex = u8(); o->tx = u8(); o->ty = u8(); o->tw = s16(); o->th = s16(); o->w = s16(); o->h = s16(); o->frame = u8();
       break;
-    case K_TEXT: {
+    case K_TEXT: case K_FLOAT: {
       o->w = u8();            // which watch font (0..6)
       read_col(o);
       int n = u8();
@@ -161,6 +163,8 @@ static void read_static(Obj *o) {
       for (int i = 0; i < n; i++) { int c = u8(); if (s) s[i] = c; }
       if (s) s[n] = 0;
       o->ext = s;
+      // (K_FLOAT: its icon, if any: texture, where from the text, size, its part of the texture)
+      if (kind == K_FLOAT && (o->tex = u8())) { o->ox = s16(); o->oy = s16(); o->w |= u8() << 8; o->h = u8(); o->tx = s16(); o->ty = s16(); o->tw = s16(); o->th = s16(); }
       break;
     }
   }
@@ -209,7 +213,10 @@ bool scene_in_sight(int cx, int cy) {
 static void read_dyn(Obj *o, uint32_t now) {
   int m = u8();
   memset(o->vel, 0, sizeof(o->vel));
-  o->dyn[0] = s16(); o->dyn[1] = s16();
+  if (m & 1) { o->dyn[0] = s16(); o->dyn[1] = s16(); }   // (else where it was: it stands still there)
+#ifdef FEEL_DEBUG
+  else { extern void feel_kept(const Obj *o, uint32_t now); feel_kept(o, now); }
+#endif
   o->dyn[2] = (m & 2) ? u8() : 255;
   if (m & 4) { o->dyn[3] = s16(); o->dyn[4] = s16(); } else o->dyn[3] = o->dyn[4] = 256;
   o->dyn[5] = (m & 8) ? s16() : 0;
@@ -255,7 +262,19 @@ void scene_stats(int *objs, int *tiles, int *anims, int *dyns) {
   for (int i = 0; i < MAX_DYN; i++) if (s_dyn[i]) *dyns += (s_dyn[i]->w * s_dyn[i]->h * s_dyn[i]->bits + 7) / 8;
 }
 
+// creatures flashing white as they are hit (C_FLASH; Link: CharSprite.flash): until when; the watch puts them back itself
+static void flash_set(int id, int ms, uint32_t now) {
+  int k = 0;
+  for (int i = 0; i < MAX_FLASH; i++) { if (s_fl[i].id == id) { k = i; break; } if ((int32_t)(s_fl[i].end - s_fl[k].end) < 0) k = i; }
+  s_fl[k].id = id; s_fl[k].end = now + ms;
+}
+bool scene_flash(uint16_t id, uint32_t now) {
+  for (int i = 0; i < MAX_FLASH; i++) if (s_fl[i].id == id && (int32_t)(s_fl[i].end - now) > 0) return true;
+  return false;
+}
+
 bool scene_moving(uint32_t now) {
+  for (int i = 0; i < MAX_FLASH; i++) if ((int32_t)(s_fl[i].end - now) > 0) return true;
   for (int id = g_head; id != NONE; id = g_obj[id]->next) {
     Obj *o = g_obj[id];
     if (o->kind == K_EMIT || (o->flags & F_ANIM)) return true;
@@ -432,12 +451,12 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
   while (p < end) {
     if (*p == C_TIME && p > data) break;   // the next frame's changes: they wait for their time
     int c = u8();
-    if (c != C_TIME && c != C_LATEST && c != C_COMMIT && c != C_READY && c != C_AHEAD && c != C_EVENT) g_partial = true;
+    if (c != C_TIME && c != C_LATEST && c != C_COMMIT && c != C_READY && c != C_AHEAD && c != C_ANSWER && c != C_EVENT && c != C_FLASH) g_partial = true;
     switch (c) {
       case C_TIME: p += 4; break;
       case C_LATEST: p += 4; break;
       case C_READY: p += 4; break;   // (read as the message arrived: main.c enqueue)
-      case C_AHEAD: p += 8; break;   // (likewise)
+      case C_AHEAD: case C_ANSWER: p += 8; break;   // (likewise)
       case C_RESET: scene_reset(); break;
       case C_CAM: read_cam(now); break;
       case C_NEW: {
@@ -516,15 +535,20 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
       case C_INPUT: touch_acked(u8()); break;
       case C_SOUND: { int k = u8(), v = u8(); if (k == 0) sound_effect(v); else if (k == 1) sound_music(v == 255 ? -1 : v); else sound_settings(v); break; }
       case C_EVENT: scene_event(u8()); break;   // (as the frame it came with plays)
+      case C_FLASH: { int id = u16(), ms = u8(); flash_set(id, ms, now); break; }
       case C_COMMIT: g_dirty = true; g_partial = false; break;
       case C_PREDICT: {
+        int v = u8();
+        if (v != 1) { predict_again(v == 2); break; }   // (none now, kept; 2: the last one again)
         Plan *pl = predict_plan();
-        if (u8()) {
-          pl->on = true; pl->marker = u16(); pl->hero = u16(); pl->step_ms = u8() * 4; pl->n = u8(); pl->cur = u8();
+        {
+          pl->on = true; pl->marker = u16(); pl->hero = u16(); pl->step_ms = u8() * 4; pl->n = u8(); pl->cur = u8(); pl->atk = u16();
           for (int i = 0; i < pl->n; i++) {
             PlanTarget *t = &pl->t[i < PLAN_T ? i : PLAN_T - 1];   // (any past PLAN_T are read, then dropped)
             int x = s16(), y = s16(), k = u8();
-            t->x = x; t->y = y; t->k = k > PLAN_S ? PLAN_S : k;
+            t->x = x; t->y = y; t->blow = 0;
+            if (k & 0x80) { t->blow = k; k = 0; }   // (a blow at an enemy beside him, that way: no steps)
+            t->k = k > PLAN_S ? PLAN_S : k;
             for (int j = 0; j < k; j++) { int d = u8(); if (j < PLAN_S) t->dir[j] = d; }
           }
           if (pl->n > PLAN_T) pl->n = PLAN_T;

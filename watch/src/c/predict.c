@@ -6,6 +6,8 @@
  * The phone's own frames come later: while they are behind, the predicted place is shown; once they agree, they take
  * over again. If they disagree (a monster came into view and the hero stopped, the press did something else), the
  * picture slides back to the phone's in a moment.
+ * Select (or a tap) on an enemy beside the hero swings at once: his attack animation plays from the press, turned to it;
+ * what the blow does (a hit or a miss, the damage, the enemy's answer) only ever comes with the phone's frames.
  */
 #include "predict.h"
 
@@ -36,10 +38,13 @@ static Obj *obj(uint16_t id) { return id < MAX_ID ? g_obj[id] : NULL; }
 static int32_t iabs(int32_t v) { return v < 0 ? -v : v; }
 
 static void walk_start(Obj *h, int k, const uint8_t *dir, uint32_t now);
-void predict_reset(void) { s_plan.on = false; s_box = s_walk = false; s_eid = NONE; }
-bool predict_active(void) { return s_box || s_walk || s_eid != NONE; }
+static bool swing_start(Obj *h, int blow, uint32_t now);
+static bool s_atk;               // the hero's swing shown (swing_start)
+void predict_reset(void) { s_plan.on = false; s_box = s_walk = s_atk = false; s_eid = NONE; }
+bool predict_active(void) { return s_box || s_walk || s_atk || s_eid != NONE; }
 
 bool predict_hero(void) { return s_walk; }
+bool predict_planned(void) { return s_plan.on; }
 bool predict_walking(uint32_t now, uint32_t *since) { if (!s_walk || now - s_wt > GAME_MS(2000)) return false; *since = s_wt; return true; }
 void predict_touch(void) { s_plan.on = false; }
 
@@ -49,12 +54,22 @@ static uint16_t s_thero = NONE;
 // A new plan (C_PREDICT) is read straight into the one in use (with 32 steps a walk, a second copy cost 400 bytes
 // of the heap): predict_plan() before, predict_set() after
 static bool s_was_on; static uint16_t s_was_marker; static uint8_t s_was_n, s_was_cur;
+static uint8_t s_cur_sent;       // the current target as the phone sent it (our own Downs move s_plan.cur)
+static void plan_came(void);
 Plan *predict_plan(void) {
   s_was_on = s_plan.on; s_was_marker = s_plan.marker; s_was_n = s_plan.n; s_was_cur = s_plan.cur;
   memset(&s_plan, 0, sizeof s_plan);
   return &s_plan;
 }
-void predict_set(void) {
+void predict_set(void) { s_cur_sent = s_plan.cur; plan_came(); }
+// (in a fight the plan goes while the hero acts and comes back the same: the phone says so in 2 bytes, the watch keeps it)
+void predict_again(bool on) {
+  s_was_on = s_plan.on; s_was_marker = s_plan.marker; s_was_n = s_plan.n; s_was_cur = s_plan.cur;
+  s_plan.on = on && s_plan.n;
+  if (on) s_plan.cur = s_cur_sent;
+  plan_came();
+}
+static void plan_came(void) {
   Plan *p = &s_plan;
 #ifdef TRACE_WALK
   if (p->on) s_thero = p->hero;
@@ -171,9 +186,61 @@ bool predict_button(int code, uint32_t now) {
   PlanTarget *t = &s_plan.t[s_plan.cur < s_plan.n ? s_plan.cur : 0];
   Obj *h = obj(s_plan.hero);
   s_plan.on = false;                                     // (whatever Select does, the next plan comes from the phone)
+  if (t->blow && h) return swing_start(h, t->blow, now);
   if (!t->k || !h) return false;
   walk_start(h, t->k, t->dir, now);
   return true;
+}
+
+// ---- a blow: the hero's swing from the press (his attack animation, as CharSprite.attack: turned to the enemy) ----
+// The phone's frames bring the rest. Its own swing, a radio round trip later, isn't shown again. The swing shown stops
+// at its blow (the frame before the last: the weapon out) until the phone's swing gets there too (at most HOLD_MS
+// more), so its outcome, which the phone works out as its swing ends, follows the blow as in Shattered rather than
+// a third of a second after the hero stood back; then the last frame (he stands as before) until the phone's swing is
+// over, and the phone's frames have him. If the phone does something else (the enemy had gone: he walks there), the
+// swing stops at once and the phone's frames show that.
+#define HOLD_MS GAME_MS(250)
+static uint16_t s_aid, s_aanim, s_atx0; static uint32_t s_at, s_aat0; static int32_t s_ax0, s_ay0; static bool s_aflip, s_aseen;
+static bool s_arel;              // the blow's frame let go: the phone's swing got past it, or HOLD_MS went by
+static bool swing_start(Obj *h, int blow, uint32_t now) {
+  Anim *a = scene_anim(s_plan.atk);
+  if (!a || !a->n || !(h->flags & F_ANIM)) return false;
+  int d = blow & 15, dx = d % 3 - 1;
+  s_atk = true; s_aid = s_plan.hero; s_aanim = s_plan.atk; s_at = now; s_aseen = false; s_arel = false;
+  s_atx0 = h->tx; s_aat0 = h->at; s_ax0 = obj_dyn_raw(h, 0, now); s_ay0 = obj_dyn_raw(h, 1, now);
+  s_aflip = dx < 0 ? true : dx > 0 ? false : (h->flags & F_FLIPH) != 0;   // (CharSprite.turnTo: by the columns)
+  APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing");
+  return true;
+}
+bool predict_anim(const Obj *o, uint32_t now, int *anim, int *frame, bool *fliph) {
+  if (!s_atk || o != obj(s_aid)) return false;
+  Anim *a = scene_anim(s_aanim);
+  if (!a || !a->n) return false;
+  int fr = a->delay_ms ? (int)((now - s_at) / a->delay_ms) : 0, last = a->n - 1;
+  if (!s_arel && a->delay_ms && now - s_at >= (uint32_t)a->delay_ms * last + HOLD_MS) s_arel = true;
+  if (!s_arel && last > 1 && fr > last - 1) fr = last - 1;
+  *anim = s_aanim; *frame = fr < last ? fr : last; *fliph = s_aflip;
+  return true;
+}
+static void swing_tick(uint32_t now) {
+  Obj *h = obj(s_aid);
+  const char *why = NULL;
+  if (!h) why = "gone";
+  else {
+    bool phone = h->tx == s_aanim && (h->flags & F_ANIM) && (h->tx != s_atx0 || h->at != s_aat0);   // the phone's own swing plays
+    if (phone) {
+      s_aseen = true;
+      // (where the phone's swing is: at its last frame, the blow shown here is let go)
+      Anim *a = scene_anim(h->tx);
+      if (a && a->n && a->delay_ms) { uint32_t t = (uint32_t)h->timer * a->delay_ms / 256 + (now - h->at); if (h->frame + t / a->delay_ms >= (uint32_t)a->n - 1) s_arel = true; }
+    }
+    else if (s_aseen) why = "over";   // (over there too: its frames from here)
+    else if (h->tx != s_atx0 || iabs(obj_dyn_raw(h, 0, now) - s_ax0) > 8 || iabs(obj_dyn_raw(h, 1, now) - s_ay0) > 8) why = "cut short";   // (it did something else)
+    // never swung there: its frames from well after the press come without it (at the latest after WAIT_MS)
+    else if ((s_heard - s_at < 0x80000000u && s_heard - s_at > (uint32_t)s_plag + GAME_MS(400)) || now - s_at > WAIT_MS) why = "not confirmed";
+    if (!why && now - s_at > 2 * WAIT_MS) why = "too long";
+  }
+  if (why) { s_atk = false; APP_LOG(APP_LOG_LEVEL_INFO, "predict: swing %s, %d ms after the press", why, (int)(now - s_at)); }
 }
 
 // the hero sets off along the steps given, now
@@ -238,6 +305,17 @@ bool predict_tap(int x, int y, uint32_t now) {
   int m = 4096 / c->zoom; if (m < 6) m = 6;
   if (cx >= s_pw || cy >= s_ph || fx < m || fx > CELL - m || fy < m || fy > CELL - m) return false;
   int to = cx + cy * s_pw, from = s_plan.hcell, hx = from % s_pw, hy = from / s_pw;
+  // an enemy beside him tapped: the blow (as Select's), unless another creature's or an item's sprite near the tap
+  // takes it (CellSelector.onClick: a creature's within 12 of its cell's middle)
+  for (int i = 0; i < s_plan.n; i++) {
+    int b = s_plan.t[i].blow, d = b & 15;
+    if (!b || hx + d % 3 - 1 != cx || hy + d / 3 - 1 != cy) continue;
+    for (int j = 0; j < s_plan.nhot; j++) {
+      int hc = s_plan.hot[j] & 0x7FFF, ax = (hc % s_pw) * CELL + CELL / 2, ay = (hc / s_pw) * CELL + CELL / 2;
+      if (hc != to && hc != from && iabs(mx - ax) <= 96 + m && iabs(my - ay) <= 96 + m) return false;
+    }
+    return swing_start(h, b, now);
+  }
   if (!ground(to) || iabs(cx - hx) > TAP_R || iabs(cy - hy) > TAP_R) return false;
   // a creature's or an item's sprite takes a tap within 12 of its cell's middle (CellSelector.onClick); stairs, a pot
   for (int i = 0; i < s_plan.nhot; i++) {
@@ -342,6 +420,7 @@ void predict_tick(uint32_t now) {
   trace(now);
 #endif
   if (s_eid != NONE && (now - s_et >= EASE_MS || !obj(s_eid))) s_eid = NONE;
+  if (s_atk) swing_tick(now);
   if (s_box) {
     Obj *m = obj(s_plan.marker);
     if (!m) s_box = false;

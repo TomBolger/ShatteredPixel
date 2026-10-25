@@ -150,7 +150,8 @@ public final class RefinementTest {
         com.watabou.noosa.Camera.main.shift(new com.watabou.utils.PointF(400, 0)); frames(app, 3);
         Object hud = get(oc, "hud"), edge = get(hud, "edge", pebxel.ui.WatchHud.class), mk = get(oc, "marker");
         check(((com.watabou.noosa.Group) edge).visible, "a target off the view is pointed to from the edge");
-        check(!((com.watabou.noosa.Image) get(mk, "img", mk.getClass())).visible, "its box on the map is hidden meanwhile");
+        com.watabou.noosa.Image mki = (com.watabou.noosa.Image) get(mk, "img", mk.getClass());
+        check(!mki.visible || mki.alpha() == 0, "its box on the map is hidden meanwhile");   // (see-through: Controls.Marker.hide)
         oc.button(Controls.DOWN); frames(app, 90);
         check(!((com.watabou.noosa.Group) edge).visible, "a Down brings the view back to show the target");
         // the hero too: after each Down the hero and the target both show whole in the play area (Near and Far)

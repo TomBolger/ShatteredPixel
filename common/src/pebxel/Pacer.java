@@ -50,7 +50,9 @@ public final class Pacer {
 	/** The clock (ms); RadioTest's runs in simulated time. */
 	public java.util.function.LongSupplier clock = System::currentTimeMillis;
 
-	public long bytes, msgs, merged, retries, resets;
+	public long bytes, msgs, merged, retries, resets, lingered;
+	static boolean LINGER = env("PACE_LINGER", 1) != 0 && !System.getenv().containsKey("PACE_OLD");
+	static int LINGER_MAX = 600;
 
 	public Pacer(Link link, Radio radio) { this.link = link; this.radio = radio; }
 
@@ -89,10 +91,15 @@ public final class Pacer {
 			busy = false;
 		}
 		if (!sync) { sinceSync = 0; return; }
-		if (OLD || !busy || link.pendingBytes() < budget()) { link.frame(sinceSync); sinceSync = 0; }
+		boolean first = false;
+		if (OLD || !busy || link.pendingBytes() < budget()) { first = !link.pending(); link.frame(sinceSync); first &= link.pending(); sinceSync = 0; }
 		else merged++;
 		synchronized (this) {
-			if (out == null && retryAt == 0 && queue.isEmpty() && !restart && link.pending()) {
+			// (the radio free, and only this frame's changes waiting, a few: they wait for the next frame. In a fight what
+			// happens comes in pairs a frame apart (a blow, then its damage number; Shattered shows texts a frame later):
+			// sent at once, the second waited a whole round trip behind the first, 150 ms and more)
+			if (first && LINGER && !walking && link.pendingBytes() < LINGER_MAX) lingered++;
+			else if (out == null && retryAt == 0 && queue.isEmpty() && !restart && link.pending()) {
 				queue.addAll(link.take(OLD ? maxMsg : Math.min(maxMsg, CAP)));
 				next();
 			}

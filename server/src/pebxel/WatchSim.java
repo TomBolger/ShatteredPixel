@@ -19,18 +19,23 @@ public final class WatchSim {
 	public final java.util.List<Integer> events = new java.util.ArrayList<>();
 	/** The plans the watch was sent (Controls.plan), as text, for tests. */
 	public final java.util.List<String> plans = new java.util.ArrayList<>();
+	private String lastPlan = "none";
 	private String readPlan() {
-		if (u8() == 0) return "none";
+		int v = u8();
+		if (v == 0) return "none";
+		if (v == 2) return lastPlan;   // (the last one again)
 		StringBuilder sb = new StringBuilder();
-		int mid = u16(), hid = u16(), step = u8() * 4, n = u8(), cur = u8();
+		int mid = u16(), hid = u16(), step = u8() * 4, n = u8(), cur = u8(), atk = u16();
 		sb.append("marker ").append(mid).append(" hero ").append(hid).append(" step ").append(step).append(" cur ").append(cur);
+		if (atk != 0xFFFF) sb.append(" attack ").append(atk);
 		for (int i = 0; i < n; i++) {
 			int x = (short) u16(), y = (short) u16(), k = u8();
 			sb.append(" | ").append(x / 8f).append(",").append(y / 8f);
-			if (k > 0) { sb.append(" walk "); for (int j = 0; j < k; j++) sb.append(u8()); }
+			if ((k & 0x80) != 0) sb.append(" blow ").append(k & 15);
+			else if (k > 0) { sb.append(" walk "); for (int j = 0; j < k; j++) sb.append(u8()); }
 		}
 		if (u8() != 0) { sb.append(" | tap from ").append(u16()); int nh = u8(); sb.append(" hot"); for (int i = 0; i < nh; i++) sb.append(' ').append(u16()); }
-		return sb.toString();
+		return lastPlan = sb.toString();
 	}
 	public static int W = Screen.w, H = Screen.h;
 	public final int[] fb = new int[Screen.w * Screen.h];
@@ -117,7 +122,8 @@ public final class WatchSim {
 		} else if (msg.length >= 5 && msg[0] == Link.C_LATEST) {   // (as main.c enqueue: a steady delay)
 			float lat = now - stamp(msg, 0) / 1000f;
 			int t5 = msg.length >= 10 && msg[5] == Link.C_READY ? 10 : 5;
-			if (msg.length >= t5 + 9 && msg[t5] == Link.C_AHEAD) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4)); t5 += 9; }
+			if (msg.length >= t5 + 9 && msg[t5] == Link.C_AHEAD) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4), false); t5 += 9; }
+			if (msg.length >= t5 + 9 && msg[t5] == Link.C_ANSWER) { ahead(stamp(msg, t5) / 1000f, stamp(msg, t5 + 4), true); t5 += 9; }
 			float old = msg.length >= t5 + 5 && msg[t5] == Link.C_TIME ? now - stamp(msg, t5) / 1000f : lat;
 			if (!haveOff || lat < base) base = lat; else base += (lat - base) / 32;
 			float need = Math.max(0, Math.min(LATE_MAX, old - base));
@@ -134,9 +140,15 @@ public final class WatchSim {
 	// a walk worked out ahead (C_AHEAD, see Ahead): its frames [a0, a1] (main.c plays them from the press when it
 	// walked the hero ahead, predict.c: not modelled here), the one before it as it was
 	private float a0 = -1, a1, aOff, p0 = -1, p1, pOff;
-	private void ahead(float from, long to) {
+	// (and the answer to a press, C_ANSWER: main.c plays its first frame as it comes, the rest after it; one that comes
+	// later puts it back, not modelled here)
+	private boolean aAnswer;
+	private void ahead(float from, long to, boolean answer) {
 		float end = to == 0xFFFFFFFFL ? Float.MAX_VALUE : to / 1000f;
-		if (from != a0) { p0 = a0; p1 = a1; pOff = aOff; a0 = from; aOff = off; }   // (main.c: not shown ahead, at the usual delay)
+		if (from != a0 || answer != aAnswer) {
+			p0 = a0; p1 = Math.min(a1, from - 0.001f); pOff = aOff; a0 = from; aAnswer = answer;
+			aOff = answer ? Math.min(off, now - from) : off;   // (main.c: a walk not shown ahead, at the usual delay)
+		}
 		a1 = end;
 	}
 	private float dueOf(float st) {
@@ -186,11 +198,11 @@ public final class WatchSim {
 			if (stopAtTime && b[p] == Link.C_TIME && p > from) return p;
 			int c = u8();
 			// (as the watch: a frame only half here isn't drawn; the last whole one stays on screen)
-			if (c == Link.C_COMMIT) partial = false; else if (c != Link.C_TIME && c != Link.C_LATEST && c != Link.C_READY && c != Link.C_AHEAD && c != Link.C_EVENT) partial = true;
+			if (c == Link.C_COMMIT) partial = false; else if (c != Link.C_TIME && c != Link.C_LATEST && c != Link.C_READY && c != Link.C_AHEAD && c != Link.C_ANSWER && c != Link.C_EVENT) partial = true;
 			switch (c) {
 				case Link.C_TIME: p += 4; break;
 				case Link.C_LATEST: p += 4; break;
-				case Link.C_AHEAD: p += 8; break;
+				case Link.C_AHEAD: case Link.C_ANSWER: p += 8; break;
 				case Link.C_RESET: a0 = p0 = -1; objs.clear(); head = Link.NONE; dyn.clear(); anims.clear(); Arrays.fill(cams, null); parts.clear(); Arrays.fill(recipes, null); fogTex = -1; break;
 				case Link.C_CAM: {
 					int id = u8(); Cam k = new Cam(); k.x = s16(); k.y = s16(); k.w = s16(); k.h = s16(); k.zoom = u16(); k.sx = s16(); k.sy = s16();
@@ -291,6 +303,7 @@ public final class WatchSim {
 				case Link.C_PASS: { u8(); u8(); u8(); int n = u16(); p += n; break; }
 				case Link.C_SOUND: { int k = u8(), v = u8(); sounds.add(k + ":" + v); break; }
 				case Link.C_EVENT: events.add(u8()); break;
+				case Link.C_FLASH: p += 3; break;   // (a white flash: not drawn here)
 				case Link.C_COMMIT: break;
 				default: throw new IllegalStateException("bad command " + c + " at " + (p - 1));
 			}
@@ -309,6 +322,7 @@ public final class WatchSim {
 			case Link.K_NINE: p += 31; break;
 			case Link.K_TILES: p += 16; break;
 			case Link.K_TEXT: p += 11 + (b[p + 10] & 255); break;
+			case Link.K_FLOAT: { int n = b[p + 10] & 255; p += 12 + n + (b[p + 11 + n] != 0 ? 14 : 0); break; }   // (as K_TEXT, then its icon)
 			case Link.K_QUADS: p += 4 + (b[p + 3] & 255) * 16 + 7; break;
 			case Link.K_SHAPE: p += 15; break;
 			case Link.K_EMIT: {   // (particles the watch makes: readEmit, drawEmit)
@@ -324,7 +338,7 @@ public final class WatchSim {
 	private void readDyn(Obj o) {
 		int m = u8();
 		Arrays.fill(o.vel, 0);
-		o.dyn[Link.D_X] = s16(); o.dyn[Link.D_Y] = s16();
+		if ((m & 1) != 0) { o.dyn[Link.D_X] = s16(); o.dyn[Link.D_Y] = s16(); }   // (else where it stood)
 		o.dyn[Link.D_A] = (m & 2) != 0 ? u8() : 255;
 		if ((m & 4) != 0) { o.dyn[Link.D_SX] = s16(); o.dyn[Link.D_SY] = s16(); } else o.dyn[Link.D_SX] = o.dyn[Link.D_SY] = 256;
 		o.dyn[Link.D_ANG] = (m & 8) != 0 ? s16() : 0;
@@ -446,7 +460,7 @@ public final class WatchSim {
 				break;
 			}
 			case Link.K_TILES: tiles(c, o); break;
-			case Link.K_TEXT: text(sx(c, d(o, Link.D_X)), sy(c, d(o, Link.D_Y)), s); break;
+			case Link.K_TEXT: case Link.K_FLOAT: text(sx(c, d(o, Link.D_X)), sy(c, d(o, Link.D_Y)), s); break;   // (K_FLOAT: its icon not drawn here)
 		}
 	}
 
@@ -919,7 +933,7 @@ public final class WatchSim {
 			b += 8 + 80;
 			switch (o.kind) {
 				case Link.K_TILES: if (o.tiles != null) b += 8 + 8 + (o.st[7] & 255) * (o.st[8] & 255) * cellBytes(o); break;   // (cells only once one is set)
-				case Link.K_TEXT: b += 8 + (o.st[10] & 255) + 1; break;
+				case Link.K_TEXT: case Link.K_FLOAT: b += 8 + (o.st[10] & 255) + 1; break;
 				case Link.K_NINE: b += 8 + 4; break;
 				case Link.K_QUADS: b += 8 + 2 + (o.st[3] & 255) * 16; break;
 			}

@@ -82,6 +82,7 @@ public class Touches {
 				case 1: { // a tap: press, and let go next frame (or after a long press)
 					int[] p = link.remap(cam, stamp, px, py);
 					if (p == null) break;   // the window it was aimed at has gone: don't guess
+					if (!lng) link.pressed();   // (the frames that answer it play as they come: Link.C_ANSWER)
 					endTap(false);
 					Game.inputHandler.touchDown(p[0], p[1], ID, 0);
 					upX = p[0]; upY = p[1];

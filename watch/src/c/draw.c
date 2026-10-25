@@ -1,6 +1,7 @@
 // Draws the watch's copy of Shattered PD's screen, the way SPD's renderer would
 // (textured rectangles x colour multiply + add, then alpha), in Pebble's 64 colours.
 #include "draw.h"
+#include "predict.h"
 #include "scene.h"
 #include "art.h"
 #include "particles.h"
@@ -321,6 +322,21 @@ static void draw_text(Obj *o) {
   // releasing the frame buffer for every line wasted work on each redraw. The next raster object takes it.
 }
 
+// a damage number and its icon (K_FLOAT; Link.floatState): the icon as an image, as see-through as the text, then the
+// text (o->w: its font, and the icon's width above it)
+static void draw_float(Obj *o, int alpha) {
+  if (o->tex && alpha >= 30) {
+    static const uint8_t WHITE[7] = {255, 255, 255, 0, 0, 0, 0};
+    fb_take();
+    if (s_fb) {
+      colour_setup(WHITE, alpha);
+      int32_t X = obj_dyn(o, 0, s_now) + o->ox, Y = obj_dyn(o, 1, s_now) + o->oy;
+      blit(o->tex, o->tx, o->ty, o->tw, o->th, scx(X), scy(Y), scx(X + ((uint16_t)o->w >> 8)), scy(Y + o->h), false, false);
+    }
+  }
+  draw_text(o);   // (its font: the low bits of o->w)
+}
+
 // ---- round-screen pieces (Pebble PD's disc and arc) ----
 static int isq(int v) { int r = 0, b = 1 << 14; while (b > v) b >>= 2; while (b) { if (v >= r + b) { v -= r + b; r = (r >> 1) + b; } else r >>= 1; b >>= 2; } return r; }
 static void hline(int x0, int x1, int y, uint8_t c) {   // pixels x0..x1 of row y
@@ -463,12 +479,15 @@ static void draw_obj(Obj *o) {
   int alpha = obj_dyn(o, 2, s_now);
   s_fine = o->kind == K_RECT;
   if (o->kind == K_TEXT) { draw_text(o); return; }
+  if (o->kind == K_FLOAT) { draw_float(o, alpha); return; }
   fb_take();
   if (!s_fb) return;
   if (o->kind == K_EMIT) { draw_emit(o); return; }
   if (o->kind == K_SHAPE) { draw_shape(o); return; }
   if (alpha < 30 && !o->col[6]) return;
-  colour_setup(o->col, alpha);
+  uint8_t fc[7]; const uint8_t *col = o->col;
+  if (scene_flash(s_id, s_now)) { memcpy(fc, o->col, 7); fc[3] = fc[4] = fc[5] = 255; col = fc; }   // (hit: white a moment)
+  colour_setup(col, alpha);
   if (o->kind == K_TILES) { draw_tiles(o); return; }
   if (o->kind == K_SKIN) { draw_skin(o); return; }
   int32_t X = obj_dyn(o, 0, s_now), Y = obj_dyn(o, 1, s_now), sx = obj_dyn(o, 3, s_now), sy = obj_dyn(o, 4, s_now), ang = obj_dyn(o, 5, s_now);
@@ -490,7 +509,11 @@ static void draw_obj(Obj *o) {
   } else {
     f.tex = o->tex; f.tx = o->tx; f.ty = o->ty; f.tw = o->tw; f.th = o->th;
     f.fx = o->flags & F_FLIPH; f.fy = o->flags & F_FLIPV;
-    if (o->flags & F_ANIM) {
+    int pa, pf; bool pfl;
+    if (predict_anim(o, s_now, &pa, &pf, &pfl)) {   // (the hero's swing at the press: predict.c)
+      Anim *a = scene_anim(pa);
+      f.tex = a->tex; f.tx = a->rects[pf * 4]; f.ty = a->rects[pf * 4 + 1]; f.tw = a->rects[pf * 4 + 2]; f.th = a->rects[pf * 4 + 3]; f.fx = pfl;
+    } else if (o->flags & F_ANIM) {
       Anim *a = scene_anim(o->tx); if (!a || !a->n) return;
       int fr = o->frame < a->n ? o->frame : a->n - 1;   // (an animation the phone has since swapped for a shorter one)
       if (a->delay_ms) {

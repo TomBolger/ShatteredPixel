@@ -228,6 +228,7 @@ public class Controls {
 	private boolean touching;
 
 	public void button(int code) {
+		if (link != null) link.pressed();   // (the frames that answer it play as they come: Link.C_ANSWER)
 		touching = false; fingerLast = false;
 		boolean held = (code & LONG) != 0;
 		int b = code & 15;
@@ -1112,14 +1113,21 @@ public class Controls {
 	 * The plan for the watch's next press, so the target box and the hero answer at once rather than a radio
 	 * round trip later (the phone's own frames then confirm it, or the watch puts things back):
 	 * 0 = the hero isn't ready (nothing to plan); else 1, marker id u16 (0xFFFF: not on the watch), hero id u16 (0xFFFF
-	 * none), step ms / 4, n, current target, then per target: marker x, y (s16, x8, 0x7FFF: none), steps k, k directions
-	 * ((dx + 1) + 3 (dy + 1)); then for a tap on the map (predict.c works out the walk it sets off on, as Hero.getCloser
+	 * none), step ms / 4, n, current target, the hero's attack animation u16 (0xFFFF: none), then per target: marker x, y
+	 * (s16, x8, 0x7FFF: none), steps k, k directions ((dx + 1) + 3 (dy + 1)), or for a blow at an enemy beside him
+	 * (Select attacks it: the watch swings at the press) 0x80 + its direction instead; then for a tap on the map (predict.c works out the walk it sets off on, as Hero.getCloser
 	 * would, over the ground Link.pass sent): 1 if a tap may walk (0: nothing more), the hero's cell u16, and the cells
 	 * where a tap does something else or the way is shut: count u8, each u16 (bit 15: no way through it either).
 	 */
+	private Link link;   // (for Link.pressed)
 	public byte[] plan(Link link) {
+		this.link = link;
 		Hero h = Dungeon.hero;
 		if (!(Game.scene() instanceof GameScene) || h == null || !h.isAlive() || !h.ready || Ui.topWindow() != null) return new byte[]{0};
+		// (the hero ready again since the list was last made, a frame ago at most (the game's actor thread readied him
+		// after this frame's look at the list): none till it is made again. Else a plan without the list went first, and the
+		// whole of it the frame after: twice a blow, the bigger one 90 bytes)
+		if (!onToolbar && (targetsStale || pending || h.pos != lastPos || Dungeon.depth != lastDepth || com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now() != lastNow)) return new byte[]{0};
 		// (the targets: not while the toolbar or a finger has the buttons, nor with a press still being taken; the box
 		// hidden, off the view at the edge, Select still walks there at once)
 		boolean listed = !onToolbar && !touching && !pending && !targets.isEmpty() && marker.img != null && marker.img.parent != null;
@@ -1128,6 +1136,9 @@ public class Controls {
 		java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
 		int n = listed ? Math.min(targets.size(), PLAN_TARGETS) : 0;
 		b.write(1); w16(b, mid < 0 ? 0xFFFF : mid); w16(b, hid < 0 ? 0xFFFF : hid); b.write(STEP_MS / 4); b.write(n); b.write(n == 0 ? 0 : Math.min(target, n - 1));
+		int atk = -1;
+		if (!aiming && hid >= 0 && h.sprite != null) for (int i = 0; i < n; i++) if (blow(h, i, cellOf(targets.get(i))) >= 0) { atk = link.attackAnim(h.sprite); break; }
+		w16(b, atk < 0 ? 0xFFFF : atk);
 		Camera cam = Camera.main; PointF rest = cam == null ? null : restCentre(cam);
 		for (int i = 0; i < n; i++) {
 			int cell = cellOf(targets.get(i));
@@ -1138,6 +1149,8 @@ public class Controls {
 			if (mid < 0 || (rest != null && shiftFor(cell, rest, cam) != null)) { w16(b, 0x7FFF); w16(b, 0x7FFF); }
 			else { w16(b, Math.round(xy[0] * 8)); w16(b, Math.round(xy[1] * 8)); }
 			Assist.Target t = i < plan.size() && plan.size() == targets.size() ? plan.get(i) : null;
+			int bl = atk < 0 ? -1 : blow(h, i, cell);
+			if (bl >= 0) { b.write(0x80 | bl); continue; }
 			// (an item's use, a wait: no walk. Nor towards a monster while the box is off the watch: he may well have come
 			// to the hero meanwhile, and a blow is struck instead of the steps shown)
 			boolean walks = t == null || t.kind == Assist.GO || t.kind == Assist.PICKUP || (t.kind == Assist.ENEMY && t.action == null && mid >= 0);
@@ -1155,6 +1168,26 @@ public class Controls {
 		tapPlan(b, link, h, aiming || hid < 0);
 		return b.toByteArray();
 	}
+	/**
+	 * Select on target i strikes the enemy on its cell, beside the hero (Assist.act or GameScene.handleCell, then
+	 * Hero.handle's Attack and actAttack: the hero's sprite plays its attack animation at once, turned to it): its
+	 * direction ((dx + 1) + 3 (dy + 1)), else -1. Only the swing is shown ahead; whether it hits, the damage, the
+	 * enemy's answer come with the phone's frames.
+	 */
+	private int blow(Hero h, int i, int cell) {
+		if (cell < 0 || aiming()) return -1;
+		Assist.Target t = i < plan.size() && plan.size() == targets.size() ? plan.get(i) : null;
+		if (t != null && (t.kind != Assist.ENEMY || t.action != null)) return -1;
+		Char ch = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(cell);
+		if (!(ch instanceof Mob) || ch == h) return -1;
+		Mob m = (Mob) ch;
+		Level lv = Dungeon.level;
+		if (m.alignment != Char.Alignment.ENEMY || m.heroShouldInteract() || m.invisible > 0 || h.fieldOfView == null || !h.fieldOfView[cell]
+				|| !lv.adjacent(h.pos, cell) || !h.canAttack(m) || h.isCharmedBy(m) || lv.map[cell] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.ALCHEMY) return -1;
+		int w = lv.width(), dx = cell % w - h.pos % w, dy = cell / w - h.pos / w;
+		return (dx + 1) + 3 * (dy + 1);
+	}
+
 	/** Cells the watch looks at round the hero for a tap's walk (predict.c TAP_R: its way is worked out in that square). */
 	static final int TAP_R = 20, TAP_HOT = 32;
 	/**
@@ -1236,7 +1269,7 @@ public class Controls {
 			img.scale.set(s);
 			float[] xy = place(cell);
 			img.x = xy[0]; img.y = xy[1];
-			img.visible = true;
+			img.visible = true; img.alpha(1);
 		}
 		/** Where the marker stands over a cell (its top left, in the map's units). */
 		static float[] place(int cell) {
@@ -1244,7 +1277,9 @@ public class Controls {
 			return new float[]{(cell % Dungeon.level.width()) * DungeonTilemap.SIZE - (16 * s - 16) / 2,
 					(cell / Dungeon.level.width()) * DungeonTilemap.SIZE - (16 * s - 16) / 2};
 		}
-		void hide() { if (img != null) img.visible = false; }
+		// (see-through rather than not drawn: the watch keeps it, with its number, so the plan, which names it, stays the
+		// same; hidden, it was sent anew, with a new number, every time the hero acted, and the whole plan with it)
+		void hide() { if (img != null) img.alpha(0); }
 	}
 
 

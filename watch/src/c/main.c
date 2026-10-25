@@ -7,7 +7,7 @@
 #include "predict.h"
 
 enum { KEY_DATA = 1, KEY_HELLO = 2, KEY_BUTTON = 3, KEY_STATS = 4, KEY_VERSION = 5, KEY_TOUCH = 6, KEY_SCREEN = 7 };
-#define PROTOCOL 14  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
+#define PROTOCOL 15  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
 enum { B_UP = 1, B_DOWN, B_SELECT, B_BACK, B_LONG = 16, B_WALKING = 32 };   // B_WALKING: pressed while a walk shows (Controls.WALKING)
 
 static Window *s_win;
@@ -153,7 +153,7 @@ static uint32_t stamp_at(const uint8_t *d) { return d[1] | d[2] << 8 | d[3] << 1
                                  // up the timers: the emulator's every step came 27 ms late, and each one put back was a stop)
 #define CATCH GAME_MS(200)   // game ms of a walk's start played at once, at most, when its frames came late
 #define NO_END 0xFFFFFFFFu
-typedef struct { bool on, join; uint32_t a0, a1; int32_t off; } Walk;   // phone stamps a0..a1 play at stamp + off (join: see due_of)
+typedef struct { bool on, join, answer; uint32_t a0, a1; int32_t off; } Walk;   // phone stamps a0..a1 play at stamp + off (join: see due_of; answer: C_ANSWER's)
 static Walk s_wk, s_wkp;     // the newest walk, and the one before it
 static bool in_walk(const Walk *w, uint32_t st) { return w->on && (int32_t)(st - w->a0) >= 0 && (w->a1 == NO_END || (int32_t)(w->a1 - st) >= 0); }
 static Walk *walk_of(uint32_t st) { return in_walk(&s_wk, st) ? &s_wk : in_walk(&s_wkp, st) ? &s_wkp : NULL; }
@@ -170,8 +170,8 @@ static uint32_t due_of(uint32_t st) {
   return d;
 }
 static void walk_heard(uint32_t a0, uint32_t a1, uint32_t now) {
-  if (!s_wk.on || a0 != s_wk.a0) {
-    s_wkp = s_wk;
+  if (!s_wk.on || a0 != s_wk.a0 || s_wk.answer) {
+    s_wkp = s_wk; if (s_wkp.a1 == NO_END) s_wkp.a1 = a0 - 1;   // (one not over yet ends where this begins)
     uint32_t began;
     // (a walk not shown ahead, a tap's: at the usual delay. Played from when its first frames came, the next ones,
     // a radio round trip behind them, came late: the hero stood still a moment, then hurried on)
@@ -179,8 +179,26 @@ static void walk_heard(uint32_t a0, uint32_t a1, uint32_t now) {
     int32_t lo = (int32_t)(now - a0) - CATCH;
     if (off < lo) off = lo;
     if (off > s_off) off = s_off;   // (never later than usual)
-    s_wk.on = true; s_wk.join = true; s_wk.a0 = a0; s_wk.off = off;
+    s_wk.on = true; s_wk.join = true; s_wk.answer = false; s_wk.a0 = a0; s_wk.off = off;
     APP_LOG(APP_LOG_LEVEL_INFO, "walk ahead: %d ms before the usual delay (press %d, came %d)", (int)(s_off - off), (int)(s_off - (int32_t)(began - a0)), (int)(s_off - (int32_t)(now - a0)));
+  }
+  s_wk.a1 = a1;
+}
+
+// ---- the answer to a press (C_ANSWER; Link.pressed on the phone) ----
+// The frames from the first one the phone made after a press until its hero is ready again: the outcome of a blow, the
+// enemy's answer. At the usual delay they played a radio round trip and some 200 ms after the press; now the first of
+// them plays as it comes, the rest at the same delay after it (one that comes later puts the rest back by as much, as on
+// a walk: pump). The frames after them wait for the usual delay again: nothing goes on then, the hero waits for a press.
+static void answer_heard(uint32_t a0, uint32_t a1, uint32_t now) {
+  if (!s_wk.on || a0 != s_wk.a0 || !s_wk.answer) {
+    s_wkp = s_wk; if (s_wkp.a1 == NO_END) s_wkp.a1 = a0 - 1;   // (one not over yet ends where this begins)
+    int32_t off = (int32_t)(now - a0);
+    if (off > s_off) off = s_off;   // (never later than usual)
+    s_wk.on = true; s_wk.join = false; s_wk.answer = true; s_wk.a0 = a0; s_wk.off = off;
+#ifdef TRACE_WALK
+    APP_LOG(APP_LOG_LEVEL_INFO, "answer: %d ms before the usual delay", (int)(s_off - off));
+#endif
   }
   s_wk.a1 = a1;
 }
@@ -234,8 +252,9 @@ static void pump(void *data) {
       // frames are, he leapt on to where he would have been by then: a cell or two at once. (Not while the watch
       // shows him walking ahead, predict.c: there the phone's frames catching up don't show; nor at the walk's start,
       // which catches up on purpose, walk_heard: put back, a late start held the delay up for seconds after)
+      // (an answer's frame that came late, likewise, from its first: at most back to the usual delay)
       Walk *w = rush ? NULL : walk_of(stamp_at(m->data + m->pos));
-      if (w && (int32_t)(now - due) > STALL_SLACK && !predict_hero() && (int32_t)(stamp_at(m->data + m->pos) - w->a0) > CATCH) {
+      if (w && (int32_t)(now - due) > STALL_SLACK && (w->answer ? w->off < s_off : !predict_hero() && (int32_t)(stamp_at(m->data + m->pos) - w->a0) > CATCH)) {
 #ifdef TRACE_WALK
         APP_LOG(APP_LOG_LEVEL_INFO, "walk put back %d ms (queue %d)", (int)(now - due), s_qbytes);
 #endif
@@ -268,6 +287,7 @@ static void enqueue(const uint8_t *data, int len, uint32_t now) {
     int t5 = 5;
     if (len >= 10 && data[5] == C_READY) { predict_ready((int16_t)(data[6] | data[7] << 8), (int16_t)(data[8] | data[9] << 8)); t5 = 10; }
     if (len >= t5 + 9 && data[t5] == C_AHEAD) { walk_ahead = t5; t5 += 9; }
+    int answer = 0; if (len >= t5 + 9 && data[t5] == C_ANSWER) { answer = t5; t5 += 9; }
     int32_t old = len >= t5 + 5 && data[t5] == C_TIME ? (int32_t)(now - stamp_at(data + t5)) : lat;
     // the quickest lately: down at once, up slowly (the phone's clock may fall behind, when it stalls)
     if (!s_have_off || lat < s_base) s_base = lat; else s_base += (lat - s_base) / 32;
@@ -279,6 +299,7 @@ static void enqueue(const uint8_t *data, int len, uint32_t now) {
     s_have_off = true;
     off_move(now);
     if (walk_ahead) walk_heard(stamp_at(data + walk_ahead), stamp_at(data + walk_ahead + 4), now);
+    if (answer) answer_heard(stamp_at(data + answer), stamp_at(data + answer + 4), now);
   }
   Msg *m = malloc(sizeof(Msg) + len);
   // short of memory: the pictures' cache gives some back (it can decode them again; a message can't be had again)
@@ -305,6 +326,7 @@ static void dropped(AppMessageResult r, void *ctx) { APP_LOG(APP_LOG_LEVEL_WARNI
 static bool fresh_start(const uint8_t *d, int len) {
   int k = len >= 10 && d[0] == C_LATEST && d[5] == C_READY ? 5 : 0;   // (look past a C_READY, a C_AHEAD)
   if (len >= 14 + k && d[0] == C_LATEST && d[5 + k] == C_AHEAD) k += 9;
+  if (len >= 14 + k && d[0] == C_LATEST && d[5 + k] == C_ANSWER) k += 9;
   return (len >= 1 && d[0] == C_RESET) || (len >= 11 + k && d[0] == C_LATEST && d[5 + k] == C_TIME && d[10 + k] == C_RESET);
 }
 
@@ -427,7 +449,7 @@ static void out_msg(int kind, int x, int y, bool lng) {
 // Is the hero shown on a walk the phone has finished already? (one it worked out ahead, C_AHEAD: its end is known and its
 // last frames are still to play here). A press then stops him all the same (Controls.button), rather than being taken
 // as a new one once the phone waits for real time to catch up. (While the phone's hero is still walking, it stops him)
-static bool walk_shown(void) { return s_q && s_wk.on && s_wk.a1 != NO_END && (int32_t)(s_cur_stamp - s_wk.a0) >= 0 && (int32_t)(s_wk.a1 - s_cur_stamp) > 0; }   // (s_q: its frames wait to play)
+static bool walk_shown(void) { return s_q && s_wk.on && !s_wk.answer && s_wk.a1 != NO_END && (int32_t)(s_cur_stamp - s_wk.a0) >= 0 && (int32_t)(s_wk.a1 - s_cur_stamp) > 0; }   // (s_q: its frames wait to play)
 static void send_button(int code) { out_msg(T_BUTTON, code | (walk_shown() ? B_WALKING : 0), 0, false); }
 
 // the map follows the finger at once; the phone's own scroll takes over when it has applied the drag
