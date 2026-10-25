@@ -60,8 +60,9 @@ final class AsQuests {
 			if (++steps > 1500) return AsBasics.hurry(planA);   // (a step that goes nowhere: given up on this floor)
 			Target q = mine();
 			if (q == null) q = smith();
-			if (q == null) q = ghost();
+			if (q == null) q = ghost(planA);
 			if (q == null) q = wandmaker();
+			if (q == null) q = AsAlchemy.suggest();
 			if (q != null) return q;
 			return AsBasics.hurry(planA);
 		} catch (Throwable e) { lastError = e; return null; }
@@ -94,10 +95,23 @@ final class AsQuests {
 	// =============================================================================================================
 	// the Ghost: his foe killed, back to him for the reward
 	// =============================================================================================================
-	static Target ghost() {
-		if (!flag(Ghost.class, "given") || Ghost.Quest.completed() || !Ghost.Quest.processed()) return null;
-		return toNpc(Ghost.class, "quest: back to the ghost");
+	static Target ghost(Target planA) {
+		if (!flag(Ghost.class, "given") || Ghost.Quest.completed()) return null;
+		if (Ghost.Quest.processed()) return toNpc(Ghost.class, "quest: back to the ghost");
+		// the floor done and his foe not met: it wanders (the crab towards the hero): round the floor a while for it
+		if (!seenAt.containsKey(Ghost.class) || planA == null || !(planA.why.equals("stairs") || planA.why.startsWith("search") || planA.why.startsWith("dead end")) || AsBasics.shortOfFood()) return null;
+		if (patrolL != L) { patrolL = L; patrolT0 = Actor.now(); patrolGoal = -1; }
+		if (Actor.now() - patrolT0 > GHOSTHUNT) return null;
+		int hp = Dungeon.hero.pos;
+		if (patrolGoal < 0 || distance(patrolGoal, hp) <= 1 || walk(patrolGoal) >= INF) {   // the known cell farthest from the last two goals
+			int best = -1, bs = -1;
+			for (int c = 0; c < L.length(); c++) if (dist[c] < INF && dist[c] > 0 && open[c] && !L.water[c]) { int sc = distance(c, hp) + (patrolLast >= 0 ? distance(c, patrolLast) : 0); if (sc > bs) { bs = sc; best = c; } }
+			patrolLast = patrolGoal < 0 ? hp : patrolGoal; patrolGoal = best;
+		}
+		return patrolGoal >= 0 ? new Target(patrolGoal, GO, "quest: round the floor for the ghost's foe") : null;
 	}
+	static Level patrolL; static float patrolT0; static int patrolGoal = -1, patrolLast = -1;
+	static final int GHOSTHUNT = optInt("QGHOST", 400);   // turns spent looking for it once the floor is done
 
 	// =============================================================================================================
 	// the Wandmaker

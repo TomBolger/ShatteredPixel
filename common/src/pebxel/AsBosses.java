@@ -118,8 +118,14 @@ final class AsBosses {
 		int hp = Dungeon.hero.pos, LEN = L.length();
 		danger(0);
 		if (dzAny && dz[hp]) {   // a blow coming here: the nearest cell it misses (through the danger, if that's the only way)
+			// (on the way to plan A's objective when a step or two will do: back and forth through a shocker's sparks
+			// went nowhere, they light every other turn)
+			int obj = out != null && !out.isEmpty() ? (out.get(0).obj >= 0 ? out.get(0).obj : out.get(0).cell) : -1;
+			if (obj == hp) obj = -1;
 			int best = -1, bk = INF;
-			for (int c = 0; c < LEN; c++) if (dist[c] < bk && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) { bk = dist[c]; best = c; }
+			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
+				int k = obj >= 0 && dist[c] <= 2 ? dist[c] + 4 * L.distance(c, obj) : 100 + dist[c] * 8;
+				if (k < bk) { bk = k; best = c; } }
 			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
 		}
 		if (!Dungeon.bossLevel()) return null;

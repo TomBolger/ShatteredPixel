@@ -73,11 +73,12 @@ public final class BotAlchemy {
 	/** In the alchemy screen: the button to press (or null: leave). */
 	static BotWindows.Answer scene(com.watabou.noosa.Scene sc) {
 		lastVisitDepth = Dungeon.depth;
+		AsAlchemy.used();
 		Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
 		Object[] combines = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "combines");
 		if (inputs == null || combines == null) return new BotWindows.Answer(null, null, "alchemy: can't see its slots");
 		if (sc != lastScene) { lastScene = sc; makes = 0; plan = null; planDepth = -1; }
-		if (plan == null && planDepth != Dungeon.depth) { plan = findPlan(); planDepth = Dungeon.depth; if (plan != null) visits++; }
+		if (plan == null && planDepth != Dungeon.depth) { plan = Cheat.ON ? findPlan() : AsAlchemy.plan(); if (!Cheat.ON && plan != null) planOut = AsAlchemy.planOut; planDepth = Dungeon.depth; if (plan != null) visits++; }   // (honest games: AsAlchemy's pick, the energy there is)
 		if (plan == null) return new BotWindows.Answer(null, null, "alchemy: nothing to make: leave");
 		int filled = 0;
 		for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
