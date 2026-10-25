@@ -19,6 +19,7 @@ public final class Tune {
 	// (MT) the death odds a Healing potion is worth when drunk (FightModel.healAt), the health share below which it is
 	// drunk with a foe after the hero or harm to come whatever the visible fight's odds (what the model can't see: more coming)
 	public static final double HEALCOST = get("OHEALCOST", 2) / 100, HEALLOW = get("OHEALLOW", 25);
+	public static final boolean CRAB = on("OCRAB", true);   // (MT: the Great Crab's block counted)
 	public static final boolean SLOTS = on("OSLOTS", true);   // (MT: FightModel counts the room beside the hero)
 	public static final boolean HEAL2 = on("OHEAL2", true);   // (off: O's first rule, P(death) >= ODEATH)
 	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;

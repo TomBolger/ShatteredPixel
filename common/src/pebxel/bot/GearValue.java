@@ -97,6 +97,23 @@ public final class GearValue {
 	public static double costWith(Hero h, Item i, double base) {
 		boolean wpn = i instanceof KindOfWeapon;
 		KindOfWeapon w0 = h.belongings.weapon(); Armor a0 = h.belongings.armor();
+		// (MT: worked out once per piece and situation: the plan asks every turn, and the sums over curses and floors were most of a plan's time)
+		String key = Dungeon.depth + ":" + h.STR() + ":" + h.lvl + ":" + h.HT + ":" + h.heroClass + ":" + liftable(h) + ":" + (base == Double.MAX_VALUE ? "w" : (int) Math.round(base * 1000)) + "|" + desc(i) + "|" + desc(wpn ? a0 : w0) + "|" + (i == w0 || i == a0);
+		Double c = memo.get(key);
+		if (c != null) return c;
+		if (memo.size() > 4000) memo.clear();
+		double v = costWith0(h, i, base, wpn, w0, a0);
+		memo.put(key, v);
+		return v;
+	}
+	static final Map<String, Double> memo = new HashMap<>();
+	static String desc(Item i) {
+		if (i == null) return "-";
+		String a = i instanceof Weapon ? String.valueOf(((Weapon) i).augment) : i instanceof Armor ? String.valueOf(((Armor) i).augment) : "";
+		return i.getClass().getSimpleName() + HeroView.visLevel(i) + (i.levelKnown ? "k" : "u") + (i.cursedKnown ? (i.cursed ? "C" : "c") : "?") + Ench.of(i).name + a;
+	}
+
+	static double costWith0(Hero h, Item i, double base, boolean wpn, KindOfWeapon w0, Armor a0) {
 		Ench shown = Ench.of(i);
 		if (i.levelKnown) return one(h, i, wpn, w0, a0, HeroView.visLevel(i), shown);
 		boolean worn = i == w0 || i == a0;

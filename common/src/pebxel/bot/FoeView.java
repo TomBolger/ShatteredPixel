@@ -51,6 +51,7 @@ public final class FoeView {
 			} finally { Random.popGenerator(); }
 		}
 		special(f, m.getClass().getSimpleName(), m.HT);
+		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; }   // (already raging: its shield is in shielding())
 		return f;
 	}

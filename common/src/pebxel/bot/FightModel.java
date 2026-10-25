@@ -79,13 +79,13 @@ public final class FightModel {
 		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
-			pH[i] = Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
+			pH[i] = f.blockAll ? 0 : Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
 			pF[i] = Dist.hit(f.acc, me0.eva); bF[i] = Fighter.blow(f.dmg, me0);
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me0);
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
 			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me0.eva); }
-			if (me0.rangedDmg != null) { pR[i] = me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
+			if (me0.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
 		}
 		// (MT) room beside the hero: at most me0.slots foes that walk up can be at it at once (a corridor: 2), the others
 		// queue and step in as one falls, in the order they'd come; shooters and sleepers take no room
@@ -112,7 +112,7 @@ public final class FightModel {
 				if (f.ranged || f.asleep) continue;
 				if (room > 0) { room--; held[i] = true; } else { queued[i] = true; arrQ[i] = arr[i]; arr[i] = atk[i] = next[i] = Double.MAX_VALUE; } }
 			double t = 0, tH = 0; boolean dead = false; int alive = n;
-			for (int guard = 0; guard < 600 && alive > 0 && !dead; guard++) {
+			for (int guard = 0; guard < 600 && alive > 0 && !dead && t < 150; guard++) {   // (MT: 150 turns at most: a fight with one it can't hurt went 600 steps a run)
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {
@@ -214,10 +214,11 @@ public final class FightModel {
 		if (me.heals <= 0) return planC = 0;
 		List<Fighter> fs = new ArrayList<>(); for (Mob m : mobs) fs.add(FoeView.of(m, h));
 		long sd = seedFor(h);
-		Result r0 = simulate(me, fs, 0, RUNS, sd);
+		int runs = Math.max(60, RUNS / 2);
+		Result r0 = simulate(me, fs, 0, runs, sd);
 		double best = r0.pDeath, bk = 0;
 		for (double k : HEALAT) {
-			Result r = simulate(me, fs, k, RUNS, sd);
+			Result r = simulate(me, fs, k, runs, sd);
 			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed;
 			if (sc < best - 1e-9) { best = sc; bk = k; }
 		}
