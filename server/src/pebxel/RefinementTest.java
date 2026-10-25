@@ -43,7 +43,16 @@ public final class RefinementTest {
     static Controls oc;
     @SuppressWarnings("unchecked")
     static java.util.List<Assist.Target> list() throws Exception { return (java.util.List<Assist.Target>) get(oc, "plan"); }
-    static void frames(WatchApp app, int n) { for (int i = 0; i < n; i++) { app.frame(); oc.frame(); } }
+    static void frames(WatchApp app, int n) { for (int i = 0; i < n; i++) { step(app); oc.frame(); } }
+    /** One frame in lockstep with the game's actor thread (as the bot plays: Lockstep): after the frame the actor
+     *  thread runs until it waits again, so what a press set going has happened by the next check however loaded the
+     *  machine is. Before, the thread ran on its own and checks that waited a fixed number of frames failed now and then. */
+    static void step(WatchApp app) { Lockstep.frame(app); }
+    /** Frames until `ok` holds, at most `cap` (generous: what is waited for takes a few); whether it came. */
+    static boolean until(WatchApp app, int cap, java.util.function.BooleanSupplier ok) {
+        for (int f = 0; f < cap && !ok.getAsBoolean(); f++) frames(app, 1);
+        return ok.getAsBoolean();
+    }
     /** Frames until the hero is ready with a list made since game time `after` (or his place changed from `from`). */
     static Assist.Target planA(WatchApp app, float after, int from) throws Exception {
         for (int f = 0; f < 3000; f++) {
@@ -59,9 +68,8 @@ public final class RefinementTest {
         int d0 = Dungeon.depth;
         StairsTest.jump(StairsTest.stairs(false));   // (the real way down: the exit's transition)
         for (int f = 0; f < 5000; f++) {
-            app.frame(); if (Game.scene() instanceof InterlevelScene) HandoffTest.pressOn();
+            step(app); if (Game.scene() instanceof InterlevelScene) HandoffTest.pressOn();
             if (Dungeon.depth > d0 && Game.scene() instanceof GameScene && Dungeon.hero != null && Dungeon.hero.ready) break;
-            Thread.sleep(1);
         }
         check(Dungeon.depth > d0, "down a floor");
         while (Ui.topWindow() != null) Ui.topWindow().hide();
@@ -93,6 +101,8 @@ public final class RefinementTest {
         oc.button(Controls.SELECT);
         a = planA(app, t0, p0);
         check(a != null && (a.obj >= 0 ? a.obj : a.cell) != o, "a place passed over is not first again at once: " + o + " vs " + a);
+        final boolean grassF = grass; final int oF = o;
+        until(app, 300, () -> { try { return grassF ? (Boolean) get(null, "grassSkip", Assist.class) : Assist.demoted(oF); } catch (Exception e) { return false; } });
         check(grass ? (Boolean) get(null, "grassSkip", Assist.class) : Assist.demoted(o), "a place passed over is held back: " + o + " now " + a + " list " + list());
         // a new floor: things stand afresh, the upgrade first again
         descend(app); h = Dungeon.hero;
@@ -245,11 +255,12 @@ public final class RefinementTest {
         float t0 = now(); oc.button(Controls.SELECT); frames(app, 60);
         check(now() == t0 && Math.abs(cam.scroll.x + cam.width / 2f - h.sprite.center().x) < 40, "Select, nothing listed, the map dragged off: the camera back on the hero, no turn");
         Item it = new com.shatteredpixel.shatteredpixeldungeon.items.food.Food(); Dungeon.level.drop(it, h.pos);
-        oc.button(Controls.SELECT); frames(app, 30);
+        oc.button(Controls.SELECT); final Hero hF = h;
+        until(app, 600, () -> Dungeon.level.heaps.get(hF.pos) == null && hF.belongings.contains(it));
         check(Dungeon.level.heaps.get(h.pos) == null && h.belongings.contains(it), "Select, nothing listed: what lies underfoot picked up");
         while (Ui.topWindow() != null) Ui.topWindow().hide();
         t0 = now(); int p0 = h.pos; oc.button(Controls.SELECT);
-        for (int f = 0; f < 120 && now() <= t0; f += 10) frames(app, 10);   // (the game thread takes the turn when it gets to it)
+        final float t0F = t0; until(app, 600, () -> now() > t0F);   // (the game thread takes the turn when it gets to it)
         check(now() > t0 && h.pos == p0, "Select, nothing listed, nothing underfoot: a search");
         Controls.legacy = null; st.set(oc, true);
         // any button stops a walk (the step under way ends)
@@ -263,8 +274,9 @@ public final class RefinementTest {
         for (int f = 0; f < 120 && !h.ready; f++) frames(app, 1);
         check(h.ready && Dungeon.level.distance(h.pos, p1) <= 1 && h.pos != far, "Up stopped the walk where he was (" + p1 + " -> " + h.pos + ", going to " + far + ")");
         // Assist off: the walk cut short can be resumed from its tag (Pebble PD's ResumeButton); Down's tag with one target
-        WatchSettings.assist(0); st.set(oc, true); frames(app, 5);
+        WatchSettings.assist(0); st.set(oc, true);
         Object[] tagBs = (Object[]) get(hud, "tagButtons", pebxel.ui.WatchHud.class);
+        until(app, 300, () -> hF.lastAction != null && ((com.watabou.noosa.Gizmo) tagBs[4]).visible);
         check(h.lastAction != null && ((com.watabou.noosa.Gizmo) tagBs[4]).visible, "Off, a walk cut short: the Resume tag shows");
         Object hooks = get(oc, "hooks"); Method tag = hooks.getClass().getMethod("tag", int.class, boolean.class); tag.setAccessible(true);
         int p2 = h.pos; tag.invoke(hooks, 4, false);
@@ -475,7 +487,7 @@ public final class RefinementTest {
         Field atk = com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.class.getDeclaredField("attack"); atk.setAccessible(true);
         for (boolean early : new boolean[]{true, false}) {
             com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikeAtStart = early;
-            for (int f = 0; f < 600 && !h.ready; f++) { app.frame(); Thread.sleep(1); }
+            for (int f = 0; f < 600 && !h.ready; f++) step(app);
             int c = -1;
             for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) if (L.passable[h.pos + d] && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(h.pos + d) == null) { c = h.pos + d; break; }
             check(c >= 0, "a cell beside the hero for the blow");
@@ -486,15 +498,15 @@ public final class RefinementTest {
             check(h.ready && h.handle(c), "the hero takes the blow");
             h.next();
             boolean swung = false, during = false, after = false;
-            for (int f = 0; f < 300; f++) {
-                app.frame(); Thread.sleep(2);
+            for (int f = 0; f < 900; f++) {
+                step(app);
                 boolean a = cur.get(h.sprite) == atk.get(h.sprite);
                 swung |= a;
                 if (swung && h.attackTarget() == null) { if (a) during = true; else after = true; break; }
             }
             check(swung, "the hero swung (early " + early + ", ready " + h.ready + ", action " + h.curAction + ", time " + t0 + " -> " + now() + ")");
             check(early ? during : after && !during, early ? "watch mode: the blow's outcome comes while the swing still plays" : "Shattered's way: the outcome as the swing ends");
-            for (int f = 0; f < 600 && !h.ready; f++) { app.frame(); Thread.sleep(1); }
+            for (int f = 0; f < 600 && !h.ready; f++) step(app);
             g.destroy(); g.sprite.killAndErase(); Dungeon.observe(); h.checkVisibleMobs();
         }
         com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.pebxelStrikeAtStart = true;
@@ -762,9 +774,8 @@ public final class RefinementTest {
         Dungeon.hero = null; Dungeon.daily = Dungeon.dailyReplay = false; Dungeon.initSeed(); Dungeon.seed = 42;
         InterlevelScene.mode = InterlevelScene.Mode.DESCEND; Game.switchScene(InterlevelScene.class);
         for (int f = 0; f < 5000; f++) {
-            app.frame(); if (Game.scene() instanceof InterlevelScene) HandoffTest.pressOn();
+            step(app); if (Game.scene() instanceof InterlevelScene) HandoffTest.pressOn();
             if (Game.scene() instanceof GameScene && Dungeon.hero != null && Dungeon.hero.ready) break;
-            Thread.sleep(1);
         }
         check(Game.scene() instanceof GameScene, "game ready");
         while (Ui.topWindow() != null) Ui.topWindow().hide();

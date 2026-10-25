@@ -202,10 +202,10 @@ index 863b15b..4ef5ba4 100644
  	//this is very confusing, I know.
  	public BitmapFont getFont(int size, String text, boolean flipped, boolean border) {
 diff --git a/SPD-classes/src/main/java/com/watabou/utils/Random.java b/SPD-classes/src/main/java/com/watabou/utils/Random.java
-index 38c1fe5..d31054b 100644
+index 38c1fe5..c9a493a 100644
 --- a/SPD-classes/src/main/java/com/watabou/utils/Random.java
 +++ b/SPD-classes/src/main/java/com/watabou/utils/Random.java
-@@ -39,13 +39,33 @@ public class Random {
+@@ -39,13 +39,57 @@ public class Random {
  		resetGenerators();
  	}
  
@@ -224,9 +224,33 @@ index 38c1fe5..d31054b 100644
 +		else if (generators.peekFirst() == pebxelVisualGen && generators.size() > 1) generators.pop();
 +	}
 +
++	//Pebxel: the particles' generator as new, at the start of each bot game (several games play in one JVM)
++	public static synchronized void pebxelVisualReset(){
++		pebxelVisualGen.setSeed(0x5eed);
++	}
++
 +	//Pebxel: a draw for the looks only (music, ripples, an emitter's first puff): from the particles' generator in lockstep
 +	public static synchronized float pebxelVisualFloat(){
 +		return pebxelVisuals ? pebxelVisualGen.nextFloat() : Float();
++	}
++
++	//Pebxel: headless bots (repeatable games) draw from a hash set or map in a fixed order. Its own order follows the
++	// identity hash of its keys (classes, mostly: SecretLaboratoryRoom's potions, Generator's), which differs from one
++	// JVM to the next and between a game played alone and one played after others, so the same number picked another key
++	public static boolean pebxelStable;
++	public static Object[] pebxelOrder( java.util.Collection<?> c ){
++		Object[] a = c.toArray();
++		if (!pebxelStable || a.length < 2 || !(c instanceof java.util.HashSet || c.getClass().getName().equals("java.util.HashMap$KeySet"))
++				|| c instanceof java.util.LinkedHashSet) return a;
++		java.util.Arrays.sort(a, java.util.Comparator.comparing(Random::pebxelKey));
++		return a;
++	}
++	private static String pebxelKey( Object o ){
++		if (o instanceof Class) return ((Class<?>)o).getName();
++		if (o == null) return "";
++		//a key with a hash of its own (strings, numbers, Shattered's numbered actors) keeps that order
++		if (o.hashCode() != System.identityHashCode(o)) return String.format("%s %011d", o.getClass().getName(), (long)o.hashCode() - Integer.MIN_VALUE);
++		return o.getClass().getName();
 +	}
 +
  	public static synchronized void resetGenerators(){
@@ -241,6 +265,24 @@ index 38c1fe5..d31054b 100644
  	}
  
  	public static synchronized void pushGenerator( long seed ){
+@@ -203,7 +247,7 @@ public class Random {
+ 		
+ 		int size = chances.size();
+ 
+-		Object[] values = chances.keySet().toArray();
++		Object[] values = pebxelOrder( chances.keySet() );
+ 		float[] probs = new float[size];
+ 		float sum = 0;
+ 		for (int i=0; i < size; i++) {
+@@ -249,7 +293,7 @@ public class Random {
+ 	public static<T> T element( Collection<? extends T> collection ) {
+ 		int size = collection.size();
+ 		return size > 0 ?
+-			(T)collection.toArray()[Int( size )] :
++			(T)pebxelOrder( collection )[Int( size )] :
+ 			null;
+ 	}
+ 
 diff --git a/android/build.gradle b/android/build.gradle
 index 02bf6f5..8ecee1f 100644
 --- a/android/build.gradle
@@ -499,6 +541,21 @@ index 270bfa5..e2a5c78 100644
  					}
  				}
  			}
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
+index 08021b8..077a8fe 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/levels/rooms/special/ShopRoom.java
+@@ -361,7 +361,9 @@ public class ShopRoom extends SpecialRoom {
+ 	protected static Bag ChooseBag(Belongings pack){
+ 
+ 		//generate a hashmap of all valid bags.
+-		HashMap<Bag, Integer> bags = new HashMap<>();
++		//Pebxel: in this order (a tie goes to the first): a HashMap's order follows the bags' identity hashes, which
++		// differ from one run to the next, so the same seed's shop sold one bag or another (bot games not repeatable)
++		HashMap<Bag, Integer> bags = new java.util.LinkedHashMap<>();
+ 		if (!Dungeon.LimitedDrops.VELVET_POUCH.dropped()) bags.put(new VelvetPouch(), 1);
+ 		if (!Dungeon.LimitedDrops.SCROLL_HOLDER.dropped()) bags.put(new ScrollHolder(), 0);
+ 		if (!Dungeon.LimitedDrops.POTION_BANDOLIER.dropped()) bags.put(new PotionBandolier(), 0);
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 index ff17e01..c45646e 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
