@@ -11,7 +11,7 @@ import java.io.File;
 /**
  * Presses watch buttons in a script and saves what the watch would show after each press.
  * Args: picture-folder, then presses: u d s b (up down select back), U D S (long), tX,Y a tap (tlX,Y long),
- * or a number = wait that many frames.
+ * or a number = wait that many frames; a press with a number after it (s2) waits only that many frames after it.
  * SEED=n NEWGAME=class to start straight in a new game.
  */
 public class Buttons {
@@ -49,6 +49,7 @@ public class Buttons {
 		for (int i = 1; i < a.length; i++) {
 			String p = a[i];
 			int wait = 30;
+			if (p.matches("[udsbUDSB]\\d+")) { wait = Integer.parseInt(p.substring(1)); p = p.substring(0, 1); }   // (a press, then only that many frames: s2)
 			if (p.matches("\\d+")) wait = Integer.parseInt(p);
 			else if (p.startsWith("@give:")) { ((com.shatteredpixel.shatteredpixeldungeon.items.Item) Class.forName("com.shatteredpixel.shatteredpixeldungeon.items." + p.substring(6)).getDeclaredConstructor().newInstance()).identify().collect(); }   // (tests: an item, e.g. @give:Amulet)
 			else if (p.startsWith("@read:")) {   // (tests: a scroll read at once, e.g. @read:ScrollOfMagicMapping)
