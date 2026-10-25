@@ -65,7 +65,7 @@ void predict_set(void) { s_cur_sent = s_plan.cur; plan_came(); }
 // (in a fight the plan goes while the hero acts and comes back the same: the phone says so in 2 bytes, the watch keeps it)
 void predict_again(bool on) {
   s_was_on = s_plan.on; s_was_marker = s_plan.marker; s_was_n = s_plan.n; s_was_cur = s_plan.cur;
-  s_plan.on = on && s_plan.n;
+  s_plan.on = on;
   if (on) s_plan.cur = s_cur_sent;
   plan_came();
 }
@@ -307,8 +307,8 @@ bool predict_tap(int x, int y, uint32_t now) {
   int to = cx + cy * s_pw, from = s_plan.hcell, hx = from % s_pw, hy = from / s_pw;
   // an enemy beside him tapped: the blow (as Select's), unless another creature's or an item's sprite near the tap
   // takes it (CellSelector.onClick: a creature's within 12 of its cell's middle)
-  for (int i = 0; i < s_plan.n; i++) {
-    int b = s_plan.t[i].blow, d = b & 15;
+  for (int i = 0; i < s_plan.ntb; i++) {
+    int b = s_plan.tb[i], d = b & 15;
     if (!b || hx + d % 3 - 1 != cx || hy + d / 3 - 1 != cy) continue;
     for (int j = 0; j < s_plan.nhot; j++) {
       int hc = s_plan.hot[j] & 0x7FFF, ax = (hc % s_pw) * CELL + CELL / 2, ay = (hc / s_pw) * CELL + CELL / 2;

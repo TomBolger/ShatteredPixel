@@ -25,7 +25,7 @@ def main():
         fight = [t for t, n in S if n == 'wfight']
         if not fight: continue
         t0 = fight[0]; t1 = next((t for t, n in S if t > t0), 1e18)
-        sel = [t for t, c in B if c == 3 and t0 <= t < t1]
+        sel = [t for t, c in B if c in (3, 5) and t0 <= t < t1]   # (Select, or a tap)
         # the attack animation: the one not looped, 4 frames (HeroSprite.attack)
         atk = {h[1] for h in H if h[3] == 4 and h[4] == 0}
         for i, tb in enumerate(sel):

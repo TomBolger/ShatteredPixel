@@ -6,7 +6,7 @@
 #define PLAN_S 32                // steps planned per walk (Controls.PLAN_STEPS)
 #define PLAN_H 32                // cells where a tap does something else (Controls.TAP_HOT)
 typedef struct { int16_t x, y; uint8_t k, blow; uint8_t dir[PLAN_S]; } PlanTarget;   // blow: 0x80 + direction, Select strikes there
-typedef struct { bool on, tap; uint16_t marker, hero, step_ms, hcell, atk; uint8_t n, cur, nhot; PlanTarget t[PLAN_T]; uint16_t hot[PLAN_H]; } Plan;
+typedef struct { bool on, tap; uint16_t marker, hero, step_ms, hcell, atk; uint8_t n, cur, nhot; PlanTarget t[PLAN_T]; uint16_t hot[PLAN_H]; uint8_t ntb, tb[8]; } Plan;   // tb: the enemies beside him a tap strikes (directions)
 
 Plan *predict_plan(void);                              // a new plan (C_PREDICT): read it into this,
 void predict_set(void);                                // then say so

@@ -34,7 +34,7 @@ public final class WatchSim {
 			if ((k & 0x80) != 0) sb.append(" blow ").append(k & 15);
 			else if (k > 0) { sb.append(" walk "); for (int j = 0; j < k; j++) sb.append(u8()); }
 		}
-		if (u8() != 0) { sb.append(" | tap from ").append(u16()); int nh = u8(); sb.append(" hot"); for (int i = 0; i < nh; i++) sb.append(' ').append(u16()); }
+		if (u8() != 0) { sb.append(" | tap from ").append(u16()); int nh = u8(); sb.append(" hot"); for (int i = 0; i < nh; i++) sb.append(' ').append(u16()); int nb = u8(); if (nb > 0) sb.append(" blows"); for (int i = 0; i < nb; i++) sb.append(' ').append(u8()); }
 		return lastPlan = sb.toString();
 	}
 	public static int W = Screen.w, H = Screen.h;

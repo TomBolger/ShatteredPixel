@@ -559,6 +559,8 @@ int scene_apply(const uint8_t *data, int len, uint32_t now) {
             for (int i = 0; i < n; i++) { int c = u16(); if (i < PLAN_H) pl->hot[i] = c; }
             pl->nhot = n > PLAN_H ? PLAN_H : n;
             if (n > PLAN_H) pl->tap = false;
+            n = u8(); for (int i = 0; i < n; i++) { int d = u8(); if (i < 8) pl->tb[i] = 0x80 | d; }
+            pl->ntb = n > 8 ? 8 : n;
           }
         }
         predict_set();

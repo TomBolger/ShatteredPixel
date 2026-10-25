@@ -470,7 +470,25 @@ public class RadioTest {
 			staleTargets();   // (the enemies first, as when they come into view)
 			run(0.4);
 			if (System.getenv("PLANS") != null) { System.out.println("  plan: " + (sim.plans.isEmpty() ? "-" : sim.plans.get(sim.plans.size() - 1)) + " plan A " + (targetsNow().isEmpty() ? "-" : targetsNow().get(0)) + " hero " + Dungeon.hero.pos); }
-			button("attack", Controls.SELECT);
+			// (DODGE=1: every other blow, the enemy steps away as the press is made: the watch swung at the plan it had)
+			if (System.getenv("DODGE") != null && i % 2 == 1 && !targetsNow().isEmpty()) {
+				int tc = Controls.cellOf(targetsNow().get(0));
+				com.shatteredpixel.shatteredpixeldungeon.actors.Char ch = Actor.findChar(tc);
+				for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) {
+					int c = tc + d;
+					if (ch instanceof Mob && Dungeon.level.passable[c] && Actor.findChar(c) == null && !Dungeon.level.adjacent(c, Dungeon.hero.pos) && c != Dungeon.hero.pos) { ch.move(c); ch.sprite.move(tc, c); System.out.println("  dodge: " + tc + " -> " + c); break; }
+				}
+			}
+			if (System.getenv("FTAP") != null && !targetsNow().isEmpty()) {
+				// (a tap on it instead of Select, through Touches as the watch's own)
+				int to = Controls.cellOf(targetsNow().get(0));
+				com.watabou.noosa.Camera c = com.watabou.noosa.Camera.main;
+				com.watabou.utils.PointF p = com.shatteredpixel.shatteredpixeldungeon.tiles.DungeonTilemap.tileCenterToWorld(to);
+				int x = Math.round((c.x + (p.x - c.scroll.x) * c.zoom) / 2f), y = Math.round((c.y + (p.y - c.scroll.y) * c.zoom) / 2f);
+				int cam = link.camIdOf(c), st = link.nowMs(), seq = ++tseq;
+				trace("T %d %d %d", ms(t), x, y);
+				press("tap", () -> { trace("Q %d %d", ms(t), Math.round(gclock * 1000)); touches.add(new byte[]{1, (byte) seq, (byte) cam, 0, (byte) x, (byte) (x >> 8), (byte) y, (byte) (y >> 8), (byte) st, (byte) (st >> 8), (byte) (st >> 16), (byte) (st >> 24)}); });
+			} else button("attack", Controls.SELECT);
 			run(1.0);
 		}
 		Gallery.calm();

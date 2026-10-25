@@ -1117,7 +1117,8 @@ public class Controls {
 	 * (s16, x8, 0x7FFF: none), steps k, k directions ((dx + 1) + 3 (dy + 1)), or for a blow at an enemy beside him
 	 * (Select attacks it: the watch swings at the press) 0x80 + its direction instead; then for a tap on the map (predict.c works out the walk it sets off on, as Hero.getCloser
 	 * would, over the ground Link.pass sent): 1 if a tap may walk (0: nothing more), the hero's cell u16, and the cells
-	 * where a tap does something else or the way is shut: count u8, each u16 (bit 15: no way through it either).
+	 * where a tap does something else or the way is shut: count u8, each u16 (bit 15: no way through it either), and the
+	 * enemies beside him a tap strikes: count u8, each its direction.
 	 */
 	private Link link;   // (for Link.pressed)
 	public byte[] plan(Link link) {
@@ -1137,7 +1138,7 @@ public class Controls {
 		int n = listed ? Math.min(targets.size(), PLAN_TARGETS) : 0;
 		b.write(1); w16(b, mid < 0 ? 0xFFFF : mid); w16(b, hid < 0 ? 0xFFFF : hid); b.write(STEP_MS / 4); b.write(n); b.write(n == 0 ? 0 : Math.min(target, n - 1));
 		int atk = -1;
-		if (!aiming && hid >= 0 && h.sprite != null) for (int i = 0; i < n; i++) if (blow(h, i, cellOf(targets.get(i))) >= 0) { atk = link.attackAnim(h.sprite); break; }
+		if (!aiming && hid >= 0 && h.sprite != null) for (int d : PathFinder.NEIGHBOURS8) if (blowAt(h, h.pos + d) >= 0) { atk = link.attackAnim(h.sprite); break; }
 		w16(b, atk < 0 ? 0xFFFF : atk);
 		Camera cam = Camera.main; PointF rest = cam == null ? null : restCentre(cam);
 		for (int i = 0; i < n; i++) {
@@ -1165,7 +1166,7 @@ public class Controls {
 			}
 			b.write(k); b.write(dirs, 0, k);   // (the count as written: stopped short, it used to say more steps than came)
 		}
-		tapPlan(b, link, h, aiming || hid < 0);
+		tapPlan(b, link, h, aiming || hid < 0, atk >= 0);
 		return b.toByteArray();
 	}
 	/**
@@ -1178,10 +1179,15 @@ public class Controls {
 		if (cell < 0 || aiming()) return -1;
 		Assist.Target t = i < plan.size() && plan.size() == targets.size() ? plan.get(i) : null;
 		if (t != null && (t.kind != Assist.ENEMY || t.action != null)) return -1;
+		return blowAt(h, cell);
+	}
+	/** A tap on the cell (or Select at it) strikes the enemy there, beside the hero: its direction, else -1. */
+	private static int blowAt(Hero h, int cell) {
+		Level lv = Dungeon.level;
+		if (cell < 0 || cell >= lv.length() || aiming()) return -1;
 		Char ch = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(cell);
 		if (!(ch instanceof Mob) || ch == h) return -1;
 		Mob m = (Mob) ch;
-		Level lv = Dungeon.level;
 		if (m.alignment != Char.Alignment.ENEMY || m.heroShouldInteract() || m.invisible > 0 || h.fieldOfView == null || !h.fieldOfView[cell]
 				|| !lv.adjacent(h.pos, cell) || !h.canAttack(m) || h.isCharmedBy(m) || lv.map[cell] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.ALCHEMY) return -1;
 		int w = lv.width(), dx = cell % w - h.pos % w, dy = cell / w - h.pos / w;
@@ -1197,7 +1203,7 @@ public class Controls {
 	 * an alchemy pot) or shuts the way (a creature in sight, as Dungeon.findPath). Taps aimed at a thrown item or a
 	 * zap, or too many such cells round him: no walk at once (the phone's frames bring it).
 	 */
-	private void tapPlan(java.io.ByteArrayOutputStream b, Link link, Hero h, boolean no) {
+	private void tapPlan(java.io.ByteArrayOutputStream b, Link link, Hero h, boolean no, boolean blows) {
 		Level lv = Dungeon.level;
 		if (no || h.rooted || h.flying || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Amok.class) != null || Char.hasProp(h, Char.Property.LARGE)) { b.write(0); return; }
 		int len = lv.length(), w = lv.width();
@@ -1227,6 +1233,10 @@ public class Controls {
 			w16(hb, c | (e.getValue() ? 0x8000 : 0));
 		}
 		b.write(1); w16(b, h.pos); b.write(nh); byte[] hh = hb.toByteArray(); b.write(hh, 0, hh.length);
+		// the enemies beside him a tap strikes (the watch swings at the tap): count, their directions
+		java.io.ByteArrayOutputStream bb = new java.io.ByteArrayOutputStream();
+		if (blows) for (int d : PathFinder.NEIGHBOURS8) { int k = blowAt(h, h.pos + d); if (k >= 0) bb.write(k); }
+		b.write(bb.size()); b.write(bb.toByteArray(), 0, bb.size());
 	}
 
 
