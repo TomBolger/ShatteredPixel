@@ -482,6 +482,7 @@ final class AsAbilities {
 			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && H.canAttack(m) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
 		} else if (SNEAK.contains(n)) {
 			if (e != null && hpf < 0.3f && losing()) { cell = away(5, false); why = "sneak away"; }
+			else if (adj.isEmpty() && H.invisible <= 0) for (Mob m : near) if (strong(m) && Assist.distance(m.pos, hp) >= 2 && (cell = beside(m, 5)) >= 0) { why = "sneak up: a surprise blow"; break; }
 		} else if (COMBO.contains(n)) {
 			Sai.ComboStrikeTracker tr = H.buff(Sai.ComboStrikeTracker.class); int hits = tr == null ? 0 : tr.hits;
 			if (e != null && (hits >= 5 || (hits >= 3 && (st || full)))) { cell = e.pos; why = "combo strike (" + hits + ")"; }
@@ -493,6 +494,10 @@ final class AsAbilities {
 			if (e != null && st && !has(Quarterstaff.DefensiveStance.class) && !has(Scimitar.SwordDance.class)) { cell = hp; why = n.equals("Scimitar") ? "sword dance" : "defensive stance"; }
 		} else if (HIT.contains(n)) {
 			if (e != null && (st || full) && (!n.equals("Greataxe") || hpf < 0.5f)) { cell = e.pos; why = n.equals("Greataxe") ? "retribution" : "runic slash"; }
+		} else if (n.equals("Flail")) {   // (spins while it walks up: the next blow is sure and harder per spin, 3 at most)
+			Object sp = H.buff(Flail.SpinAbilityTracker.class) == null ? null : Assist.field(H.buff(Flail.SpinAbilityTracker.class), "spins");
+			int spins = sp instanceof Integer ? (Integer) sp : 0;
+			if (adj.isEmpty() && spins < 3) for (Mob m : near) if (Assist.hunting(m) && Assist.walk(m.pos) <= 4 && !FoeView.shooter(m) && (spins > 0 || strong(m) || full)) { cell = hp; why = "spin (" + (spins + 1) + ")"; break; }
 		} else if (n.equals("Whip")) {
 			int r = 0; for (Mob m : foes) if (H.canAttack(m)) r++;
 			if (r >= 2 || (r >= 1 && (st || full))) { cell = hp; why = "lash"; }
@@ -500,6 +505,12 @@ final class AsAbilities {
 		if (why == null || cell < 0) return null;
 		Target t = Assist.use(w, MeleeWeapon.AC_ABILITY, cell, AB + "wep:" + why + (full ? " (full)" : ""));
 		return t;
+	}
+	/** An empty cell beside m within reach steps of the hero, or -1. */
+	static int beside(Mob m, int reach) {
+		int best = -1;
+		for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = m.pos + k; if (c >= 0 && c < L.length() && L.passable[c] && !L.avoid[c] && L.heroFOV[c] && Actor.findChar(c) == null && Assist.walk(c) <= reach && (best < 0 || Assist.walk(c) < Assist.walk(best))) best = c; }
+		return best;
 	}
 	static boolean lungeOk(Mob m) {
 		if (H.rooted) return false;
