@@ -229,6 +229,32 @@ final class AsBasics {
 		return st >= 0 ? new Target(st, GO, "spawner: to it (Yog's demons, a Healing potion)") : null;
 	}
 
+	// =============================================================================================================
+	// sleepers (Pebble PD's bot): a blow at a sleeping foe always lands (a surprise), and one left asleep wakes later on
+	// its own and comes hunting at a bad time. Crept up on and struck first, when the fight model says it's an easy one.
+	// =============================================================================================================
+	static final boolean SNEAK = opt("BSNEAK", false);   // (off: 60 honest games to depth 5, deaths 6 -> 8 on, 8 with 1% risk and 6 steps: waking foes better left asleep)
+	static final int SNEAKWALK = optInt("BSNEAKWALK", 10), SNEAKRISK = optInt("BSNEAKRISK", 3);   // steps; the fight's chance of death (percent) at most
+
+	static Target sleeper(Target planA) {
+		if (!SNEAK || planA == null || planA.kind == ENEMY || planA.kind == USE || Dungeon.bossLevel()) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.HP * 10 < h.HT * 7 || inDanger || h.rooted || seenFoe && anyAwake()) return null;
+		Mob best = null; int bw = INF;
+		for (Mob m : mobs()) {
+			if (!enemy(m) || m.state != m.SLEEPING || m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.NPC || m instanceof Piranha || m instanceof Mimic || Char.hasProp(m, Char.Property.IMMOVABLE) || Char.hasProp(m, Char.Property.BOSS) || Char.hasProp(m, Char.Property.MINIBOSS)) continue;
+			int w = AsBosses.walkNear(m.pos);
+			if (w > SNEAKWALK || w >= bw) continue;
+			if (pebxel.bot.FightModel.evaluate(h, Collections.singletonList(m)).pDeath * 100 > SNEAKRISK) continue;
+			bw = w; best = m;
+		}
+		if (best == null) return null;
+		if (adjacent(best.pos, hp)) return new Target(best.pos, ENEMY, "sleeper: a sure first blow");
+		int st = AsBosses.besideStep(best.pos);
+		return st >= 0 ? new Target(st, GO, "sleeper: creep up on it") : null;
+	}
+	static boolean anyAwake() { for (Mob m : mobs()) if (hostile(m)) return true; return false; }
+
 	static boolean shoreCell(int c) { for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && L.water[n]) return true; } return false; }
 
 	/** A missile or a charged attack wand at m, if the way is clear. */
