@@ -44,7 +44,14 @@ public final class BotStats {
 		i = w.indexOf(" ("); if (i >= 0) w = w.substring(0, i);
 		return w.replaceAll("[;=,]", " ").trim();
 	}
-	static void newGame() { abil.clear(); turnsBy.clear(); lastWhy = ""; lost.clear(); lastHP = -1; healed = 0; restTurns = 0; starveTurns = 0; lastT = -1; Arrays.fill(lostAt, 0); Arrays.fill(turnsAt, 0); attacks = 0; surprised = 0; }
+	/** Item uses (agent K5): every USE entry acted on, by item class and action ("uses="), and AsItems' own by key ("it="). */
+	static final Map<String, Integer> used = new TreeMap<>(), items = new TreeMap<>();
+	static String itemKey(Assist.Target t) {
+		if (t == null || t.why == null || !t.why.startsWith(AsItems.IT)) return null;
+		String w = t.why.substring(AsItems.IT.length()); int i = w.indexOf(':'); if (i >= 0) w = w.substring(0, i);
+		return w.replaceAll("[;=,/]", " ").trim();
+	}
+	static void newGame() { used.clear(); items.clear(); abil.clear(); turnsBy.clear(); lastWhy = ""; lost.clear(); lastHP = -1; healed = 0; restTurns = 0; starveTurns = 0; lastT = -1; Arrays.fill(lostAt, 0); Arrays.fill(turnsAt, 0); attacks = 0; surprised = 0; }
 
 	/** Each decision (the hero ready), with the decision about to be acted on. */
 	static void decision(Assist.Target t) {
@@ -63,6 +70,8 @@ public final class BotStats {
 			if (c instanceof Mob) { attacks++; boolean sp = ((Mob) c).surprisedBy(h, true); if (sp) surprised++; if (AssistBot.v) System.out.println("    attack " + c.getClass().getSimpleName() + (sp ? " SURPRISED" : "")); }
 		}
 		String ak = abilKey(t); if (ak != null) abil.merge(ak, 1, Integer::sum);
+		if (t != null && t.kind == Assist.USE && t.item != null && t.action != null) used.merge(t.item.getClass().getSimpleName() + "/" + t.action.replaceAll("[;=,:/]", " "), 1, Integer::sum);
+		String ik = itemKey(t); if (ik != null) items.merge(ik, 1, Integer::sum);
 		lastRest = t != null && t.kind == Assist.WAIT && Assist.REST_ACT.equals(t.action);
 		lastSrc = source(h, L);
 		lastWhy = t == null ? "?" : t.why.replaceAll("[;=,:]", " ");
@@ -90,6 +99,8 @@ public final class BotStats {
 		sb.append("by="); for (Map.Entry<String, Integer> e : lost.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("turnsBy="); for (Map.Entry<String, Integer> e : turnsBy.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("abil="); for (Map.Entry<String, Integer> e : abil.entrySet()) sb.append(e.getKey().replace(':', '/')).append(':').append(e.getValue()).append(','); sb.append(';');
+		sb.append("uses="); for (Map.Entry<String, Integer> e : used.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
+		sb.append("it="); for (Map.Entry<String, Integer> e : items.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("lostAt="); for (int i = 1; i < 27; i++) if (lostAt[i] > 0 || turnsAt[i] > 0) sb.append(i).append(':').append(lostAt[i]).append('/').append(turnsAt[i]).append(','); sb.append(';');
 		if (h != null) {
 			int heal = 0, sou = 0, pos = 0, unkP = 0, unkS = 0;

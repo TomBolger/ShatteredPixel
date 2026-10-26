@@ -93,6 +93,8 @@ public final class BotWindows {
 		// the quests' choices (AsChoices: the Ghost's reward, the Wandmaker's wand, the Blacksmith's favours, leaving the mine)
 		Ui.Part qc = AsChoices.choose(w, bs);
 		if (qc != null) return answer(qc.g, "choice: " + AsChoices.why);
+		Ui.Part ic = AsItems.choose(w, bs);   // (an item's own window: the Augmentation's choice, the Beacon's set / return: AsItems)
+		if (ic != null) return answer(ic.g, "item choice");
 		// the hero's subclass and armour ability, quest rewards: one of the choices (each game its own), confirmed
 		if (HumanTalents.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null && (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility"))) {   // (TALENTS=human: the simulated player's random pick)
 			com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass hc = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass;

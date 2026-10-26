@@ -657,6 +657,66 @@ public final class RefinementTest {
         AsAbilities.prepAt = -1; AsAbilities.ban.clear();
         return urgent ? AsAbilities.urgent(null) : AsAbilities.suggest(null);
     }
+
+    static Assist.Target it(boolean urgent) throws Exception {
+        Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
+        setup.setAccessible(true); setup.invoke(null, new Object[]{null});
+        AsAbilities.prepAt = -1; AsAbilities.ban.clear(); AsItems.prepAt = -1; AsItems.ban.clear(); AsItems.tries.clear();
+        return urgent ? AsItems.urgent0(null) : AsItems.suggest0(null);
+    }
+    /** The consumables (AsItems): the staff imbued with a better known-uncursed wand only, an unknown potion never used
+     *  by its kind, Corruption only when its sum says it takes, a bomb on held strong foes out of the blast, trap ranks,
+     *  no fire beside grass. */
+    static void items() throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero;
+        Gallery.calm(); h.HP = h.HT = 100; WatchSettings.assist(2); WatchSettings.itemAssist(true); Assist.reset();
+        Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); L.updateFieldOfView(h, L.heroFOV);
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.items.KindOfWeapon w0 = h.belongings.weapon;
+        // 1. the staff: a known-uncursed Lightning goes in; one whose curse isn't known doesn't
+        MagesStaff st = new MagesStaff(new com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfMagicMissile()); st.identify(); h.belongings.weapon = st;
+        com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfLightning wl = new com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfLightning();
+        wl.cursed = false; wl.cursedKnown = false; h.belongings.backpack.items.add(wl);
+        Assist.Target t = it(false);
+        check(t == null || t.item != st, "a wand whose curse isn't known is not imbued: " + t);
+        wl.cursedKnown = true; t = it(false);
+        check(t != null && t.item == st && MagesStaff.AC_IMBUE.equals(t.action) && t.on == wl, "the staff imbued with a known-uncursed Lightning: " + t);
+        h.belongings.backpack.items.clear(); h.belongings.weapon = w0;
+        // 2. an unknown potion is no known one
+        com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation lv = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation();
+        h.belongings.backpack.items.add(lv); AsItems.prep();
+        check(lv.isKnown() ? AsItems.has(lv.getClass()) == lv : AsItems.has(lv.getClass()) == null, "an unknown potion is never picked by its kind");
+        h.belongings.backpack.items.clear();
+        // 3. Corruption's sum: a rat at full health resists a +0 wand, nearly dead it doesn't
+        int[] wd = walks(L, h.pos); int far = -1, far2 = -1;
+        for (int c = 0; c < wd.length; c++) if (com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) == null && L.heroFOV[c] && L.passable[c] && wd[c] >= 4 && wd[c] <= 6 && L.distance(c, h.pos) >= 4 && Assist.line(h.pos, c)) {
+            if (far < 0) far = c; else if (far2 < 0 && L.distance(c, far) == 1 && Assist.line(h.pos, c)) far2 = c; }
+        check(far >= 0, "a cell for the foes");
+        com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfCorruption wc = new com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfCorruption(); wc.identify();
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat r = rat(far, true);
+        check(!AsItems.corruptSure(r, wc), "a rat at full health resists Corruption +0");
+        r.HP = 1; check(AsItems.corruptSure(r, wc), "a rat at 1 health is corrupted for sure");
+        gone(r);
+        // 4. a bomb: two strong foes rooted together, far off: thrown lit; next to the hero: not
+        if (far2 >= 0) {
+            com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll a = brute(far), b = brute(far2);
+            com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(a, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Roots.class, 10f);
+            com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(b, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Roots.class, 10f);
+            com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb bomb = new com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb(); h.belongings.backpack.items.add(bomb);
+            t = it(true);
+            check(t != null && t.item == bomb && "LIGHTTHROW".equals(t.action) && L.distance(t.cell, h.pos) >= 3, "a lit bomb on two rooted strong foes: " + t + " (near " + AsItems.near.size() + " hard " + AsItems.hard + ")");
+            gone(a); gone(b); h.belongings.backpack.items.clear();
+        } else System.out.println("items: no two cells side by side for the bomb check (skipped)");
+        // 5. traps by danger; fire by grass
+        check(AsItems.trapRank(new com.shatteredpixel.shatteredpixeldungeon.levels.traps.GrimTrap()) > AsItems.trapRank(new com.shatteredpixel.shatteredpixeldungeon.levels.traps.ToxicTrap())
+                && AsItems.trapRank(new com.shatteredpixel.shatteredpixeldungeon.levels.traps.ToxicTrap()) > AsItems.trapRank(new com.shatteredpixel.shatteredpixeldungeon.levels.traps.AlarmTrap()), "trap ranks: Grim worse than Toxic worse than Alarm");
+        int m0 = L.map[h.pos]; com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(h.pos, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.GRASS);
+        check(!AsItems.fireOk(), "no Fireblast standing on grass");
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(h.pos, m0);
+        Gallery.calm(); Assist.reset();
+        System.out.println("items: the staff imbued (known uncursed only), unknown potions kept unknown, Corruption's sum, a bomb on held foes, trap ranks, no fire on grass: ok");
+    }
+
     /** The talents and abilities (AsAbilities): a meal talent eats before a fight, a Duelist's charged ability on a
      *  strong foe, Berserk when low beside one, the King's Crown put on. */
     static void abilities() throws Exception {
@@ -849,6 +909,7 @@ public final class RefinementTest {
         talentSpent(app);
         chestFromBeside();
         abilities();
+        items();
 
         Link link = new Link(new Assets()); Controls controls = new Controls(); Touches touches = new Touches();
         pebxel.ui.WndWatchMenu menu = new pebxel.ui.WndWatchMenu(); GameScene.show(menu);
