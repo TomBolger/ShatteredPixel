@@ -79,6 +79,11 @@ final class Rules {
 		// hands give nothing while the hero burns, "out of the fire first"): the next round's worst (the blows of those
 		// beside him at their most, the bolts of the shooters in line, a third of the harm to come) could kill: drink
 		propose("rescue: drink rather than die", c -> c == Rules.planA && c.role != Role.HEAL && healPot() != null && Brain.healing == 0 && worstRound() >= H().HP, 0, Rules::drinkTarget),
+		// (ST) the same with the climb's curse counted (the lookahead leaves it out: a DM-100's bolt is 4.5 times what it
+		// sees), and with no Healing, a known way out: Teleportation, Invisibility (unseen, nothing strikes or bolts him),
+		// Terror (CB-8: a known Teleportation in 30 of 85 deaths from 16, Invisibility in 17)
+		propose("stealth: drink rather than die, the curse counted", AsStealth::drinkWhen, 0, AsStealth::drinkTarget),
+		propose("stealth: away rather than die", AsStealth::awayWhen, 0, AsStealth::awayTarget),
 		// -- getting away by the stairs ------------------------------------------------------------------------------
 		// (BR-a1: a starving hero bounced between the floors for ever, up from the foe by the stairs, down again as the
 		// floor above was done.) The stairs up are an escape only with a rest to come (food for it), not straight after
