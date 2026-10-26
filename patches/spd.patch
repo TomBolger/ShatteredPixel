@@ -557,7 +557,7 @@ index 08021b8..077a8fe 100644
  		if (!Dungeon.LimitedDrops.SCROLL_HOLDER.dropped()) bags.put(new ScrollHolder(), 0);
  		if (!Dungeon.LimitedDrops.POTION_BANDOLIER.dropped()) bags.put(new PotionBandolier(), 0);
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
-index ff17e01..c45646e 100644
+index ff17e01..e9a5edb 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 +++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 @@ -152,6 +152,8 @@ public class AlchemyScene extends PixelScene {
@@ -569,7 +569,72 @@ index ff17e01..c45646e 100644
  
  		w -= insets.left + insets.right;
  		h -= insets.top + insets.bottom;
-@@ -1005,7 +1007,7 @@ public class AlchemyScene extends PixelScene {
+@@ -186,6 +188,7 @@ public class AlchemyScene extends PixelScene {
+ 		centerW = left + pw/2;
+ 
+ 		int pos = (int)(insets.top) + (h - 120)/2;
++		if (PixelScene.pebxelZoom > 0) pos = (int)(insets.top) + Math.max(24, (h - 170)/2);   //pebxel: higher, for the bigger buttons below
+ 
+ 		if (splitAlchGuide &&
+ 				w >= 300 &&
+@@ -352,7 +355,8 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "cancel");
+ 			}
+ 		};
+-		cancel.setRect(left + 8, pos + 2, 16, 16);
++		int SM = PixelScene.pebxelZoom > 0 ? 24 : 16;   //pebxel: finger-sized small buttons
++		cancel.setRect(left + 8, pos + 2, SM, SM);
+ 		cancel.enable(false);
+ 		add(cancel);
+ 
+@@ -375,7 +379,7 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "repeat");
+ 			}
+ 		};
+-		repeat.setRect(left + 24, pos + 2, 16, 16);
++		repeat.setRect(left + 8 + SM, pos + 2, SM, SM);
+ 		repeat.enable(false);
+ 		add(repeat);
+ 
+@@ -434,7 +438,7 @@ public class AlchemyScene extends PixelScene {
+ 		energyLeft = PixelScene.renderTextBlock(energyText, 9);
+ 		energyLeft.setPos(
+ 				centerW - energyLeft.width()/2,
+-				insets.top + h - 8 - energyLeft.height()
++				insets.top + h - (PixelScene.pebxelZoom > 0 ? 16 : 8) - energyLeft.height()
+ 		);
+ 		energyLeft.hardlight(0x44CCFF);
+ 		add(energyLeft);
+@@ -477,7 +481,7 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "energize");
+ 			}
+ 		};
+-		energyAdd.setRect(energyLeft.right(), energyLeft.top() - (16 - energyLeft.height())/2, 16, 16);
++		energyAdd.setRect(energyLeft.right(), energyLeft.top() - (SM - energyLeft.height())/2, SM, SM);
+ 		align(energyAdd);
+ 		add(energyAdd);
+ 
+@@ -496,6 +500,11 @@ public class AlchemyScene extends PixelScene {
+ 				} else {
+ 					clearSlots();
+ 					updateState();
++					if (PixelScene.pebxelZoom > 0) {   //pebxel: the watch's journal window, on the alchemy guide
++						WndJournal.last_index = 1;
++						AlchemyScene.this.addToFront(GameScene.pebxelWindow(new WndJournal()));
++						return;
++					}
+ 					AlchemyScene.this.addToFront(new Window() {
+ 
+ 						{
+@@ -530,6 +539,7 @@ public class AlchemyScene extends PixelScene {
+ 		btnGuide.icon(new ItemSprite(ItemSpriteSheet.ALCH_PAGE));
+ 		btnGuide.setSize(btnGuide.reqWidth()+4, 18);
+ 		btnGuide.setPos(centerW - btnGuide.width()/2f, energyAdd.top()- btnGuide.height()-2);
++		if (PixelScene.pebxelZoom > 0) btnGuide.setPos(repeat.right() + 6, cancel.top() + (SM - btnGuide.height())/2f);   //pebxel: beside the two small ones, clear of the energy and the slots
+ 		align(btnGuide);
+ 		add(btnGuide);
+ 
+@@ -1005,7 +1015,7 @@ public class AlchemyScene extends PixelScene {
  						InputButton.this.item(null);
  						updateState();
  					}
@@ -984,6 +1049,34 @@ index a3f6715..3293edd 100644
  				if (clickReady) {
  					killTooltip();
  					switch (event.button){
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
+index ef0e910..761e2c8 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
+@@ -39,6 +39,23 @@ public class ExitButton extends IconButton {
+ 		height = 20;
+ 	}
+ 
++	//pebxel: on the round watch, the corner it was put in is outside the circle: moved in along the diagonal until
++	//all four corners are inside (a rectangular screen: where it was put)
++	@Override
++	protected void layout() {
++		if (PixelScene.pebxelRound && width > 0) {
++			com.watabou.noosa.Camera c = camera() != null ? camera() : com.watabou.noosa.Camera.main;
++			float cx = c.width / 2f, cy = c.height / 2f, r = Math.min(c.width, c.height) / 2f - 1;
++			for (int i = 0; i < 40; i++) {
++				float fx = x + width / 2f > cx ? x + width : x, fy = y + height / 2f > cy ? y + height : y;
++				float dx = fx - cx, dy = fy - cy, d = (float) Math.sqrt(dx * dx + dy * dy);
++				if (d <= r) break;
++				x += dx > 0 ? -1 : 1; y += dy > 0 ? -1 : 1;
++			}
++		}
++		super.layout();
++	}
++
+ 	@Override
+ 	protected void onClick() {
+ 		if (Game.scene() instanceof TitleScene) {
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java
 index 2dc7887..b2ee4df 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java

@@ -399,9 +399,11 @@ public class Controls {
 
 	/** (tests) The button Select would press in the top window. */
 	Component focused() {
-		Window w = Ui.topWindow(); if (w == null) return null;
-		if (w instanceof pebxel.ui.Navigable) return ((pebxel.ui.Navigable) w).focused();
-		List<Ui.Part> bs = buttons(w); return bs.isEmpty() || focusOwner != w ? null : (Component) bs.get(Math.max(0, Math.min(bs.size() - 1, focus))).g;
+		Window w = Ui.topWindow();
+		Group m = w != null ? w : !(Game.scene() instanceof GameScene) ? Game.scene() : null;   // (a whole screen too)
+		if (m == null) return null;
+		if (m instanceof pebxel.ui.Navigable) return ((pebxel.ui.Navigable) m).focused();
+		List<Ui.Part> bs = buttons(m); return bs.isEmpty() || focusOwner != m ? null : (Component) bs.get(Math.max(0, Math.min(bs.size() - 1, focus))).g;
 	}
 
 	/** Pebble PD's red exit tag. */
@@ -489,7 +491,7 @@ public class Controls {
 	static List<Ui.Part> buttons(Group g) {
 		List<Ui.Part> out = new ArrayList<>();
 		// (a screen's exit button is left out: Back does that, and Select shouldn't start on it)
-		for (Ui.Part p : Ui.parts(g)) if (p.button && p.g instanceof Component && !(p.g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.ExitButton) && !(p.g instanceof CloseTag)) out.add(p);
+		for (Ui.Part p : Ui.parts(g)) if (p.button && p.g instanceof Component && !(p.g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.ExitButton) && !(p.g instanceof CloseTag) && ((Component) p.g).width() >= 1 && ((Component) p.g).height() >= 1) out.add(p);   // (a button with no size, such as the alchemy pot's hidden inventory key, is nothing to focus)
 		out.sort((a, c) -> {
 			Component x = (Component) a.g, y = (Component) c.g;
 			if (Math.abs(x.top() - y.top()) > 4) return Float.compare(x.top(), y.top());
