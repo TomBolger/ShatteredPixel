@@ -55,7 +55,7 @@ final class Brain {
 	static final boolean FIGHTV = Assist.opt("BFIGHT", true), STAIRSV = Assist.opt("BSTAIRS", true), GEARV = Assist.opt("BGEAR", true);
 
 	/** What a candidate is, for the brain. */
-	enum Role { CARRY, HEAL, ESCAPE, UP, DOWN, EQUIP, REST, OTHER }
+	enum Role { CARRY, HEAL, ESCAPE, UP, DOWN, EQUIP, REST, RANGED, OTHER }
 
 	static final class Cand {
 		final Target t; final String src; final Role role; double v = Double.NaN; boolean veto; String note = "";
@@ -123,10 +123,11 @@ final class Brain {
 
 	static Role role(Target t) {
 		if (t == null) return Role.OTHER;
-		if (t.kind == Assist.USE && t.item instanceof PotionOfHealing && Potion.AC_DRINK.equals(t.action)) return Role.HEAL;
+		if (t.kind == Assist.USE && t.item instanceof Potion && Potion.AC_DRINK.equals(t.action) && Clues.p(t.item, PotionOfHealing.class) >= 0.9) return Role.HEAL;   // (ID: by what the hero knows or believes, never an unknown potion's true kind)
 		if (t.kind == Assist.USE && escapeItem(t.item) && (Potion.AC_DRINK.equals(t.action) || Scroll.AC_READ.equals(t.action))) return Role.ESCAPE;
 		if (t.kind == Assist.USE && EquipableItem.AC_EQUIP.equals(t.action)) return Role.EQUIP;
 		if (t.kind == Assist.WAIT && Assist.REST_ACT.equals(t.action)) return Role.REST;
+		if (t.kind == Assist.USE && t.why != null && t.why.startsWith("brain: from afar")) return Role.RANGED;
 		if ((t.kind == Assist.GO || t.kind == Assist.PICKUP) && t.why.startsWith("escape: up")) return Role.UP;
 		if ((t.kind == Assist.GO || t.kind == Assist.PICKUP) && t.why.startsWith("escape: down")) return Role.DOWN;
 		return Role.CARRY;
@@ -142,6 +143,7 @@ final class Brain {
 		try {
 			judge0();
 		} catch (Throwable e) { Assist.lastError = e; }
+		try { if (ON && DITHER) steady(); } catch (Throwable e) { Assist.lastError = e; }
 		long dt = System.nanoTime() - t0 + beginNanos; nanos += dt;
 		if (DBG && dt > 20_000_000L) System.out.println("  BRAIN slow " + dt / 1000000 + " ms (begin " + beginNanos / 1000000 + ") d" + Dungeon.depth); maxNanos = Math.max(maxNanos, dt); if (dt > 20_000_000L) slow++;
 	}
@@ -155,6 +157,7 @@ final class Brain {
 		List<Cand> cs = new ArrayList<>();
 		for (Target t : out) { Cand c = null; for (Cand o : offers) if (o.t == t) c = o; cs.add(c != null ? c : new Cand(t, "list", role(t))); }
 		if (fight && FIGHTV) own(cs);
+		if (!fight && SKIPV) try { skip(cs); } catch (Throwable e) { Assist.lastError = e; }
 		// the values, then the table's rows
 		for (Cand c : cs) if (!c.valued()) value(c);
 		Rules.apply(cs, legacyA);
@@ -208,18 +211,138 @@ final class Brain {
 	/** The brain's own options in a fight, when the rules didn't offer them: drink Healing, a known escape, the stairs. */
 	static void own(List<Cand> cs) {
 		Hero h = H;
-		PotionOfHealing heal = h.belongings.getItem(PotionOfHealing.class);
-		if (heal != null && heal.isKnown() && !has(cs, Role.HEAL) && !Assist.declined(PotionOfHealing.class, Potion.AC_DRINK)) cs.add(new Cand(Assist.use(heal, Potion.AC_DRINK, -1, "brain: heal"), "brain", Role.HEAL));
+		Item heal = Clues.healing();   // (ID: a known Healing, else an unknown one believed Healing)
+		if (heal != null && !has(cs, Role.HEAL) && !Assist.declined(PotionOfHealing.class, Potion.AC_DRINK)) cs.add(new Cand(Assist.use(heal, Potion.AC_DRINK, -1, "brain: heal"), "brain", Role.HEAL));
 		if (!has(cs, Role.ESCAPE) && !Assist.blind()) for (Class<? extends Item> k : Arrays.asList(ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class)) {
 			Item i = h.belongings.getItem(k);
 			if (i != null && Assist.known(i) && !Assist.declined(k, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ)) { cs.add(new Cand(Assist.use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "brain: escape"), "brain", Role.ESCAPE)); break; }
 		}
+		if (RANGEDV && !Assist.blind()) afar(cs);
 		if (STAIRSV && !Dungeon.bossLevel() && !Assist.L.locked && Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null) {
 			int ent = Assist.L.entrance(), ex = Assist.L.exit();
 			if (Dungeon.depth > 1 && !has(cs, Role.UP) && stairsOk(ent)) cs.add(new Cand(new Target(ent, ent == h.pos ? Assist.PICKUP : Assist.GO, "escape: up the stairs (brain)"), "brain", Role.UP));
 			if (!has(cs, Role.DOWN) && stairsOk(ex) && Assist.L.map[ex] != Terrain.LOCKED_EXIT && Dungeon.depth % 5 != 4) cs.add(new Cand(new Target(ex, ex == h.pos ? Assist.PICKUP : Assist.GO, "escape: down the stairs (brain)"), "brain", Role.DOWN));
 		}
 	}
+	// (M2) descend or explore: the rest of a floor is worth its finds (food, XP, items: BLOOT floors for a whole floor,
+	// by the share still unexplored) and costs its danger: a foe in sight, awake, not yet after the hero, that the fight
+	// model says would likely kill him (met again BMEET of the time if he stays). When the danger outweighs the finds,
+	// the stairs down (known, a short walk, not past the foe; not the boss's) are offered with that value. The food
+	// side (short of food: on down) is K6's AsBasics.hurry.
+	static final boolean SKIPV = Assist.opt("BSKIP", true);
+	static final double LOOT = Assist.optInt("BLOOT", 60) / 100.0, MEET = Assist.optInt("BMEET", 50) / 100.0, SKIPPD = Assist.optInt("BSKIPPD", 15) / 100.0;
+	static void skip(List<Cand> cs) {
+		Hero h = H;
+		if (has(cs, Role.DOWN) || Dungeon.bossLevel() || Dungeon.depth % 5 == 4 || Assist.L.locked || Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null || !Assist.floorLeft()) return;
+		int ex = Assist.L.exit();
+		if (ex < 0 || ex >= Assist.L.length() || !Assist.known[ex] || Assist.L.map[ex] == Terrain.LOCKED_EXIT || Assist.walk(ex) > 20 || Assist.bad.containsKey(ex)) return;
+		List<Mob> ds = new ArrayList<>();
+		for (Mob m : Assist.mobs()) if (Assist.enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC) && !(m instanceof Piranha) && !Char.hasProp(m, Char.Property.IMMOVABLE)) ds.add(m);
+		if (ds.isEmpty()) return;
+		for (Mob m : ds) if (Assist.distance(m.pos, ex) < Assist.walk(ex)) return;   // (it's nearer the stairs than he is)
+		double pd = FightModel.evaluate(h, ds).pDeath;
+		if (pd < SKIPPD) return;
+		int seen = 0, left = 0; for (int c = 0; c < Assist.L.length(); c++) if (Assist.dist[c] > 0 && Assist.dist[c] < Assist.INF) { if (Assist.unseenBy(c)) left++; else seen++; }
+		double share = Math.min(1, Math.max(0.1, left * 4.0 / Math.max(1, seen + left * 4)));   // (an unknown edge cell stands for the room beyond it)
+		double r = Budget.ahead(h), v = MEET * pd * r - LOOT * share;
+		Cand c = new Cand(new Target(ex, ex == h.pos ? Assist.PICKUP : Assist.GO, "escape: down the stairs (brain: the floor's danger)"), "brain", Role.DOWN);
+		c.v = v; c.note = String.format(java.util.Locale.ROOT, "skip pd %.2f share %.2f R %.1f", pd, share, r);
+		cs.add(c); skips++;
+	}
+	static int skips;
+
+	// (M2) from afar or closing in: a caster's bolt ignores armour and the Assist never shoots at casters (Assist.ranged:
+	// "melee from round a corner"); with plan A a walk at a foe not beside the hero, the bow / a charged attack wand at
+	// the nearest caster in line is offered and weighed: the fight with the hero's shots first (the lookahead's policy)
+	// against the same fight walking up at once (no shots). A wand charge used costs BCHARGE floors.
+	static final boolean RANGEDV = Assist.opt("BRANGED", true);
+	static final double CHARGE = Assist.optInt("BCHARGE", 1) / 100.0;
+	static void afar(List<Cand> cs) {
+		Target a = cs.get(0).t; Hero h = H;
+		if (a.kind != Assist.ENEMY && !(a.why != null && a.why.startsWith("caster: close in"))) return;
+		for (Mob m : foes) if (Assist.adjacent(m.pos, h.pos)) return;
+		Mob c = null; for (Mob m : foes) if ((m instanceof Shaman || m instanceof Warlock || m instanceof DM100) && Assist.line(h.pos, m.pos) && (c == null || Assist.distance(m.pos, h.pos) < Assist.distance(c.pos, h.pos))) c = m;
+		if (c == null || me.rangedShots <= 0) return;
+		Item it = null; String act = null; boolean wand = false;
+		com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow bow = Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.class);
+		if (bow != null) { it = bow; act = com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.AC_SHOOT; }
+		int ed = Assist.distance(c.pos, h.pos);
+		if (it == null) for (Item i : h.belongings.backpack) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) {
+			com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand w = (com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) i;
+			if (Assist.charged(w, w) && Assist.attackWand(w.getClass(), ed)) { it = w; act = com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand.AC_ZAP; wand = true; break; } }
+		if (it == null || Assist.declined(it.getClass(), act)) return;
+		Look.Out walk = base, shoot = Look.run(me, fs, plan().afar(), seed);
+		Cand k = new Cand(Assist.use(it, act, c.pos, "brain: from afar (a caster)"), "brain", Role.RANGED);
+		k.v = fightV(shoot, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - fightV(walk, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - (wand ? CHARGE : 0);
+		k.note = "afar " + shoot + " | walk " + walk;
+		cs.add(k);
+	}
+
+	// =============================================================================================================
+	// (M2, the coordinator's ask) steadiness across decisions: several skills propose competing moves, and plan A has
+	// gone back and forth between them (K7's, WD's loops; the Dwarf King's two tactics, M2-c). Two guards, each logged
+	// (DITHER / ZEROTIME lines) so the owners can fix the cause:
+	//   dithering: over the last BDITHERN decisions plan A took turns among 2-3 targets, the hero on 3 cells or fewer,
+	//     no foe's health down and his own not up: one of them is kept as plan A for BDITHERK decisions (a boss's or a
+	//     fight's tactic first, else the latest), while it stays in the list;
+	//   zero time: BZEROT decisions with the same plan A and the game's clock not moving: that one is put last.
+	// =============================================================================================================
+	static final boolean DITHER = Assist.opt("BDITHER", true);
+	static int acted, lastActed = -1, commitCell = -1; static final Set<String> ditherKeys = new HashSet<>(); static final Map<Integer, Integer> lastFoeHp = new HashMap<>();
+	static final int DN = Assist.optInt("BDITHERN", 6), DK = Assist.optInt("BDITHERK", 5), ZT = Assist.optInt("BZEROT", 8);
+	static final ArrayDeque<String> hKeys = new ArrayDeque<>(); static final ArrayDeque<Integer> hPos = new ArrayDeque<>(); static final ArrayDeque<Integer> hFoe = new ArrayDeque<>(), hHp = new ArrayDeque<>(); static final ArrayDeque<Float> hT = new ArrayDeque<>();
+	static String commitKey; static int commitLeft, zeroSame; static String zeroKey, zeroVeto; static int zeroVetoLeft; static int dithers, zeros; static int hDepth = -1;
+	static String key(Target t) { String w = t.why == null ? "" : t.why; int c = w.indexOf(" ["); if (c > 0) w = w.substring(0, c); return t.kind + "@" + t.cell + ":" + w; }
+	static boolean tactic(String k) { String w = k.substring(k.indexOf(':') + 1); return w.startsWith("boss") || w.startsWith("tactic") || w.startsWith("fight"); }
+	static void steady() {
+		List<Target> out = Assist.out; if (out.isEmpty()) return;
+		Hero h = H; float now = Actor.now();
+		if (Dungeon.depth != hDepth) { hDepth = Dungeon.depth; hKeys.clear(); hPos.clear(); hFoe.clear(); hHp.clear(); hT.clear(); commitLeft = 0; zeroSame = 0; zeroVetoLeft = 0; }
+		boolean fresh = acted != lastActed;   // (a re-plan with nothing done since (the watch's list redrawn, a Down) isn't a decision of its own)
+		// the zero-time veto in force: that plan A put last
+		if (zeroVetoLeft > 0) { if (fresh) zeroVetoLeft--; if (out.size() > 1 && key(out.get(0)).equals(zeroVeto)) { Target t = out.remove(0); out.add(t); } }
+		// a commitment in force: its target kept first while it's in the list
+		if (commitLeft > 0) {
+			if (fresh) commitLeft--; Target c = null; for (Target t : out) if (key(t).equals(commitKey)) { c = t; break; }
+			if (c != null && out.get(0) != c) { out.remove(c); out.add(0, c); }
+			else if (c == null && commitCell == h.pos) {   // (the kept one's cell reached: the others it took turns with put last, the hero stays)
+				List<Target> rest = new ArrayList<>(); for (Target t : out) if (ditherKeys.contains(key(t))) rest.add(t);
+				if (rest.size() < out.size()) { out.removeAll(rest); out.addAll(rest); }
+			} else if (c == null) commitLeft = 0;
+		}
+		if (!fresh) return;
+		lastActed = acted;
+		String k = key(out.get(0));
+		int foe = 0;   // (the damage dealt since the last decision: health off each foe in sight, a kill its last health; new foes coming don't hide it)
+		Map<Integer, Integer> now2 = new HashMap<>(); for (Mob m : Assist.mobs()) if (Assist.enemy(m)) { int v = m.HP + m.shielding(); now2.put(m.id(), v); Integer p0 = lastFoeHp.get(m.id()); if (p0 != null && p0 > v) foe += p0 - v; }
+		for (Map.Entry<Integer, Integer> e : lastFoeHp.entrySet()) if (!now2.containsKey(e.getKey())) { com.shatteredpixel.shatteredpixeldungeon.actors.Actor a = Actor.findById(e.getKey()); if (!(a instanceof Mob) || !((Mob) a).isAlive()) foe += e.getValue(); }
+		lastFoeHp.clear(); lastFoeHp.putAll(now2);
+		hKeys.addLast(k); hPos.addLast(h.pos); hFoe.addLast(foe); hHp.addLast(h.HP); hT.addLast(now);
+		while (hKeys.size() > Math.max(DN, ZT)) { hKeys.removeFirst(); hPos.removeFirst(); hFoe.removeFirst(); hHp.removeFirst(); hT.removeFirst(); }
+		// zero time: the same plan A, the clock still
+		if (k.equals(zeroKey) && hT.size() >= 2 && now == ((ArrayDeque<Float>) hT).toArray(new Float[0])[hT.size() - 2]) zeroSame++; else { zeroSame = 0; zeroKey = k; }
+		if (zeroSame >= ZT && out.size() > 1) {
+			zeros++; System.out.println("ZEROTIME d" + Dungeon.depth + " t" + (int) now + " " + ZT + " decisions on '" + k + "' with no time passing: put last (next: " + key(out.get(1)) + ")");
+			zeroVeto = k; zeroVetoLeft = DK; zeroSame = 0; Target t = out.remove(0); out.add(t); return;
+		}
+		if (commitLeft > 0 || hKeys.size() < DN) return;
+		// dithering over the last DN decisions
+		String[] ks = hKeys.toArray(new String[0]); Integer[] ps = hPos.toArray(new Integer[0]), fo = hFoe.toArray(new Integer[0]), hp = hHp.toArray(new Integer[0]);
+		int from = ks.length - DN; Set<String> kset = new LinkedHashSet<>(); Set<Integer> pset = new HashSet<>(); int switches = 0;
+		for (int i = from; i < ks.length; i++) { kset.add(ks[i]); pset.add(ps[i]); if (i > from && !ks[i].equals(ks[i - 1])) switches++; }
+		int dealt = 0; for (int i = from + 1; i < ks.length; i++) dealt += fo[i];
+		boolean progress = dealt > 0 || hp[ks.length - 1] > hp[from];
+		if (kset.size() < 2 || kset.size() > 3 || pset.size() > 3 || switches < DN - 2 || progress) return;
+		String pick = null; for (String x : kset) if (tactic(x)) pick = x;
+		if (pick == null) pick = ks[ks.length - 1];
+		dithers++; System.out.println("DITHER d" + Dungeon.depth + " t" + (int) now + " plan A took turns among " + kset + " on " + pset.size() + " cells, no progress: kept '" + pick + "' for " + DK);
+		commitKey = pick; commitLeft = DK; ditherKeys.clear(); ditherKeys.addAll(kset); ditherKeys.remove(pick);
+		try { commitCell = Integer.parseInt(pick.substring(pick.indexOf('@') + 1, pick.indexOf(':'))); } catch (Throwable e) { commitCell = -1; }
+		Target c = null; for (Target t : out) if (key(t).equals(pick)) { c = t; break; }
+		if (c != null && out.get(0) != c) { out.remove(c); out.add(0, c); }
+		hKeys.clear(); hPos.clear(); hFoe.clear(); hHp.clear(); hT.clear();
+	}
+
 	static boolean has(List<Cand> cs, Role r) { for (Cand c : cs) if (c.role == r) return true; return false; }
 	/** Stairs known, a short walk off, no foe nearer to them than the hero. */
 	static boolean stairsOk(int s) {
@@ -237,9 +360,10 @@ final class Brain {
 		switch (c.role) {
 			case CARRY: return;
 			case HEAL: {
-				if (n <= 0) return;
-				Look.Out o = Look.run(me, fs, plan().drink(), seed);
-				c.v = fightV(o, n, vh, vh2) - fightV(base, n, vh, vh2);
+				Fighter m1 = me;
+				if (n <= 0) { if (c.t.item == null || Assist.known(c.t.item)) return; m1 = me.copy(); m1.heals = 1; m1.healAmount = Math.round(0.8f * me.ht + 14); vh = Budget.rescue(h, 1, 1); }   // (a believed Healing: drunk, it's the one)
+				Look.Out o = Look.run(m1, fs, plan().drink(), seed);
+				c.v = fightV(o, Math.max(1, n), vh, vh2) - fightV(base, n, vh, vh2);
 				c.note = "drink " + o + " | on " + base;
 				return;
 			}
@@ -273,7 +397,7 @@ final class Brain {
 
 	/** A fight's value: death costs the floors ahead, each Healing drunk what it was worth kept, the health left a little. */
 	static double fightV(Look.Out o, int n, double vh, double vh2) {
-		double u = o.healsUsed, spent = u <= 1 ? u * vh : vh + (u - 1) * vh2;
+		double u = Tune.HEALBUD ? o.healsLive : o.healsUsed, spent = u <= 1 ? u * vh : vh + (u - 1) * vh2;
 		return -o.pDeath * R - spent + HPW * o.hpLeft / Math.max(1, me.ht);
 	}
 	/** Gone from the fight (after o's walk): later, the value of what comes after (the fight met again, a new floor
@@ -303,7 +427,7 @@ final class Brain {
 
 	static final boolean DBG = Assist.opt("ADBG", false) || Assist.opt("BDBG", false);
 	static void dump(List<Cand> cs, Cand pick) {
-		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " foes " + fs.size() + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
+		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " [" + Budget.dump(H) + "]" + " foes " + fs.size() + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
 		for (Cand c : cs) if (c.valued() || c.veto) System.out.println("    " + c + "  " + c.note);
 	}
 
@@ -315,8 +439,9 @@ final class Brain {
 
 	/** The game's tally (AssistBot prints it with the result). */
 	static String stats() {
-		String s = String.format("decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", decisions, fights, overrides,
+		String s = String.format("dithers %d zerotime %d skips %d decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", dithers, zeros, skips, decisions, fights, overrides,
 				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
+		skips = 0; lastFoeHp.clear(); dithers = zeros = 0; hDepth = -1; commitLeft = 0; zeroVetoLeft = 0; zeroSame = 0; zeroKey = null;
 		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset(); lastDepth = fledFrom = -1; fledAt = -999; lastPlanRole = null;
 		return s;
 	}

@@ -135,7 +135,7 @@ public final class BotModelTest {
 				m.pos = cell; m.state = m.HUNTING; m.alignment = Char.Alignment.ENEMY;
 				GameScene.add(m);
 				see(m, h);
-				if (n == 0) { h.HP = s.hp0; me = HeroView.of(h); foe = FoeView.of(m, h); foe.asleep = false; }
+				if (n == 0) { h.HP = s.hp0; me = HeroView.of(h); foe = FoeView.of(m, h); foe.asleep = false; duelOnly(foe); }
 				h.HP = h.HT = 100000;
 				Random.pushGenerator(1000 + n);
 				double tH = 0, tM = Random.Float() * m.attackDelay(); int start = h.HP;
@@ -163,6 +163,10 @@ public final class BotModelTest {
 					hDmg / Math.max(1, hTries), Dist.hit(me.acc, foe.eva) * Fighter.blow(me.dmg, foe).mean(), mDmg / Math.max(1, mTries), Dist.hit(foe.acc, me.eva) * Fighter.blow(foe.dmg, me).mean(), h.attackDelay(), foe.delay, me, foe));
 		}
 	}
+
+	/** (M2) What only the mob's own turns do, left out: these duels are Char.attack alone, no Actor.act (a brute's rage
+	 *  never runs down, a monk never focuses, Goo never pumps up, the ooze never ticks). Arena checks those, with real turns. */
+	static void duelOnly(Fighter f) { f.rageDecay = 0; f.reach = 1; f.pump = 0; f.pumpNow = false; f.fleeHit = 0; if (f.name.equals("Goo")) f.hitDirect = 0; }
 
 	/** The mob has seen the hero (else every blow on it is a surprise: Mob.surprisedBy). */
 	static void see(Mob m, Hero h) {

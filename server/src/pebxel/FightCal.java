@@ -19,6 +19,7 @@ import pebxel.bot.FightModel;
 final class FightCal {
 	static final boolean ON = "1".equals(System.getenv("FIGHTCAL"));
 	static boolean active; static int hp0, minHp, quiet, depth, heals0; static FightModel.Result pred; static String names;
+	static String how = "";   // (M2: how the fight ended: won (one of its foes dead), left (all alive, out of sight), floor (stairs, a fall, a teleport off the floor), died)
 	static Set<Integer> ids = new HashSet<>(); static Map<Integer, Integer> mobHp = new HashMap<>(); static boolean blows;
 
 	static void newGame() { rT = -1; active = false; ids.clear(); mobHp.clear(); }
@@ -39,7 +40,7 @@ final class FightCal {
 	static void decision() {
 		if (!ON) return;
 		Hero h = Dungeon.hero; if (h == null) return;
-		if (active && Dungeon.depth != depth) end(false);
+		if (active && Dungeon.depth != depth) { how = "floor"; end(false); }
 		List<Mob> ms = engaged(h);
 		rate(h, ms);
 		if (!active) {
@@ -54,7 +55,7 @@ final class FightCal {
 		if (h.HP < hp0) blows = true;
 		for (Integer id : mobHp.keySet()) { com.shatteredpixel.shatteredpixeldungeon.actors.Actor a = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findById(id); if (!(a instanceof Mob) || !((Mob) a).isAlive() || ((Mob) a).HP < mobHp.get(id)) blows = true; }
 		for (Mob m : ms) if (ids.add(m.id())) names += "+" + m.getClass().getSimpleName() + ",";
-		if (ms.isEmpty()) { if (++quiet >= 3) end(false); } else quiet = 0;
+		if (ms.isEmpty()) { if (++quiet >= 3) { how = "left"; for (Integer id : mobHp.keySet()) { com.shatteredpixel.shatteredpixeldungeon.actors.Actor a = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findById(id); if (!(a instanceof Mob) || !((Mob) a).isAlive()) { how = "won"; break; } } end(false); } } else quiet = 0;
 	}
 
 	// (MT) the damage rate: at a decision in a fight, the model's mean loss over the next RATE turns against the health
@@ -82,7 +83,7 @@ final class FightCal {
 		if (!died && !blows) return;   // (no blow either way: no fight, it was only in sight)
 		Hero h = Dungeon.hero;
 		int min = died ? 0 : Math.min(minHp, h == null ? 0 : h.HP);
-		System.out.printf(Locale.ROOT, "FIGHTCAL depth %d hp0 %d pdeath %.3f loss %.1f p90 %.0f | real loss %d died %d healed %d mobs %s%n",
-				depth, hp0, pred.pDeath, pred.lossMean, pred.loss90, hp0 - min, died ? 1 : 0, h != null && heals(h) < heals0 ? 1 : 0, names);
+		System.out.printf(Locale.ROOT, "FIGHTCAL depth %d hp0 %d pdeath %.3f loss %.1f p90 %.0f | real loss %d died %d healed %d end %s mobs %s%n",
+				depth, hp0, pred.pDeath, pred.lossMean, pred.loss90, hp0 - min, died ? 1 : 0, h != null && heals(h) < heals0 ? 1 : 0, died ? "died" : how, names);
 	}
 }
