@@ -774,12 +774,12 @@ public final class Assist {
 			if (itemsOn()) { Target ua = Brain.offer("artifacts!", AsArtifacts.urgent(first)); if (ua != null) front(ua); }   // (AsArtifacts.urgent: an emergency artifact, the Horn before rations)
 			if (itemsOn()) { Target ur = Brain.offer("urgent", AsAbilities.urgent(first)); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
 			if (itemsOn()) { Target hk = Brain.hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
-			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
+			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = Brain.offer("escape", escape());
 			if (e != null) front(e);
-			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = Brain.offer("bosses", AsBosses.tactics()); if (tc == null) tc = Brain.offer("tactics", tactics()); if (tc != null) front(tc); }   // (a boss's own mechanics first: AsBosses)
+			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = Brain.offer("bosses", AsBosses.tactics()); if (tc == null) tc = Brain.offer("tactics", tactics()); if (tc != null && !AsQuests.vetoMove(tc)) front(tc); }   // (a boss's own mechanics first: AsBosses)
 			h0 = 0;
 			Brain.judge();
 		}
@@ -1014,7 +1014,8 @@ public final class Assist {
 		for (Blob b : L.blobs.values()) {
 			if (b == null || b.volume <= 0 || b.cur == null || c >= b.cur.length || b.cur[c] <= 0) continue;
 			if (b instanceof ToxicGas || b instanceof CorrosiveGas || b instanceof ConfusionGas || b instanceof Fire || b instanceof ParalyticGas
-					|| b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing) return true;
+					|| b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing
+					|| b instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.MagicalFireRoom.EternalFire) return true;   // (the magical fire room's wall burns as fire does: K5)
 		}
 		return false;
 	}

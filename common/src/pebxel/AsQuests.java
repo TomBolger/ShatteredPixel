@@ -56,10 +56,25 @@ final class AsQuests {
 	static Target suggest0(Target planA) {
 		try {
 			Target b = AsBasics.fightLoop(planA);
+			if (b == null) b = AsBasics.chasm();
+			if (b == null) b = AsBasics.restStairs();
+			if (b != null) return b;
+			b = AsBasics.crab(planA);
+			if (b == null) b = AsBasics.piranha(planA);
+			if (b == null) b = AsBasics.spawner(planA);
+			if (b == null) b = AsBasics.sacrifice(planA);
+			if (b == null) b = AsBasics.sleeper(planA);
 			if (b != null) return b;
 			if (!ON) return AsBasics.hurry(planA);
 			remember();
 			boolean fightOn = false; for (Mob m : mobs()) if (hostile(m) && (adjacent(m.pos, Dungeon.hero.pos) || hunting(m))) fightOn = true;
+			if (fightOn && !inDanger && Dungeon.hero.belongings.getItem(CorpseDust.class) != null) {   // (the dust calls wraith after wraith: the fights never end till it's handed over)
+				boolean adj = false; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, Dungeon.hero.pos)) adj = true;
+				Integer wp = seenAt.get(Wandmaker.class);
+				Target w = adj && (Dungeon.hero.HP * 2 < Dungeon.hero.HT || wp == null || walk(wp) > 60) ? null : wandmaker();   // (beside a wraith too, when he's near: they're weak, and they never stop coming)
+				if (w == null && wp != null && Dungeon.hero.HP * 4 >= Dungeon.hero.HT) w = cutThrough(wp);   // (the way to him blocked by them: through them, a step at a time)
+				if (w != null) return w;
+			}
 			if (fightOn || inDanger) return null;
 			if (Dungeon.depth != stepsDepth) { stepsDepth = Dungeon.depth; steps = 0; }
 			if (++steps > 1500) return AsBasics.hurry(planA);   // (a step that goes nowhere: given up on this floor)
@@ -73,20 +88,42 @@ final class AsQuests {
 		} catch (Throwable e) { lastError = e; return null; }
 	}
 
+	/** A tactic's move vetoed (Assist planList's hook): into the Great Crab's dead end. */
+	static boolean vetoMove(Target t) {
+		try { return AsBasics.crabVeto(t); } catch (Throwable e) { lastError = e; return false; }
+	}
+
+	/** The first step of the shortest known way to c with foes taken as no wall: walked, or (a foe there) struck. */
+	static Target cutThrough(int c) {
+		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
+		int[] prev = new int[N]; Arrays.fill(prev, -2); ArrayDeque<Integer> q = new ArrayDeque<>(); prev[hp] = -1; q.add(hp);
+		while (!q.isEmpty()) { int u = q.poll(); if (u == c || adjacent(u, c)) {
+				int x = u; while (prev[x] != hp && prev[x] >= 0) x = prev[x];
+				if (x == hp) return null;
+				Char ch = Actor.findChar(x);
+				if (ch instanceof Mob && hostile((Mob) ch)) return new Target(x, ENEMY, "quest: cut through to the Wandmaker");
+				return ch == null ? new Target(x, GO, "quest: through them to the Wandmaker") : null; }
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || prev[v] != -2 || !L.passable[v] || !(known[v] || L.heroFOV[v]) || L.avoid[v]) continue;
+				prev[v] = u; q.add(v); } }
+		return null;
+	}
+
 	/** A hands suggestion vetoed (Assist planList's hook). */
 	static boolean veto(Target hk) {
 		try {
 			if (ON && hk != null && "drink to learn".equals(hk.why) && graveOpen()) return true;   // (unknown potions kept for the barricade: one is the floor's Liquid Flame)
+			if (AsBosses.vetoAim(hk)) return true;
 			return AsBasics.veto(hk);
 		} catch (Throwable e) { lastError = e; return false; }
 	}
-	/** The corpse dust quest on, its barricade seen standing and no known fire to burn it: the Wandmaker's floor. */
+	/** The corpse dust quest on and the dust not in hand: the Wandmaker's floor (unknown potions kept for the barricade). */
 	static boolean graveOpen() {
 		if (!flag(Wandmaker.class, "spawned") || !flag(Wandmaker.class, "given") || Wandmaker.Quest.wand1 == null || !seenAt.containsKey(Wandmaker.class)) return false;
 		Object t = qobj(Wandmaker.class, "type"); if (!(t instanceof Integer) || (Integer) t != 1 || Dungeon.hero.belongings.getItem(CorpseDust.class) != null) return false;
 		if (gambleL == L && gambles >= 3) return false;
-		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c]) return true;
-		return false;
+		if (!GRAVEEARLY) { for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c]) return true; return false; }
+		return true;   // (from his word on, not only once the barricade is seen: the floor's Liquid Flame was drink-tested before it was found)
 	}
 
 	static void remember() {
@@ -149,6 +186,11 @@ final class AsQuests {
 		return null;
 	}
 
+	static int lastBar = -1; static Level barL;
+	static final boolean GRAVEEARLY = opt("QGRAVEEARLY", true);
+	static final int THROWWALKS = optInt("QTHROWWALKS", 150);   // walks towards a throwing spot on a floor, at most
+	static int throwWalks; static Level throwL;
+
 	/** The mass grave: the corpse dust behind its barricade (it burns). */
 	static Target grave() {
 		Heap dust = null;
@@ -158,6 +200,19 @@ final class AsQuests {
 		int bar = -1, bd = INF, ref = dust != null ? dust.pos : Dungeon.hero.pos;
 		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && known[c] && distance(c, ref) < bd) { bd = distance(c, ref); bar = c; }
 		if (DBG) { int nb = 0; for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE) nb++; System.out.println("    GRAVE bar " + bar + " barricades " + nb + " dust " + (dust == null ? -1 : dust.pos)); }
+		if (bar < 0 && dust == null) {   // the barricade burnt (or none seen): the grave's remains opened one by one, the dust is in one
+			int bh = -1, bw = INF;
+			for (Heap hh : L.heaps.valueList()) if (hh.seen && hh.type == Heap.Type.SKELETON && hh.pos >= 0 && (walk(hh.pos) < bw || hh.pos == Dungeon.hero.pos) && !bad.containsKey(hh.pos)) { bw = hh.pos == Dungeon.hero.pos ? 0 : walk(hh.pos); bh = hh.pos; }
+			if (bh >= 0 && bw < INF) return new Target(bh, PICKUP, "quest: the grave's remains, for the dust");
+			if (barL == L && lastBar >= 0 && L.map[lastBar] != Terrain.BARRICADE && !L.solid[lastBar] && lastBar != Dungeon.hero.pos) {   // (the floor's way on known, the grave behind it never looked into)
+				if (walk(lastBar) < INF && !L.heroFOV[lastBar]) return new Target(lastBar, GO, "quest: through the burnt barricade, to the grave");
+				if (walk(lastBar) >= INF && !L.heroFOV[lastBar]) {   // (its flames remembered: back where it can be seen, to see them gone)
+					int bc = -1, bk = INF; for (int c = 0; c < L.length(); c++) if (dist[c] < bk && dist[c] > 0 && open[c] && distance(c, lastBar) <= 3 && sight(c, lastBar)) { bk = dist[c]; bc = c; }
+					if (bc >= 0) return new Target(bc, GO, "quest: back to the burnt barricade");
+				}
+			}
+		}
+		if (bar >= 0) { barL = L; lastBar = bar; }
 		if (bar < 0 || (dust != null && bd > 10)) return null;
 		Hero h = Dungeon.hero; Item fire = null; String act = Item.AC_THROW;
 		PotionOfLiquidFlame lf = h.belongings.getItem(PotionOfLiquidFlame.class); if (lf != null && lf.isKnown()) fire = lf;
@@ -172,19 +227,34 @@ final class AsQuests {
 			if (DBG) System.out.println("    GRAVE gamble " + fire);
 			if (fire == null) return null;
 		}
-		int d = distance(h.pos, bar);
-		if (DBG) System.out.println("    GRAVE fire " + fire + " d " + d + " line " + line(h.pos, bar) + " bar " + bar + " hp " + h.pos);
-		if (d >= 1 && d <= 4 && line(h.pos, bar) && (!L.flamable[h.pos] || d >= 3)) {   // (beside it from bare floor will do: fire spreads only over what burns)
+		// a thrown potion stops on the cell before what's solid (Ballistica): aimed at a floor cell beside the barricade,
+		// its 3x3 of flames sets the barricade alight; the hero 2+ off that cell (off grass: the fire spreads over it)
+		boolean wand = Wand.AC_ZAP.equals(act);
+		int aim = -1, ak = INF;
+		for (int f : PathFinder.NEIGHBOURS8) { int a = bar + f;
+			if (a < 0 || a >= L.length() || L.solid[a] || !(known[a] || L.heroFOV[a])) continue;
+			int d = distance(h.pos, a);
+			if (wand ? (distance(h.pos, bar) <= 4 && new Ballistica(h.pos, bar, Ballistica.STOP_TARGET | Ballistica.STOP_SOLID | Ballistica.IGNORE_SOFT_SOLID).collisionPos == bar)
+					: (d >= 2 && d <= 4 && !L.flamable[h.pos] && line(h.pos, a))) { if (d < ak) { ak = d; aim = wand ? bar : a; } } }
+		if (DBG) System.out.println("    GRAVE fire " + fire + " aim " + aim + " bar " + bar + " hp " + h.pos);
+		if (aim >= 0) {
 			if (!known(fire)) { if (gambleL != L) { gambleL = L; gambles = 0; } gambles++; }
-			return use(fire, act, bar, known(fire) ? "quest: burn the barricade" : "quest: an unknown potion at the barricade");
+			return use(fire, act, aim, known(fire) ? "quest: burn the barricade" : "quest: an unknown potion at the barricade");
 		}
-		int best = -1, bb = INF;   // a spot 2-3 off with a clear throw
-		for (int c = 0; c < L.length(); c++) if (dist[c] < INF && open[c] && seenChar(c) == null && distance(c, bar) >= 1 && distance(c, bar) <= 4 && !(distance(c, bar) == 1 && L.flamable[c]) && new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) {
-			int k = dist[c] + (L.flamable[c] ? 6 : 0) + (distance(c, bar) <= 2 ? 2 : 0); if (k < bb) { bb = k; best = c; } }   // (off grass if it can be: the fire spreads)
-		if (DBG) { int a = 0, b2 = 0, c3 = 0; for (int c = 0; c < L.length(); c++) if (distance(c, bar) >= 2 && distance(c, bar) <= 4) { if (dist[c] < INF && open[c]) { a++; if (new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) b2++; else c3 = new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos; } }
-			System.out.println("    GRAVE spots " + a + " in line " + b2 + " e.g. stops at " + c3 + " best " + best); }
+		int best = -1, bb = INF;   // a spot 2-4 off a floor cell beside it, with a clear throw there, off grass
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] >= INF || !open[c] || seenChar(c) != null || L.flamable[c] || distance(c, bar) > 5 || dist[c] >= bb) continue;
+			boolean ok = false;
+			for (int f : PathFinder.NEIGHBOURS8) { int a = bar + f;
+				if (a < 0 || a >= L.length() || L.solid[a] || !(known[a] || L.heroFOV[a])) continue;
+				int d = distance(c, a); if (d >= 2 && d <= 4 && line(c, a)) { ok = true; break; } }
+			if (ok) { bb = dist[c]; best = c; } }
+		if (DBG) System.out.println("    GRAVE spot " + best);
 		if (best < 0) { int bk = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && open[c] && seenChar(c) == null) { int k = distance(c, bar) * 6 + dist[c]; if (k < bk) { bk = k; best = c; } } }   // (none known: nearer it, to see round it)
-		return best >= 0 && best != h.pos ? new Target(best, GO, "quest: to throw at the barricade") : null;
+		if (best < 0 || best == h.pos) return null;
+		if (throwL != L) { throwL = L; throwWalks = 0; }
+		if (++throwWalks > THROWWALKS) return null;   // (no spot it can be thrown from comes: given up)
+		return new Target(best, GO, "quest: to throw at the barricade");
 	}
 
 	/** The ritual: a candle onto each of the four cells round the marked spot (thrown, as a player would). */
