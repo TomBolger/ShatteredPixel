@@ -790,6 +790,37 @@ public final class RefinementTest {
         ch.charges = 0; ch.partialCharge = 0;
         t = ab(true);
         check(t == null || !com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "no charge: no ability: " + t);
+        // 2b. the Champion (WD): a Round Shield in the pack goes in the second slot, nothing about; low beside a strong
+        // foe, the second weapon's guard
+        gone(g); h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.CHAMPION;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.RoundShield rs = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.RoundShield(); rs.identify();
+        h.belongings.backpack.items.add(rs);
+        t = ab(false);
+        check(t != null && t.item == rs && "ab:second".equals(t.action), "a Champion, a Round Shield in the pack: worn as the second weapon: " + t);
+        h.belongings.backpack.items.remove(rs); h.belongings.secondWep = rs; rs.activate(h);   // (as act's equipSecondary, without taking the turn)
+        g = brute(near); h.HP = 40; ch.charges = 2;
+        t = ab(true);
+        check(t != null && t.item == rs && com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "the Champion low beside a strong foe: the second weapon's guard: " + t);
+        gone(g); h.belongings.secondWep = null; h.HP = 100; ch.charges = 0; h.subClass = sub0; g = null;
+        // 2c. the Sniper (WD): a strong foe at range, a dart in the pack: thrown first (it marks the foe for the special shot)
+        h.heroClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.HUNTRESS; h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.SNIPER;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow bow = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow(); bow.identify();
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.Dart dart = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.Dart();
+        h.belongings.backpack.items.add(bow); h.belongings.backpack.items.add(dart);
+        g = brute(far);
+        t = ab(true);
+        check(t != null && t.item == dart && com.shatteredpixel.shatteredpixeldungeon.items.Item.AC_THROW.equals(t.action) && t.cell == far, "the Sniper, a strong foe at range: a dart thrown to mark it: " + t);
+        gone(g); h.belongings.backpack.items.clear(); h.heroClass = cls0; h.subClass = sub0;
+        // 2d. the Rogue's cloak as an escape (WD): dying beside a strong foe, no Healing: the cloak goes on
+        h.heroClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.ROGUE;
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows(); ck.identify();
+        Field cf = com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact.class.getDeclaredField("charge"); cf.setAccessible(true); cf.setInt(ck, 5);
+        h.belongings.artifact = ck; ck.activate(h);
+        g = brute(near); h.HP = 20;
+        t = ab(true);
+        check(t != null && t.item == ck && com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.AC_STEALTH.equals(t.action), "the Rogue dying beside a strong foe: the cloak as an escape: " + t);
+        gone(g); ck.doUnequip(h, false, false); h.belongings.artifact = null; h.HP = 100; h.heroClass = cls0;
+        g = brute(near);
         ch.detach(); h.heroClass = cls0;
         // 3. the Berserker at full rage, low, a strong foe beside: Berserk; at full health against a weak one: not
         com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor arm = new ClothArmor(); arm.affixSeal(new com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal()); h.belongings.armor = arm;
@@ -815,7 +846,7 @@ public final class RefinementTest {
         check(t != null && t.item == crown && "WEAR".equals(t.action), "the King's Crown is put on: " + t);
         h.belongings.backpack.items.clear(); h.belongings.weapon = null; h.belongings.armor = new ClothArmor();
         Gallery.calm(); Assist.reset();
-        System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, Berserk when low (not at full health), the Crown put on: ok");
+        System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, the Champion's second weapon and its guard, the Sniper's marking throw, the Rogue's cloak escape, Berserk when low (not at full health), the Crown put on: ok");
     }
 
     static Assist.Target arts() throws Exception {
