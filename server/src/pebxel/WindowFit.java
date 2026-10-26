@@ -73,6 +73,14 @@ public final class WindowFit {
 			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent t = LONG_TALENTS[k];
 			wins.put("talent t" + (k + 1) + " " + t.name().toLowerCase() + " (long)", () -> new WndInfoTalent(t, 0, UPGRADE));
 		}
+		// the Stone of Intuition's guess windows (Thomas: icons off the window, the guess button under them): a potion, a scroll, a ring
+		for (Item guessed : new Item[]{new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength(), new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby(), new com.shatteredpixel.shatteredpixeldungeon.items.potions.exotic.PotionOfShroudingFog(), new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfWealth()})
+			wins.put("intuition guess " + guessed.getClass().getSimpleName(), () -> {
+				if (guessed.isIdentified() || (guessed instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion && ((com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion) guessed).isKnown())
+						|| (guessed instanceof com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll && ((com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll) guessed).isKnown())
+						|| (guessed instanceof com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring && ((com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring) guessed).isKnown())) throw new IllegalStateException("already known");
+				return new com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfIntuition().new WndGuess(guessed);
+			});
 		wins.put("subclass choice", () -> new WndChooseSubclass(new com.shatteredpixel.shatteredpixeldungeon.items.TengusMask(), Dungeon.hero));
 		wins.put("subclass info", () -> new WndInfoSubclass(HeroClass.CLERIC, com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.PALADIN));
 		wins.put("armor ability choice", () -> new WndChooseAbility(new com.shatteredpixel.shatteredpixeldungeon.items.KingsCrown(), Dungeon.hero.belongings.armor, Dungeon.hero));

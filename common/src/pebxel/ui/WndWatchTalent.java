@@ -25,6 +25,7 @@ public class WndWatchTalent extends WatchWindow implements Navigable, Scrolls {
 	private final List<List<String[]>> lines;
 	private final Group text = new Group();
 	private WatchButton button;
+	private List<String> note;
 	private int top, drag;
 
 	public WndWatchTalent(WndInfoTalent src) { this(src.talent, src.points, src.buttonCallback); }
@@ -40,8 +41,9 @@ public class WndWatchTalent extends WatchWindow implements Navigable, Scrolls {
 		int head = Math.max(36, Math.min(2, nl.size()) * lineHeight(WatchText.G14B) + 4);
 		// the room the screen leaves for the description (round: the circle's middle), and the lines it makes
 		int maxH = round ? 186 : WatchHud.H - 14 - 6;
-		int foot = callback != null ? GAP + BTN_H : 0;
 		int lh = lineHeight(WatchText.G14);
+		note = callback == null ? WatchHud.wrap(whyNot(talent), WatchText.G14, round ? 180 : w - 4) : null;
+		int foot = callback != null ? GAP + BTN_H : note != null ? GAP + note.size() * lh + 2 : 0;
 		boolean meta = (callback != null && callback.metamorphDesc()) || (Dungeon.hero != null && Dungeon.hero.metamorphedTalents.containsValue(talent));
 		String desc = talent.desc(meta);
 		int room = (maxH - head - 4 - foot) / lh;
@@ -82,7 +84,25 @@ public class WndWatchTalent extends WatchWindow implements Navigable, Scrolls {
 			button.label(button.text());
 			add(button);
 		}
+		if (note != null) for (int i = 0; i < note.size(); i++) text(note.get(i), WatchText.G14, LIGHT, round ? (w - WatchText.width(WatchText.G14, note.get(i))) / 2 : 2, h - foot + GAP + i * lh, 0, 0);
 		lay();
+	}
+
+	/** Why a talent window has no button (Thomas: "I can't spend tier 2 talents": the page shows tier 2 a level early, its
+	 *  first point comes at level 7, and the window said nothing). */
+	private static String whyNot(Talent t) {
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
+		if (h == null) return "";
+		for (int i = 0; i < h.talents.size(); i++) if (h.talents.get(i).containsKey(t)) {
+			int tier = i + 1;
+			if (h.pointsInTalent(t) >= t.maxPoints()) return "Fully upgraded.";
+			if (h.talentPointsAvailable(tier) > 0) return "Open it from the Talents page to spend a point.";
+			if (tier == 3 && h.subClass == com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.NONE) return "Tier 3 needs a subclass first.";
+			if (tier == 4 && h.armorAbility == null) return "Tier 4 needs an armor ability first.";
+			int lv = Talent.tierLevelThresholds[tier];
+			return h.lvl < lv - 1 || h.talentPointsSpent(tier) == 0 ? "No point to spend yet: tier " + tier + " points start at level " + lv + "." : "No point to spend: next one at the next level.";
+		}
+		return "Only a view.";
 	}
 
 	/** The lines from `top` that fit, and the triangles. */
