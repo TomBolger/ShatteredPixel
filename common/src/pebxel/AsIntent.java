@@ -32,6 +32,8 @@ final class AsIntent {
 
 	/** AS_INTENT=0 (tests): the list as before (no reordering, no once-more, "your way on" plan A, demotions flat). */
 	static final boolean ON = opt("INTENT", true);
+	/** Its parts, for tests (AS_INTENTWAY / DIS / AGAIN / POST / RANK / MULT = 0: that part off). */
+	static final boolean WAYB = opt("INTENTWAY", true), DIS = opt("INTENTDIS", true), AGAIN = opt("INTENTAGAIN", true), POST = opt("INTENTPOST", true), RANK = opt("INTENTRANK", true), MULT = opt("INTENTMULT", true);
 	static Object floor;
 	/** The way the player is going (pang 0..63, -1 none), since when, and plan A taken since (it fades after FADE). */
 	static int dir = -1; static float dirAt = -99; static int planAs;
@@ -45,7 +47,7 @@ final class AsIntent {
 	static final int AGAIN_AFTER = 10, DETOUR = 2, AGAIN_NEAR = 8, NEAR = 3;
 	/** Passed over in a fight that is now over: plan A again once, when it lies close by (NEAR steps) or on the way. */
 	static final Set<Integer> postFight = new HashSet<>();
-	static void afterFight(Set<Integer> held) { if (ON) postFight.addAll(held); }
+	static void afterFight(Set<Integer> held) { if (ON && POST) postFight.addAll(held); }
 	/** Counters (tests, the bot's report): lists reordered by his way or liking, plans A held back as disliked, once-mores. */
 	static long ranked, disliked, again;
 
@@ -113,7 +115,7 @@ final class AsIntent {
 		if (optional(cat(e)) && !s.combat) liked(cat(e), -0.5);
 	}
 	/** How much longer an objective passed over again stays held back (Assist.pass's demotion): 1, 3, 9 times. */
-	static int demoteMult(int o) { if (!ON) return 1; Skip s = skips.get(o); if (s == null || !optional(s.cat)) return 1; int n = s.n; return n <= 1 ? 1 : n == 2 ? 3 : 9; }   // (the unexplored, the stairs: never longer; the way on must come back)
+	static int demoteMult(int o) { if (!ON || !MULT) return 1; Skip s = skips.get(o); if (s == null || !optional(s.cat)) return 1; int n = s.n; return n <= 1 ? 1 : n == 2 ? 3 : 9; }   // (the unexplored, the stairs: never longer; the way on must come back)
 
 	/** planList's last pass over the list (the player's side of it). */
 	static void rank(List<Target> out) {
@@ -137,7 +139,7 @@ final class AsIntent {
 			}
 		}
 		// 1. once more, on the way: a thing passed over, a while ago, a step or two off the way to plan A's objective
-		if (calm && walkA) {
+		if (calm && walkA && AGAIN) {
 			int ao = a.obj >= 0 ? a.obj : a.cell, best = -1, bd = INF; Skip bs = null;
 			for (Map.Entry<Integer, Skip> e : skips.entrySet()) {
 				Skip s = e.getValue(); int o = e.getKey();
@@ -159,15 +161,15 @@ final class AsIntent {
 			}
 		}
 		// 2. a kind he doesn't care for: no plan A while something else is (not in a fight, never a skill's or his own)
-		if (calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && !cat(a).equals("item") && !cat(a).equals("search") && like(cat(a)) <= -2) {   // (never the loot: it wins the game; only lower in B and C)
+		if (DIS && calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && !cat(a).equals("item") && !cat(a).equals("search") && like(cat(a)) <= -2) {   // (never the loot: it wins the game; only lower in B and C)
 			for (int j = 1; j < out.size(); j++) { Target e = out.get(j); if (e.kind != ENEMY && !(optional(cat(e)) && like(cat(e)) <= -2)) { out.add(0, out.remove(j)); disliked++; break; } }
 		}
 		// 3. his way: the next thing that way (what lies about, the unexplored, the stairs, a door he has been through or
 		// not) as plan B, while he is going that way and plan A isn't (Thomas: "go north until we have to turn and then
 		// suggest previously explored doors ... that should stay as Plan B until it's selected")
-		if (calm && dir >= 0 && (now - dirAt <= DIR_TURNS || ovrC == WAY)) way(out);
+		if (WAYB && calm && dir >= 0 && (now - dirAt <= DIR_TURNS || ovrC == WAY)) way(out);
 		// 4. the entries after plan A: the list's order, lifted by his liking and by lying his way
-		if (out.size() < 3 || seenFoe) return;
+		if (out.size() < 3 || seenFoe || !RANK) return;
 		int fixed = 1;
 		double[] sc = new double[out.size()];
 		boolean any = false;

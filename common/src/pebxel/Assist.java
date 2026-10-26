@@ -1637,7 +1637,7 @@ public final class Assist {
 				if (w > 0 && sd * w < ns) { ns = sd * w; nt = c; }
 			}
 			// (Thomas: the bot's plan A first, his way on as plan B till he takes it: then it leads, "your choice")
-			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(AsIntent.ON ? Math.min(1, out.size()) : 0, t); } ovrC = WAY; }
+			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(AsIntent.ON && AsIntent.WAYB ? Math.min(1, out.size()) : 0, t); } ovrC = WAY; }
 			wayOn = -1;
 		}
 		// the interrupted walk, taken up again (30 turns), the fight first
