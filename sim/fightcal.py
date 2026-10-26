@@ -4,24 +4,24 @@ the predicted P(death): predicted against real death rates; by predicted mean lo
 against real loss. Fights where a Healing potion was drunk are counted apart (the model's prediction assumed none)."""
 import re, sys
 
-R = re.compile(r"FIGHTCAL depth (\d+) hp0 (\d+) pdeath ([\d.]+) loss ([\d.]+) p90 (\d+) \| real loss (-?\d+) died (\d) healed (\d) mobs (.*)")
+R = re.compile(r"FIGHTCAL depth (\d+) hp0 (\d+) pdeath ([\d.]+) loss ([\d.]+) p90 (\d+) \| real loss (-?\d+) died (\d) healed (\d)(?: end (\w+))? mobs (.*)")
 rows = []
 for p in sys.argv[1:]:
     for line in open(p, errors="replace"):
         m = R.search(line)
         if m:
-            d, hp0, pd, pl, p90, rl, died, healed, mobs = m.groups()
-            rows.append(dict(d=int(d), hp0=int(hp0), pd=float(pd), pl=float(pl), rl=int(rl), died=int(died), healed=int(healed), mobs=mobs))
+            d, hp0, pd, pl, p90, rl, died, healed, end, mobs = m.groups()
+            rows.append(dict(d=int(d), hp0=int(hp0), pd=float(pd), pl=float(pl), rl=int(rl), died=int(died), healed=int(healed), end=end or '?', mobs=mobs))
 
 def table(rs, title):
     print(f"== {title}: {len(rs)} fights, {sum(r['died'] for r in rs)} deaths")
     bins = [0, 0.005, 0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.01]
-    print(f"  {'P(death) bin':>14} {'n':>6} {'pred':>7} {'real':>7}   {'pred loss':>9} {'real loss':>9}")
+    print(f"  {'P(death) bin':>14} {'n':>6} {'pred':>7} {'real':>7}   {'pred loss':>9} {'real loss':>9}   ends (won left floor died)")
     for a, b in zip(bins, bins[1:]):
         g = [r for r in rs if a <= r["pd"] < b]
         if not g: continue
         n = len(g)
-        print(f"  {a:6.3f}-{b:<6.3f} {n:6d} {sum(r['pd'] for r in g)/n:7.3f} {sum(r['died'] for r in g)/n:7.3f}   {sum(r['pl'] for r in g)/n:9.1f} {sum(r['rl'] for r in g)/n:9.1f}")
+        print(f"  {a:6.3f}-{b:<6.3f} {n:6d} {sum(r['pd'] for r in g)/n:7.3f} {sum(r['died'] for r in g)/n:7.3f}   {sum(r['pl'] for r in g)/n:9.1f} {sum(r['rl'] for r in g)/n:9.1f}   " + " ".join(f"{sum(1 for r in g if r['end'] == e)/n:.2f}" for e in ("won", "left", "floor", "died")))
     lb = [0, 0.1, 0.25, 0.5, 0.75, 1.0, 10]
     print(f"  {'loss/hp bin':>14} {'n':>6} {'pred':>7} {'real':>7}  (as a share of hp0)")
     for a, b in zip(lb, lb[1:]):

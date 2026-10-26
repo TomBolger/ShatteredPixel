@@ -29,6 +29,7 @@ public final class Tune {
 	public static final boolean RINGS = on("ORINGS", true);   // (MT: known fight rings counted in the hero's numbers)
 	public static final double HOPE = get("OHOPE", 3) / 100;   // (MT: in a fight likely lost, a drink's edge on near-ties)
 	public static final double FOEFX = get("OFOEFX", 100) / 100;   // (MT: the deep kinds' blows' effects past armour, scaled)
+	public static final boolean KINDS = on("OKINDS", true);   // (M2: the kinds' behaviour in a fight: a brute's rage running down, the eye's beam cycle, scorpios backing off, spinners fleeing, Goo's pumping dodged, shooters' bolts till the hero is beside them)
 	public static final boolean SLOTS = on("OSLOTS", true);   // (MT: FightModel counts the room beside the hero)
 	public static final boolean HEAL2 = on("OHEAL2", true);   // (off: O's first rule, P(death) >= ODEATH)
 	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;

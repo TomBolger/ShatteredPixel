@@ -101,6 +101,27 @@ public final class FightModel {
 	 * (Fighter). Fills r (FightModel's sums) and / or o (Look's).
 	 */
 	static void core(Fighter me, List<Fighter> foes0, Look.Plan p, int runs, long seed, double maxT, Result r, Look.Out o) {
+		long t0 = PROF ? System.nanoTime() : 0;
+		try { core0(me, foes0, p, runs, seed, maxT, r, o); }
+		finally { if (PROF) { long dt = System.nanoTime() - t0; calls++; nanos += dt; String k = caller(); prof.merge(k, dt, Long::sum); } }
+	}
+
+	// (M2) the profiler (env PROF=1): time in the simulation by the first caller outside pebxel.bot, for SLOWPLAN lines
+	public static final boolean PROF = Tune.on("PROF", false) || "1".equals(System.getenv("PROF"));
+	public static int calls; public static long nanos; public static final Map<String, Long> prof = new TreeMap<>();
+	static String caller() {
+		for (StackTraceElement e : new Throwable().getStackTrace()) { String c = e.getClassName(); if (!c.startsWith("pebxel.bot.")) return c.substring(c.lastIndexOf('.') + 1) + "." + e.getMethodName() + ":" + e.getLineNumber(); }
+		return "?";
+	}
+	/** The profile since the last call, cleared. */
+	public static String profile() {
+		StringBuilder b = new StringBuilder(String.format(Locale.ROOT, "sims %d %.1f ms:", calls, nanos / 1e6));
+		prof.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue(), x.getValue())).limit(6).forEach(e -> b.append(String.format(Locale.ROOT, " %s %.1f", e.getKey(), e.getValue() / 1e6)));
+		calls = 0; nanos = 0; prof.clear();
+		return b.toString();
+	}
+
+	static void core0(Fighter me, List<Fighter> foes0, Look.Plan p, int runs, long seed, double maxT, Result r, Look.Out o) {
 		int n = foes0.size();
 		if (n == 0) { if (r != null) { r.pWin = 1; r.hpLeft = me.hp; } if (o != null) { o.pDone = 1; o.hpLeft = me.hp; } return; }
 		SplittableRandom rnd = new SplittableRandom(seed);
@@ -109,7 +130,7 @@ public final class FightModel {
 		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n], pBurst = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
-			pH[i] = f.blockAll ? 0 : Dist.hit(me.acc, f.eva); bH[i] = Fighter.blow(me.dmg, f);
+			pH[i] = f.blockAll ? 0 : Dist.hit(me.acc, f.eva) * f.reach; bH[i] = Fighter.blow(me.dmg, f);
 			pF[i] = Dist.hit(f.acc, me.eva); bF[i] = Fighter.blow(f.dmg, me);
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me);
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me); pLow[i] = Dist.hit(f.lowAcc, me.eva); pHLow[i] = Dist.hit(me.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
@@ -118,13 +139,13 @@ public final class FightModel {
 			if (f.burstDmg != null) pBurst[i] = Dist.hit(2 * f.acc, me.eva);
 			if (me.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me.rangedSure ? 1 : Dist.hit(me.rangedAcc, f.eva); bR[i] = Fighter.blow(me.rangedDmg, f); }
 			// (BR) walking off: a faster one strikes every (its blow + the step it takes to catch up); a shooter keeps shooting
-			chase[i] = f.ranged ? f.delay / 0.6 : f.speed > me.speed * 1.01 ? f.delay + 1 / f.speed : 0;
+			chase[i] = f.immobile ? 0 : f.ranged ? f.delay / 0.6 : f.speed > me.speed * 1.01 ? f.delay + 1 / f.speed : 0;
 		}
 		// (MT) room beside the hero: at most me.slots foes that walk up can be at it at once (a corridor: 2), the others
 		// queue and step in as one falls, in the order they'd come; shooters and sleepers take no room
 		Integer[] ord = new Integer[n]; for (int i = 0; i < n; i++) ord[i] = i;
 		final double[] arrOf = new double[n];
-		for (int i = 0; i < n; i++) { Fighter f = foes0.get(i); arrOf[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.ranged ? me.speed : f.speed); }
+		for (int i = 0; i < n; i++) { Fighter f = foes0.get(i); arrOf[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.ranged || f.immobile ? me.speed : f.speed); }
 		Arrays.sort(ord, (a, b) -> Double.compare(arrOf[a], arrOf[b]));
 		boolean[] queued = new boolean[n], held = new boolean[n]; double[] arrQ = new double[n];
 		boolean hurtable = false; for (int i = 0; i < n; i++) hurtable |= pH[i] > 0 || pR[i] > 0 || foes0.get(i).asleep;
@@ -132,21 +153,27 @@ public final class FightModel {
 		double[] losses = new double[runs];
 		int deaths = 0, wins = 0, done = 0, used = 0; double tsum = 0, left = 0, leftO = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
+		double[] zapEnd = new double[n], rageT = new double[n], burstAt = new double[n]; boolean[] pumpFirst = new boolean[n];   // (M2: Tune.KINDS)
 		for (int run = 0; run < runs; run++) {
 			int myHp = me.hp, sh = me.shield, heals = me.heals, shots = fleeing ? 0 : me.rangedShots, hl = Math.max(me.healLeft, p.healing), usedR = 0;   // (the same buff, whichever gave it)
 			boolean drink = p.drink && heals > 0;
 			for (int i = 0; i < n; i++) {
 				Fighter f = foes0.get(i);
-				hp[i] = f.hp + f.shield; rage[i] = false; awake[i] = !f.asleep;
+				hp[i] = f.hp + f.shield; rage[i] = f.ragingNow; rageT[i] = 0; awake[i] = !f.asleep; pumpFirst[i] = f.pumpNow;
 				// arr: when it's beside the hero (a shooter stays put: the hero walks up to it); atk: when its blows start
-				arr[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : f.ranged ? (f.dist - 1) / Math.max(0.1, me.speed) : (f.dist - 1) / Math.max(0.1, f.speed);
+				arr[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : f.ranged || f.immobile ? (f.dist - 1) / Math.max(0.1, me.speed) : (f.dist - 1) / Math.max(0.1, f.speed);
 				atk[i] = f.ranged && !f.asleep ? 0 : arr[i];
-				next[i] = awake[i] ? atk[i] + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
+				// (M2) a shooter's bolts until the hero is beside it: from the start of his last step there (a step moves him
+				// at once and then takes its time: the arena's shamans and DM-100s at 4 cells got 2 bolts off, not 3)
+				zapEnd[i] = Tune.KINDS && f.ranged ? Math.max(0, arr[i] - 1 / Math.max(0.1, me.speed)) : arr[i];
+				boolean beams = Tune.KINDS && f.burstEvery > 0 && f.burstDmg != null;   // (the eye's turns begin at once: its beam reaches from afar)
+				next[i] = awake[i] ? (beams ? 0 : atk[i]) + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
+				burstAt[i] = beams && awake[i] ? next[i] + (f.burstReady ? 0 : f.burstCharge) : Double.MAX_VALUE;
 				if (fleeing) next[i] = chase[i] > 0 && awake[i] ? (f.ranged ? 0 : arr[i]) + chase[i] * rnd.nextDouble() : Double.MAX_VALUE;
 			}
 			int room = me.slots;
 			if (!fleeing) for (int oi = 0; oi < n; oi++) { int i = ord[oi]; Fighter f = foes0.get(i); queued[i] = false; held[i] = false;
-				if (f.ranged || f.asleep) continue;
+				if (f.ranged || f.asleep || f.immobile) continue;
 				if (room > 0) { room--; held[i] = true; } else { queued[i] = true; arrQ[i] = arr[i]; arr[i] = atk[i] = next[i] = Double.MAX_VALUE; } }
 			else for (int i = 0; i < n; i++) { queued[i] = false; held[i] = false; }
 			double t = 0, tH = 0; boolean dead = false, gone = false; int alive = n, lost = p.lose, steps = p.flee;
@@ -165,9 +192,10 @@ public final class FightModel {
 					for (int i = 0; i < n; i++) if (hp[i] > 0 && t >= arr[i] - 1e-9 && hp[i] < best) { best = hp[i]; tg = i; }
 					if (tg >= 0) {
 						Fighter f = foes0.get(tg);
+						if (rage[tg] && f.rageDecay > 0 && decay(f, tg, t, hp, rageT)) { alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd); tH += me.delay; continue; }
 						if (!awake[tg] || rnd.nextDouble() < (bLow[tg] != null && hp[tg] <= f.lowAt ? pHLow[tg] : pH[tg])) hp[tg] -= bH[tg].draw(rnd.nextDouble());   // (a sleeper: a surprise blow, sure)
 						if (!awake[tg]) { awake[tg] = true; atk[tg] = t; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
-						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; }
+						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; rageT[tg] = t; if (f.rageDecay > 0) next[tg] = Math.max(next[tg], t) + 1; }   // (Brute.triggerEnrage spends a turn)
 						if (hp[tg] <= 0) {
 							alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd);
 							if (bDeath[tg] != null) { int d = bDeath[tg].draw(rnd.nextDouble()); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
@@ -183,7 +211,7 @@ public final class FightModel {
 					if (shots > 0 && ni >= 0) {
 						shots--;
 						if (rnd.nextDouble() < pR[ni]) hp[ni] -= bR[ni].draw(rnd.nextDouble());
-						if (hp[ni] <= 0 && foes0.get(ni).rageHp > 0 && !rage[ni]) { rage[ni] = true; hp[ni] = foes0.get(ni).rageHp; }
+						if (hp[ni] <= 0 && foes0.get(ni).rageHp > 0 && !rage[ni]) { rage[ni] = true; hp[ni] = foes0.get(ni).rageHp; rageT[ni] = t; if (foes0.get(ni).rageDecay > 0) next[ni] = Math.max(next[ni], t) + 1; }
 						if (hp[ni] <= 0) { alive--; room = free(foes0, ni, room, queued, held, arrQ, arr, atk, next, t, rnd); }
 						tH += me.rangedDelay;
 					} else if (na < Double.MAX_VALUE) tH = Math.max(na, t + 0.01);
@@ -192,10 +220,19 @@ public final class FightModel {
 					else tH = t + 1;
 				} else {
 					Fighter f = foes0.get(fi); t = ft;
-					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && (t < arr[fi] - 1e-9 || fleeing);
+					if (rage[fi] && f.rageDecay > 0 && decay(f, fi, t, hp, rageT)) { alive--; room = free(foes0, fi, room, queued, held, arrQ, arr, atk, next, t, rnd); continue; }   // (its rage ran out: it dies)
+					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && (t < zapEnd[fi] - 1e-9 || fleeing);
 					boolean may = fleeing || t >= atk[fi] - 1e-9;
-					if (!zap && f.burstEvery > 0 && may && rnd.nextDouble() * f.burstEvery < 1) {   // (MT: the Eye's beam, an attack in so many: magic, past armour)
+					double nextT = t + (fleeing ? chase[fi] : f.delay);
+					boolean beam = burstAt[fi] < Double.MAX_VALUE && t >= burstAt[fi] - 1e-9, charging = !beam && burstAt[fi] < Double.MAX_VALUE && t >= burstAt[fi] - f.burstCharge - 1e-9;
+					if (beam || (!Tune.KINDS && !zap && f.burstEvery > 0 && may && rnd.nextDouble() * f.burstEvery < 1)) {   // (MT: the Eye's beam, an attack in so many: magic, past armour; M2: its own cycle, from afar too)
 						if (rnd.nextDouble() < pBurst[fi]) { int d = (int) Math.round(f.burstDmg.draw(rnd.nextDouble()) * me.taken); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
+						if (beam) burstAt[fi] = t + f.burstEvery;
+					} else if (charging) {
+						// (the eye charging its beam: no blow)
+					} else if (f.pump > 0 && may && !fleeing && !zap && (pumpFirst[fi] || rnd.nextDouble() < (lo ? 0.5 : f.pump))) {
+						// (M2: Goo pumps up, the hero steps out of the blast's reach and back: neither strikes for a while)
+						pumpFirst[fi] = false; nextT = t + 3 * f.delay; tH = Math.max(tH, t + 2);
 					} else if (may && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
 						int d = (zap ? bZ[fi] : rage[fi] && bRage[fi] != null ? bRage[fi] : lo ? bLow[fi] : bF[fi]).draw(rnd.nextDouble());
 						if (!zap && f.hitDirect > 0) d += (int) Math.round(f.hitDirect);   // (MT: what its blow sets off past armour: fire, poison, bleeding)
@@ -203,8 +240,9 @@ public final class FightModel {
 						myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d);
 						if (f.leech > 0) hp[fi] = Math.min(f.ht, hp[fi] + d);
 						if (myHp <= 0) dead = true;
+						if (!zap && !fleeing && f.fleeHit > 0 && rnd.nextDouble() < f.fleeHit) { nextT = t + f.fleeT; arr[fi] = atk[fi] = t + f.fleeT; }   // (M2: a spinner runs off once it has poisoned)
 					}
-					next[fi] = t + (fleeing ? chase[fi] : f.delay);
+					next[fi] = nextT;
 				}
 			}
 			if (dead) deaths++;
@@ -219,6 +257,13 @@ public final class FightModel {
 			r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs;
 		}
 		if (o != null) { o.pDeath = deaths / (double) runs; o.pDone = done / (double) runs; o.hpLeft = leftO / runs; o.healsUsed = used / (double) runs; o.time = tsum / runs; }
+	}
+
+	/** (M2) A raging foe's shield running down (a brute's 4 a turn): true when it's gone (the foe dies). */
+	static boolean decay(Fighter f, int i, double t, int[] hp, double[] rageT) {
+		int d = (int) Math.floor(f.rageDecay * (t - rageT[i]) + 1e-9);
+		if (d > 0) { hp[i] -= d; rageT[i] += d / f.rageDecay; }
+		return hp[i] <= 0;
 	}
 
 	/** A foe fell: its room beside the hero goes to the first one queued (it steps in now, or when it would have come). */

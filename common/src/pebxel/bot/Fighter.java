@@ -29,6 +29,14 @@ public final class Fighter {
 	 *  burst in place of one attack in burstEvery (the Eye's beam: magic accuracy, no armour). */
 	public double hitDirect; public Dist burstDmg; public double burstEvery;
 	public int rageHp; public Dist rageDmg;
+	/** Foe only (M2, from the source, checked in the arena): the rage shield's loss a turn (a brute's: 4, BruteRage.act),
+	 *  raging already (its shield in hp); its beam's period from beam to beam and the charge before it (the Eye: 7, 2),
+	 *  charged now (drawn); it backs away from the hero beside it (a scorpio: its shots half as often, the hero's blows
+	 *  reach it this share of the time); after a blow that lands it runs off (a spinner: half its bites, for 7 turns);
+	 *  it pumps up (Goo: a share of its turns, half when low; the hero steps out of the blast's reach, both lose the
+	 *  turns), pumped now; it can't move (DM-201: the hero walks up to it, it never follows). */
+	public double rageDecay; public boolean ragingNow; public double burstCharge; public boolean burstReady;
+	public double reach = 1; public double fleeHit, fleeT; public double pump; public boolean pumpNow, immobile;
 	/** Foe only: the damage its death does to the hero beside it (a skeleton's bones: armour counts twice), and the health it heals per blow
 	 *  that lands (a vampire bat). */
 	public Dist deathDmg; public double leech;
@@ -55,6 +63,7 @@ public final class Fighter {
 		Fighter f = new Fighter();
 		f.name = name; f.acc = acc; f.eva = eva; f.dmg = dmg; f.dr = dr; f.delay = delay; f.speed = speed; f.hp = hp; f.ht = ht; f.shield = shield;
 		f.dist = dist; f.ranged = ranged; f.asleep = asleep; f.boss = boss; f.slimeCap = slimeCap; f.rageHp = rageHp; f.rageDmg = rageDmg;
+		f.rageDecay = rageDecay; f.ragingNow = ragingNow; f.burstCharge = burstCharge; f.burstReady = burstReady; f.reach = reach; f.fleeHit = fleeHit; f.fleeT = fleeT; f.pump = pump; f.pumpNow = pumpNow; f.immobile = immobile;
 		f.deathDmg = deathDmg; f.blockAll = blockAll; f.hitDirect = hitDirect; f.burstDmg = burstDmg; f.burstEvery = burstEvery; f.leech = leech; f.zapDmg = zapDmg; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
 		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg; f.slots = slots; f.healLeft = healLeft;
 		return f;
