@@ -80,6 +80,8 @@ final class Brain {
 	/** A new list: the base list's plan A so far. */
 	static void begin(Target planA) {
 		first = planA; offers.clear(); H = Dungeon.hero;
+		if (Dungeon.depth != lastDepth && lastDepth >= 0 && (lastPlanRole == Role.UP || lastPlanRole == Role.DOWN)) { fledFrom = lastDepth; fledAt = Actor.now(); }
+		lastDepth = Dungeon.depth;
 		try { Rules.observe(); } catch (Throwable e) { Assist.lastError = e; }
 		long t0 = System.nanoTime();
 		try { setupFight(); } catch (Throwable e) { Assist.lastError = e; fight = false; base = null; }
@@ -305,14 +307,16 @@ final class Brain {
 	}
 
 	/** Plan A's kind, counted (the bot acts on every plan A: equips, drinks, escapes, rests made). */
-	static void tally(Target t) { Role r = role(t); if (r != Role.CARRY && r != Role.OTHER) planAs.merge(r.name().toLowerCase(), 1, Integer::sum); }
+	static void tally(Target t) { Role r = role(t); lastPlanRole = r; lastDepth = Dungeon.depth; if (r != Role.CARRY && r != Role.OTHER) planAs.merge(r.name().toLowerCase(), 1, Integer::sum); }
 	static final Map<String, Integer> planAs = new TreeMap<>();
+	// the stairs taken to get away (Rules: rest before going back, no chained escapes)
+	static Role lastPlanRole; static int lastDepth = -1, fledFrom = -1; static float fledAt = -999;
 
 	/** The game's tally (AssistBot prints it with the result). */
 	static String stats() {
 		String s = String.format("decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", decisions, fights, overrides,
 				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
-		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset();
+		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset(); lastDepth = fledFrom = -1; fledAt = -999; lastPlanRole = null;
 		return s;
 	}
 }

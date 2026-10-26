@@ -59,6 +59,14 @@ final class Rules {
 		// a walk to the stairs, chosen last turn over the fight, kept on: re-weighed from scratch each step it went back
 		// and forth (a step nearer, the foe a step nearer too)
 		boost("keep going: the stairs", c -> (c.role == Role.UP || c.role == Role.DOWN) && c.role == Brain.lastRole && Actor.now() - Brain.lastAt <= 2, Brain.MARGIN),
+		// -- getting away by the stairs ------------------------------------------------------------------------------
+		// (BR-a1: a starving hero bounced between the floors for ever, up from the foe by the stairs, down again as the
+		// floor above was done.) The stairs up are an escape only with a rest to come (food for it), not straight after
+		// another escape by the stairs, and the floor fled to is rested on before going back.
+		veto("stairs: no rest to come", c -> (c.role == Role.UP || c.role == Role.DOWN) && (Assist.starving() || AsBasics.foodTurns() < AsBasics.restTurns() + AsBasics.FOODRESERVE)),
+		veto("stairs: no chained escapes", c -> (c.role == Role.UP || c.role == Role.DOWN) && Actor.now() - Brain.fledAt < 30 && Actor.now() >= Brain.fledAt),
+		propose("fled: rest before going back", c -> (stairsDown(c) || stairsUp(c)) && Brain.fledFrom >= 0 && Math.abs(Brain.fledFrom - Dungeon.depth) == 1
+				&& H().HP * 10 < H().HT * 9 && calm() && !Assist.starving() && !Assist.declined(null, Assist.REST_ACT), PREP, Rules::restTarget),
 		// -- the boss ahead: arrive whole, with the scrolls read ---------------------------------------------------
 		// (strategy-reference 4.x: every boss guide starts "full health, upgrades in"; Thomas: "boss preparation")
 		propose("boss next: rest first", c -> stairsDown(c) && bossNext() && calm() && H().HP * 100 < H().HT * 95 && !Assist.starving()
@@ -80,7 +88,9 @@ final class Rules {
 		int ex = Assist.L.exit(); Target t = c.t;
 		return c == planA && (t.kind == Assist.GO || t.kind == Assist.PICKUP) && (t.obj == ex || t.cell == ex) && Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null;
 	}
-	static Target restTarget() { Target t = new Target(Dungeon.hero.pos, Assist.WAIT, "boss next: rest first"); t.action = Assist.REST_ACT; t.obj = -1; return t; }
+	/** c is plan A, the walk to the stairs up. */
+	static boolean stairsUp(Cand c) { int en = Assist.L.entrance(); Target t = c.t; return c == planA && (t.kind == Assist.GO || t.kind == Assist.PICKUP) && (t.obj == en || t.cell == en); }
+	static Target restTarget() { Target t = new Target(Dungeon.hero.pos, Assist.WAIT, "rest first (brain)"); t.action = Assist.REST_ACT; t.obj = -1; return t; }
 	static ScrollOfUpgrade upgrade() { ScrollOfUpgrade s = H().belongings.getItem(ScrollOfUpgrade.class); return s != null && s.isKnown() ? s : null; }
 	static Item upgradeOn() {
 		Item on = null; try { on = UpgradePlan.target(H()); } catch (Throwable e) { }
