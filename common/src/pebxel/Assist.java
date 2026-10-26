@@ -849,6 +849,7 @@ public final class Assist {
 		}
 		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
 		if (mode() != 0) AsPacing.after(out);   // (agent MD: a wait that has not paid, given up)
+		if (mode() != 0) AsEscape.after(out);   // (agent HE: a known way out, used before it's too late)
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
@@ -1748,7 +1749,8 @@ public final class Assist {
 		if (foul(hp) || burning()) {   // out of the gas / fire: the nearest clean cell (alight: water, if near)
 			boolean w = burning();
 			for (int p = 0; p < 2 && best < 0; p++, w = false)
-				for (int c = 0; c < LEN; c++) if (dist[c] < bk && dist[c] > 0 && (!w || dist[c] <= 4) && open[c] && !foul(c) && seenChar(c) == null && (!w || water(c)) && !bad.containsKey(c)) { bk = dist[c]; best = c; }
+				for (int c = 0; c < LEN; c++) { int dk = dist[c] + (!w && wet(c) ? 20 : 0);   // (HE: with a piranha about, a dry cell first: the two escapes took turns along its shore, 5 bites to death)
+					if (dk < bk && dist[c] > 0 && (!w || dist[c] <= 4) && open[c] && !foul(c) && seenChar(c) == null && (!w || water(c)) && !bad.containsKey(c)) { bk = dk; best = c; } }
 			if (best >= 0) { Target t = new Target(best, GO, "escape the gas / fire"); return t; }
 		}
 		boolean adjFoe = false; for (Mob m : mobs()) if (enemy(m) && adjacent(m.pos, hp)) adjFoe = true;

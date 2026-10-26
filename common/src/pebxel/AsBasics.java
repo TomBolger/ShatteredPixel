@@ -224,7 +224,7 @@ final class AsBasics {
 	/** The nearest cell the hero can walk to that no water touches (a piranha's bite can't reach it), within 12 steps, or -1. */
 	static int dryCell(int from) {
 		int best = -1, bd = 13;
-		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < bd && L.passable[c] && !L.water[c] && !shoreCell(c) && !L.avoid[c] && Actor.findChar(c) == null && !Assist.bad.containsKey(c)) { bd = dist[c]; best = c; }
+		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < bd && L.passable[c] && !L.water[c] && !shoreCell(c) && !L.avoid[c] && Actor.findChar(c) == null && !Assist.bad.containsKey(c) && !Assist.foul(c)) { bd = dist[c]; best = c; }   // (HE: not into gas or fire: "off the shore" and "escape the gas" took turns, in the bites' reach)
 		return best;
 	}
 

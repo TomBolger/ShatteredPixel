@@ -78,7 +78,7 @@ final class AsGear {
 		if (a instanceof ClassArmor) return 999;
 		int lv = Math.max(0, HeroView.visLevel(a));
 		int enc = a.STRReq(lv) - h.STR();
-		if (enc > ENCMAX) return -1;
+		if (enc > (a.levelKnown ? ENCMAX : 0)) return -1;   // (an unknown piece only at its shown +0's full STR: RefinementTest, nothing read from the hidden level)
 		double v = block(a.tier, lv);
 		if (enc == 1) v *= 0.75;
 		return v;
