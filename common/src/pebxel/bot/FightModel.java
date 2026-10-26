@@ -85,7 +85,7 @@ public final class FightModel {
 		int n = foes0.size();
 		// per foe: hit odds both ways, blow distributions (fixed for the fight)
 		double[] pH = new double[n], pF = new double[n], pR = new double[n];
-		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n]; Dist[] bZ = new Dist[n];
+		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n], pBurst = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
 			pH[i] = f.blockAll ? 0 : Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
@@ -94,6 +94,7 @@ public final class FightModel {
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
 			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me0.eva); }
+			if (f.burstDmg != null) pBurst[i] = Dist.hit(2 * f.acc, me0.eva);
 			if (me0.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
 		}
 		// (MT) room beside the hero: at most me0.slots foes that walk up can be at it at once (a corridor: 2), the others
@@ -162,8 +163,11 @@ public final class FightModel {
 				} else {
 					Fighter f = foes0.get(fi); t = ft;
 					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && t < arr[fi] - 1e-9;
-					if (t >= atk[fi] - 1e-9 && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
+					if (!zap && f.burstEvery > 0 && t >= atk[fi] - 1e-9 && rnd.nextDouble() * f.burstEvery < 1) {   // (MT: the Eye's beam, an attack in so many: magic, past armour)
+						if (rnd.nextDouble() < pBurst[fi]) { int d = (int) Math.round(f.burstDmg.draw(rnd.nextDouble()) * me0.taken); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
+					} else if (t >= atk[fi] - 1e-9 && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
 						int d = (zap ? bZ[fi] : rage[fi] && bRage[fi] != null ? bRage[fi] : lo ? bLow[fi] : bF[fi]).draw(rnd.nextDouble());
+						if (!zap && f.hitDirect > 0) d += (int) Math.round(f.hitDirect);   // (MT: what its blow sets off past armour: fire, poison, bleeding)
 						if (me0.taken != 1) d = (int) Math.round(d * me0.taken);
 						myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d);
 						if (f.leech > 0) hp[fi] = Math.min(f.ht, hp[fi] + d);
