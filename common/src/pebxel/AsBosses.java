@@ -137,6 +137,7 @@ final class AsBosses {
 		Target dg = dodge(); if (dg != null) return dg;
 		if (!Dungeon.bossLevel()) return null;
 		Target t = null;
+		if (TENGU && L instanceof PrisonBossLevel && (t = tenguPlan()) != null) return t;
 		for (Mob m : mobs()) {
 			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
 			else if (m instanceof DwarfKing && KING2) t = king((DwarfKing) m);
@@ -144,6 +145,56 @@ final class AsBosses {
 			if (t != null) return t;
 		}
 		return null;
+	}
+
+	// =============================================================================================================
+	// Tengu (strategy-reference 4.2; Tengu.java): his aim is 10 beside the hero and 20 from afar (attackSkill), he never
+	// walks (only jumps, 5-7 off in the arena, a bracket of 25 health at a time), and once out of sight he stays where
+	// he landed: so to him and struck from beside him; Blink to close the gap, Invisibility drunk for the walk in; lost
+	// from sight, to where he was last seen (his jump's puff shows where he lands when it's in sight), then round the
+	// arena to the cells not in sight (a hero who lost him searched the floor for 4,000 turns: the floor's timeouts).
+	// =============================================================================================================
+	static final boolean TENGU = opt("BTENGU", true), TBLINK = opt("BTBLINK", true), TINVIS = opt("BTINVIS", true);
+	static int tenguAt = -1; static Level tenguL; static final Set<Integer> tenguLooked = new HashSet<>();
+
+	static Target tenguPlan() {
+		Object st = ((PrisonBossLevel) L).state();
+		if (st != PrisonBossLevel.State.FIGHT_START && st != PrisonBossLevel.State.FIGHT_ARENA) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (tenguL != L) { tenguL = L; tenguAt = -1; tenguLooked.clear(); }
+		Tengu tg = null; for (Mob m : mobs()) if (m instanceof Tengu && m.isAlive() && L.mobs.contains(m)) tg = (Tengu) m;
+		if (tg == null) return null;
+		boolean seen = L.heroFOV[tg.pos] && tg.invisible <= 0;
+		if (seen) { tenguAt = tg.pos; tenguLooked.clear(); }
+		if (h.rooted) return null;
+		if (seen) {
+			if (L.adjacent(tg.pos, hp)) return h.isCharmedBy(tg) ? null : new Target(tg.pos, ENEMY, "Tengu: strike from beside him (his aim halves)");
+			int d = L.distance(tg.pos, hp);
+			if (TINVIS && st == PrisonBossLevel.State.FIGHT_ARENA && d >= 4 && h.invisible <= 0) {   // (he can't aim at what he can't see: the walk in unshot, the first blow a surprise)
+				com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility iv = bag(com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility.class);
+				if (iv != null && known(iv) && h.HP * 2 < h.HT * 3 / 2 && tg.HP * 2 <= tg.HT) return use(iv, Potion.AC_DRINK, -1, "Tengu: invisible for the walk in");
+			}
+			if (TBLINK && d >= 4) {   // a Stone of Blink thrown beside him: there at once
+				com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfBlink bl = bag(com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfBlink.class);
+				if (bl != null) { int best = -1, bk = INF;
+					for (int k : PathFinder.NEIGHBOURS8) { int c = tg.pos + k;
+						if (c < 0 || c >= L.length() || !L.passable[c] || L.avoid[c] || danger[c] || Actor.findChar(c) != null || !L.heroFOV[c]) continue;
+						if (new Ballistica(hp, c, Ballistica.PROJECTILE).collisionPos != c) continue;
+						int kk = L.distance(c, hp); if (kk < bk) { bk = kk; best = c; } }
+					if (best >= 0) return use(bl, Item.AC_THROW, best, "Tengu: blink beside him"); }
+			}
+			int s1 = kingStep(tg.pos, -1);
+			return s1 >= 0 ? new Target(s1, GO, "Tengu: to him (his aim halves beside him)") : null;
+		}
+		// out of sight: where he was last seen, then the cells not in sight
+		if (tenguAt >= 0 && (L.heroFOV[tenguAt] || L.distance(tenguAt, hp) <= 1)) { tenguLooked.add(tenguAt); tenguAt = -1; }
+		if (tenguAt >= 0) { int s1 = kingStep(tenguAt, -1); if (s1 >= 0) return new Target(s1, GO, "Tengu: to where he was last seen"); tenguAt = -1; }
+		int best = -1, bk = INF;
+		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && !L.heroFOV[c] && open[c] && !danger[c] && !tenguLooked.contains(c) && dist[c] < bk) { bk = dist[c]; best = c; }
+		if (best < 0) return null;
+		int s1 = kingStep(best, -1); if (s1 < 0) return null;
+		if (L.distance(best, hp) <= 1) tenguLooked.add(best);
+		return new Target(s1, GO, "Tengu: look for him");
 	}
 
 	/** A blow coming at the hero's cell (a beam, a leap, a bomb...): the nearest cell it misses. */
@@ -527,6 +578,7 @@ final class AsBosses {
 				char ch = c == hp ? '@' : who instanceof DM300 || who instanceof DwarfKing ? 'D' : who instanceof DwarfKing.DKWarlock ? 'W' : who instanceof DwarfKing.DKMonk ? 'M' : who instanceof DwarfKing.DKGhoul ? 'G' : who instanceof DwarfKing.DKGolem ? 'O' : who instanceof Pylon ? (((Mob) who).alignment == Char.Alignment.ENEMY ? 'P' : 'p') : dz.length == LEN && dz[c] ? '!' : elec.length == LEN && elec[c] ? 'E' : t == Terrain.INACTIVE_TRAP ? '^' : t == Terrain.WATER ? '~' : !known[c] ? ' ' : t == Terrain.WALL || t == Terrain.WALL_DECO ? '#' : t == Terrain.DOOR ? '+' : t == Terrain.LOCKED_DOOR ? 'L' : L.passable[c] ? (dist[c] < INF ? '.' : ',') : '?';
 				sb.append(ch); }
 			sb.append('\n'); }
+		for (Mob m : L.mobs) sb.append("    mob " + m.getClass().getSimpleName() + " at " + m.pos + " fov " + (m.pos >= 0 && m.pos < LEN && L.heroFOV[m.pos]) + " hp " + m.HP + " state " + (m.state == null ? "" : m.state.getClass().getSimpleName()) + " inv " + m.invisible + "\n");
 		System.out.print(sb);
 	}
 }
