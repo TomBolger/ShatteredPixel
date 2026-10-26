@@ -1031,6 +1031,29 @@ index 2dcab6a..27a489b 100644
  			quickslotsToShow = 3;
  			startingSlot = swappedQuickslots ? 3 : 0;
  			btnSwap.visible = true;
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
+index 6a7280e..51e88ad 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
+@@ -44,6 +44,9 @@ public class IconTitle extends Component {
+ 
+ 	private float healthLvl = Float.NaN;
+ 
++	/** (pebxel) room kept clear at the right for the watch's red exit tag, which sits over a window's top right corner. */
++	public static int pebxelPad;
++
+ 	public IconTitle() {
+ 		super();
+ 	}
+@@ -96,7 +99,7 @@ public class IconTitle extends Component {
+ 		int imWidth = (int)Math.max(imIcon.width(), 16);
+ 		int imHeight = (int)Math.max(imIcon.height(), 16);
+ 
+-		tfLabel.maxWidth((int)(width - (imWidth + GAP)));
++		tfLabel.maxWidth((int)(width - (imWidth + GAP) - pebxelPad));
+ 		tfLabel.setPos(x + imWidth + GAP,
+ 						imHeight > tfLabel.height() ? y +(imHeight - tfLabel.height()) / 2 : y);
+ 		PixelScene.align(tfLabel);
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndBag.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndBag.java
 index f4803d6..aa001b2 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndBag.java
@@ -1139,4 +1162,35 @@ index 05b4e01..6471f7f 100644
 +			icon.am = 1f;
  		}
  	}
+ 
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndUpgrade.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndUpgrade.java
+index 35f1b06..c850757 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndUpgrade.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndUpgrade.java
+@@ -455,7 +455,7 @@ public class WndUpgrade extends Window {
+ 				}
+ 			}
+ 		};
+-		btnUpgrade.setRect(0, bottom+2*GAP, WIDTH/2f, 16);
++		btnUpgrade.setRect(0, bottom+2*GAP, (WIDTH-1)/2f, 16);
+ 		add(btnUpgrade);
+ 
+ 		btnCancel = new RedButton(Messages.get(this, "back")){
+@@ -471,7 +471,7 @@ public class WndUpgrade extends Window {
+ 			}
+ 
+ 		};
+-		btnCancel.setRect(btnUpgrade.right()+1, bottom+2*GAP, WIDTH/2f, 16);
++		btnCancel.setRect(btnUpgrade.right()+1, bottom+2*GAP, WIDTH-btnUpgrade.right()-1, 16);   // (pebxel: not past the window's width)
+ 		add(btnCancel);
+ 
+ 		btnUpgrade.enable(Dungeon.hero.ready);
+@@ -479,7 +479,7 @@ public class WndUpgrade extends Window {
+ 		btnUpgrade.icon(new ItemSprite(upgrader));
+ 		btnCancel.icon(Icons.EXIT.get());
+ 
+-		bottom = (int)btnCancel.bottom();
++		bottom = (int)Math.ceil(btnCancel.bottom());
+ 
+ 		resize(WIDTH, (int)bottom);
  

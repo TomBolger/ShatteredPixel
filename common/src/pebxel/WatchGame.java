@@ -17,6 +17,7 @@ public class WatchGame extends ShatteredPixelDungeon {
 				"TitleScene", "WelcomeScene", "AboutScene", "ChangesScene", "NewsScene", "SupporterScene", "WatchTitleScene", "WatchHeroSelect", "WatchWelcome");
 		// Pebble PD's own windows in place of some of Shattered's
 		com.shatteredpixel.shatteredpixeldungeon.scenes.GameScene.pebxelWindows = pebxel.ui.Swaps::window;
+		com.shatteredpixel.shatteredpixeldungeon.windows.IconTitle.pebxelPad = 17;   // (the exit tag is 16 units wide at zoom 3)
 		com.watabou.noosa.Game.pebxelScenes = pebxel.ui.Swaps::scene;
 		// the game's animations at Shattered's own pace (Thomas, 2026-10-25: "let's reset animations": they ran 1.5 x, which
 		// once hid slowness since fixed). The watch's clock must match (scene.h GAME_SPEED)
