@@ -6,7 +6,7 @@
 enum { C_RESET = 1, C_CAM, C_NEW, C_SET, C_DEL, C_ORDER, C_TILES, C_DTEX, C_MOVE, C_ANIM, C_TIME, C_INPUT, C_LATEST, C_SOUND, C_COMMIT, C_PREDICT, C_TILES2, C_ANIMTO, C_RECIPE, C_FOG, C_READY, C_AHEAD, C_EVENT, C_PASS, C_STEP, C_FOGD, C_ANSWER, C_FLASH };   // C_SOUND: kind (0 effect, 1 music, 2 settings), value; C_PREDICT: the plan for the next press (predict.c); C_EVENT: what happened (EV_*: main.c buzzes, lights); C_PASS: the ground a tap may walk (predict.c); C_STEP: a sprite's step to the next cell; C_FOGD: C_FOG without its size; C_ANSWER: these frames answer a press (main.c); C_FLASH: a creature flashes white a moment
 // picture kinds
 enum { K_IMG = 1, K_RECT, K_NINE, K_TILES, K_TEXT, K_SKIN, K_QUADS, K_SHAPE, K_EMIT, K_FLOAT };   // K_EMIT: particles made here (particles.c); K_FLOAT: a damage number and its icon (Link.floatState)
-enum { F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32 };   // F_FOG: the fog of war (draw.c draw_fog)
+enum { F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32, F_FAINT = 64 };   // F_FOG: the fog of war (draw.c draw_fog); F_FAINT: an item, drawn faint when nearly see-through (draw.c faint)
 #define NONE 0xFFFF
 // C_EVENT's flags (Link.EV_*): the hero hurt (a short buzz), dead (a long one), something worth seeing (the backlight)
 enum { EV_HURT = 1, EV_DEAD = 2, EV_LIGHT = 4 };

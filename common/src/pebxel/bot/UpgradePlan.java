@@ -33,6 +33,19 @@ public final class UpgradePlan {
 	private UpgradePlan() { }
 
 	public static String last = "";
+
+	/** (M2, SR's audit: the guides' upgrade timing) No holding a scroll back: two or more in hand (UPCAP: a scroll held
+	 *  helps no fight), or the health lost outrunning the food (the turns of food left, hunger and pack, short of a rest
+	 *  to full and a floor's walk: what the scroll's armour or blows save is health the hero can't rest back). */
+	public static boolean noHold(Hero h) {
+		ScrollOfUpgrade s = h.belongings.getItem(ScrollOfUpgrade.class);
+		if (s != null && s.isKnown() && s.quantity() >= UPCAP) return true;
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Hunger hu = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Hunger.class);
+		double food = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Hunger.STARVING - (hu == null ? 0 : hu.hunger());
+		for (Item i : h.belongings) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.food.Food) food += ((com.shatteredpixel.shatteredpixeldungeon.items.food.Food) i).energy * i.quantity();
+		return food < (h.HT - h.HP) * 10 + FLOORWALK;
+	}
+	static final int UPCAP = (int) Tune.get("OUPCAP", 2), FLOORWALK = (int) Tune.get("OUPWALK", 300);
 	/** Choose by RunProjection (on by default; AS_OTOE=0: by the two-point score alone). */
 	static final boolean TOE = Tune.TOE;
 
@@ -70,10 +83,10 @@ public final class UpgradePlan {
 		double base = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, 0, 0, d, z0);
 		double baseLate = GearValue.cost(h, w0, wl0, we0, a0, al0, ae0, (int) Math.round(Sg), dl, boss, z0);
 		List<Item> cands = new ArrayList<>();
-		if (a0 != null && !(a0 instanceof ClassArmor)) cands.add(a0);
-		if (w0 != null && (w0 instanceof MeleeWeapon)) cands.add(w0);
+		if (a0 != null && !(a0 instanceof ClassArmor) && a0.isUpgradable()) cands.add(a0);
+		if (w0 != null && (w0 instanceof MeleeWeapon) && w0.isUpgradable()) cands.add(w0);   // (the Spirit Bow isn't one: SpiritBow.isUpgradable() is false, its level is the hero's / 5)
 		double wb = GearValue.slotCost(h, true), ab = GearValue.slotCost(h, false);
-		for (Item i : h.belongings.backpack) if (GearValue.judged(i) && !(i.cursedKnown && i.cursed) && !(i.levelKnown && i.level() < 0) && !dup(cands, i)) {
+		for (Item i : h.belongings.backpack) if (GearValue.judged(i) && i.isUpgradable() && !(i.cursedKnown && i.cursed) && !(i.levelKnown && i.level() < 0) && !dup(cands, i)) {
 			// (MT: a pack piece only if the scroll makes it worth wearing at once: Sais upgraded twice in the pack, never worn, while mail stayed +4)
 			boolean wp = !(i instanceof Armor);
 			if (Tune.UPPACK && GearValue.one(h, i, wp, w0, a0, HeroView.visLevel(i) + n, Ench.of(i)) >= (wp ? wb : ab) * (1 - Tune.GEARNEED)) continue;
@@ -115,7 +128,7 @@ public final class UpgradePlan {
 			return tb;
 		}
 		if (best == null) return null;
-		if (bNow >= base * (1 - Tune.UPHOLD) && dl > 1 && Dungeon.depth % 5 != 4) { last = "hold: " + last; return null; }
+		if (bNow >= base * (1 - Tune.UPHOLD) && dl > 1 && Dungeon.depth % 5 != 4 && !noHold(h)) { last = "hold: " + last; return null; }
 		return best;
 	}
 

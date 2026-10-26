@@ -400,7 +400,7 @@ public final class WatchSim {
 		px0 = d(o, Link.D_X) / 8f; py0 = d(o, Link.D_Y) / 8f;
 		scx = d(o, Link.D_SX) / 256f; scy = d(o, Link.D_SY) / 256f;
 		double ang = Math.toRadians(d(o, Link.D_ANG) / 64f); cs = (float) Math.cos(ang); sn = (float) Math.sin(ang);
-		orx = ory = 0; fine = false;
+		orx = ory = 0; fine = false; faint = false;
 		switch (o.kind) {
 			case Link.K_EMIT: drawEmit(o); break;
 			case Link.K_SHAPE: shape(o, s); break;
@@ -421,6 +421,8 @@ public final class WatchSim {
 					tx = a.rects[f * 4]; ty = a.rects[f * 4 + 1]; tw = a.rects[f * 4 + 2]; th = a.rects[f * 4 + 3];
 				}
 				col = s; ci = 20;
+				int A = Math.round(alpha * 255);
+				faint = (flip & Link.F_FAINT) != 0 && A >= 13 && A < 43 && (s[26] & 255) == 0;   // (as draw.c: FAINT_MIN to A_HALF)
 				BufferedImage t = tex(tex);
 				if (t == null) { flat = new float[]{1, 0, 1, 1}; quad(w, h, null); break; }
 				final int TX = tx, TY = ty, TW = tw, TH = th; final boolean fx = (flip & 1) != 0, fy = (flip & 2) != 0;
@@ -789,6 +791,20 @@ public final class WatchSim {
 	/** One texture pixel through the picture's colour multiply/add and alpha. */
 	private void plot(int px, int py, int c) {
 		byte[] s = col;
+		if (faint) {   // as draw.c faint(): the pixel under it a shade toward the picture's colour, in the channel that differs most
+			if ((c >>> 24) < 128) return;
+			float r = ((c >> 16) & 255) / 255f * (s[ci] & 255) / 255f + (s[ci + 3] & 255) / 255f;
+			float g = ((c >> 8) & 255) / 255f * (s[ci + 1] & 255) / 255f + (s[ci + 4] & 255) / 255f;
+			float bb = (c & 255) / 255f * (s[ci + 2] & 255) / 255f + (s[ci + 5] & 255) / 255f;
+			int b0 = fb[py * W + px], br = ((b0 >> 16) & 255) / 85, bg = ((b0 >> 8) & 255) / 85, bl = (b0 & 255) / 85, nr = br, ng = bg, nb = bl;
+			int dr = q(r) / 85 - br, dg = q(g) / 85 - bg, db = q(bb) / 85 - bl, ar = Math.abs(dr), ag = Math.abs(dg), ab = Math.abs(db);
+			if (ar >= ag && ar >= ab && ar > 0) nr += Integer.signum(dr);
+			else if (ag >= ab && ag > 0) ng += Integer.signum(dg);
+			else if (ab > 0) nb += Integer.signum(db);
+			else ng = br + bg + bl < 5 ? (bg < 3 ? bg + 1 : bg - 1) : (bg > 0 ? bg - 1 : bg + 1);
+			fb[py * W + px] = 0xFF000000 | (nr * 85 << 16) | (ng * 85 << 8) | nb * 85;
+			return;
+		}
 		float a = (c >>> 24) / 255f * alpha + (s[ci + 6] & 255) / 255f;
 		if (a <= 0.01f) return;
 		float r = ((c >> 16) & 255) / 255f * (s[ci] & 255) / 255f + (s[ci + 3] & 255) / 255f;
@@ -839,8 +855,8 @@ public final class WatchSim {
 		fb[y * W + x] = 0xFF000000 | (q(r) << 16) | (q(g) << 8) | q(b);
 	}
 
-	// as draw.c: pictures solid, on a 50% checker or gone; plain colour blocks (fades) the 16 levels
-	private boolean fine;
+	// as draw.c: pictures solid, on a 50% checker or gone; plain colour blocks (fades) the 16 levels; faint items a nudge
+	private boolean fine, faint;
 	private void put(int px, int py, float r, float g, float b, float a) {
 		int A = Math.round(a * 255);
 		if (fine ? A <= 247 && A <= BAYER[((py & 3) << 2) | (px & 3)] : A < 213 && (A < 43 || ((px ^ py) & 1) == 0)) return;

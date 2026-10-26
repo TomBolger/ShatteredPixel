@@ -30,7 +30,7 @@ public final class Link {
 			C_TILES = 7, C_DTEX = 8, C_MOVE = 9, C_ANIM = 10, C_TIME = 11, C_INPUT = 12, C_LATEST = 13, C_SOUND = 14, C_COMMIT = 15, C_PREDICT = 16, C_TILES2 = 17, C_ANIMTO = 18, C_RECIPE = 19, C_FOG = 20, C_READY = 21, C_AHEAD = 22, C_EVENT = 23, C_PASS = 24, C_STEP = 25, C_FOGD = 26, C_ANSWER = 27, C_FLASH = 28;
 	// ---- picture kinds ----
 	public static final int K_IMG = 1, K_RECT = 2, K_NINE = 3, K_TILES = 4, K_TEXT = 5, K_SKIN = 6, K_QUADS = 7, K_SHAPE = 8, K_EMIT = 9, K_FLOAT = 10;
-	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32;   // F_FOG: the fog of war (the watch draws it as Pebble PD does)
+	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32, F_FAINT = 64;   // F_FOG: the fog of war (the watch draws it as Pebble PD does); F_FAINT: an item, which the watch draws faint (a nudge of the floor under it) when nearly see-through, as the Cracked Spyglass's hidden heaps at 10%
 	public static final int NONE = 0xFFFF;
 	/** The command format's version; the watch app sends its own in its hello. */
 	public static final int PROTOCOL = 16;   // 16: C_ANSWER names the press it answers (the watch's number for it, sent with a button too); 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
@@ -811,7 +811,8 @@ public final class Link {
 				int tx = tex(im.texture, !(g instanceof com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar) && !skin);
 				s8(skin ? K_SKIN : K_IMG); s8(cam); s8(tx);
 				s8((im.flipHorizontal ? F_FLIPH : 0) | (im.flipVertical ? F_FLIPV : 0) | (animated ? F_ANIM : 0)
-					| (g instanceof com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar ? F_FOG : 0));
+					| (g instanceof com.shatteredpixel.shatteredpixeldungeon.tiles.FogOfWar ? F_FOG : 0)
+					| (g instanceof com.shatteredpixel.shatteredpixeldungeon.sprites.ItemSprite ? F_FAINT : 0));
 				origin(v); size(im.width, im.height);
 				if (animated) { s16(anim(a, tx, im.texture)); s16(0); s16(0); s16(0); }
 				else texRect(NoosaAccess.frame(im), im.texture);

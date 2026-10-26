@@ -654,7 +654,7 @@ public final class RefinementTest {
     static Assist.Target ab(boolean urgent) throws Exception {
         Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
         setup.setAccessible(true); setup.invoke(null, new Object[]{null});
-        AsAbilities.prepAt = -1; AsAbilities.ban.clear();
+        AsAbilities.prepAt = -1; AsAbilities.ban.clear(); AsAbilities.offerN.clear();
         return urgent ? AsAbilities.urgent(null) : AsAbilities.suggest(null);
     }
 
@@ -716,6 +716,90 @@ public final class RefinementTest {
         Gallery.calm(); Assist.reset();
         System.out.println("items: the staff imbued (known uncursed only), unknown potions kept unknown, Corruption's sum, a bomb on held foes, trap ranks, no fire on grass: ok");
     }
+
+    /** The clues (agent ID: Clues, Identify): a bat's potion is Healing and drunk as one; a pool room on the floor makes
+     *  a potion colour lying there likelier Invisibility; no unknown scroll read with nothing to gain (one is, with a
+     *  cursed armour on); a prize past a chasm taken with the potion believed Levitation. */
+    @SuppressWarnings("unchecked")
+    static void clues() throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero;
+        Gallery.calm(); h.HP = h.HT = 100; WatchSettings.assist(2); WatchSettings.itemAssist(true); Assist.reset();
+        Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); L.updateFieldOfView(h, L.heroFOV);
+        h.belongings.backpack.items.clear();
+        Field hf = com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.class.getDeclaredField("handler"); hf.setAccessible(true);
+        Field sf = com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.class.getDeclaredField("handler"); sf.setAccessible(true);
+        Set<Class<?>> pk = (Set<Class<?>>) ((com.shatteredpixel.shatteredpixeldungeon.items.ItemStatusHandler<?>) hf.get(null)).known();
+        Set<Class<?>> sk = (Set<Class<?>>) ((com.shatteredpixel.shatteredpixeldungeon.items.ItemStatusHandler<?>) sf.get(null)).known();
+        Set<Class<?>> pk0 = new HashSet<>(pk), sk0 = new HashSet<>(sk);
+        Class<?> HEAL = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class, INV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility.class,
+                MV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfMindVision.class, LEV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation.class;
+        pk.remove(HEAL); pk.remove(INV); pk.remove(MV); pk.remove(LEV);
+        try {
+            int[] wd = walks(L, h.pos); int c1 = -1;
+            for (int c = 0; c < wd.length; c++) if (wd[c] == 1 && L.heaps.get(c) == null && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) == null) { c1 = c; break; }
+            check(c1 >= 0, "a cell beside the hero");
+            // 1. a bat killed beside the hero drops a potion: Healing, drunk as one when low
+            com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Bat bat = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Bat(); bat.pos = c1; bat.state = bat.HUNTING; GameScene.add(bat);
+            L.updateFieldOfView(h, L.heroFOV);
+            hands();
+            gone(bat);
+            com.shatteredpixel.shatteredpixeldungeon.items.Heap hp = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing(), c1); hp.seen = true;
+            hands();
+            double ph = pebxel.bot.Identify.p(HEAL, HEAL);
+            check(ph >= 0.9, "a bat's potion is believed Healing: " + ph);
+            hp.destroy();
+            Item mine = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing(); h.belongings.backpack.items.add(mine);
+            check(Clues.healing() == mine && Clues.about(mine).contains("bat"), "the bat's potion is the Healing to drink, the why says so: " + Clues.about(mine));
+            h.HP = Math.max(2, h.HT / 6); com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll r = brute(c1);
+            Assist.Target t = hands();
+            check(t != null && t.item == mine && t.why.contains("bat"), "low beside a strong gnoll: the bat's potion drunk as Healing: " + t);
+            gone(r); h.HP = 100; h.belongings.backpack.items.clear();
+            // 2. a pool room seen: a colour lying on this floor likelier Invisibility, one never seen less
+            Assist.reset(); hands();
+            double i0 = pebxel.bot.Identify.p(INV, INV), m0 = pebxel.bot.Identify.p(MV, INV);
+            int c2 = -1; for (int c = 0; c < wd.length; c++) if (wd[c] >= 2 && wd[c] <= 5 && L.heaps.get(c) == null && L.heroFOV[c]) { c2 = c; break; }
+            check(c2 >= 0, "a cell in sight for a potion");
+            com.shatteredpixel.shatteredpixeldungeon.items.Heap hi = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility(), c2); hi.seen = true;
+            hands();
+            Clues.room(new com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.PoolRoom()); Clues.explored(false);
+            double i1 = pebxel.bot.Identify.p(INV, INV), m1 = pebxel.bot.Identify.p(MV, INV);
+            check(i1 > i0 * 1.5 && i1 > 0.5 && m1 < m0, String.format("a pool room on the floor: the colour lying there Invisibility %.2f -> %.2f, one not seen %.2f -> %.2f", i0, i1, m0, m1));
+            hi.destroy();
+            // 3. an unknown scroll: not read with nothing to gain; read with a cursed armour worn (Remove Curse)
+            sk.add(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
+            sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse.class); sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution.class);
+            for (Class<?> e : Arrays.asList(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTerror.class,
+                    com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfMirrorImage.class)) sk.add(e);   // (the escapes known: nothing to learn there)
+            for (Item i : h.belongings) i.identify();
+            com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution lu = new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution(); h.belongings.backpack.items.add(lu);
+            Assist.reset(); t = hands();
+            check(t == null || t.item != lu, "an unknown scroll isn't read with nothing to gain: " + t);
+            Armor a0 = h.belongings.armor; Armor ca = new LeatherArmor(); ca.cursed = true; ca.cursedKnown = true; h.belongings.armor = ca;
+            t = hands();
+            check(t != null && t.item == lu && Scroll().equals(t.action), "a cursed armour worn: the unknown scroll is read (it may be Remove Curse): " + t);
+            h.belongings.armor = a0; h.belongings.backpack.items.clear();
+            // 4. a prize past a chasm, the potion believed Levitation (no known one): drunk for it
+            int c3 = -1;
+            for (int c = 0; c < wd.length && c3 < 0; c++) if (wd[c] == 3 && L.heroFOV[c] && L.heaps.get(c) == null) { boolean ok = true;
+                for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int n = c + k; if (n < 0 || n >= L.length() || !L.passable[n] || L.heaps.get(n) != null || n == h.pos || wd[n] < 1 || L.map[n] != L.map[c]) ok = false; }
+                if (ok) c3 = c; }
+            if (c3 >= 0) {
+                int[] keep = new int[8]; int j = 0;
+                for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { keep[j++] = L.map[c3 + k]; com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c3 + k, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.CHASM); GameScene.updateMap(c3 + k); }
+                com.shatteredpixel.shatteredpixeldungeon.items.Heap hz = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy(), c3); hz.seen = true;
+                Item lp = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation(); h.belongings.backpack.items.add(lp);
+                double[] like = new double[12]; Arrays.fill(like, 0.02); like[pebxel.bot.Identify.pos(pebxel.bot.Identify.POT, LEV)] = 1; pebxel.bot.Identify.like(LEV, like, "the traps room on this floor");
+                L.updateFieldOfView(h, L.heroFOV);
+                t = it(false);
+                check(t != null && t.item == lp && t.why.contains("prize past the traps") && t.why.contains("likely Levitation"), "a prize past a chasm: the believed Levitation drunk for it: " + t);
+                hz.destroy(); j = 0; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c3 + k, keep[j++]); GameScene.updateMap(c3 + k); }
+                AsItems.cross = null; h.belongings.backpack.items.clear();
+            } else System.out.println("clues: no open 3x3 for the chasm check (skipped)");
+        } finally { pk.clear(); pk.addAll(pk0); sk.clear(); sk.addAll(sk0); }
+        Gallery.calm(); Assist.reset();
+        System.out.println("clues: a bat's potion drunk as Healing, a pool room's Invisibility, no scroll read for nothing (one for a curse), a believed Levitation for a prize: ok");
+    }
+    static String Scroll() { return com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.AC_READ; }
 
     /** The talents and abilities (AsAbilities): a meal talent eats before a fight, a Duelist's charged ability on a
      *  strong foe, Berserk when low beside one, the King's Crown put on. */
@@ -790,6 +874,37 @@ public final class RefinementTest {
         ch.charges = 0; ch.partialCharge = 0;
         t = ab(true);
         check(t == null || !com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "no charge: no ability: " + t);
+        // 2b. the Champion (WD): a Round Shield in the pack goes in the second slot, nothing about; low beside a strong
+        // foe, the second weapon's guard
+        gone(g); h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.CHAMPION;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.RoundShield rs = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.RoundShield(); rs.identify();
+        h.belongings.backpack.items.add(rs);
+        t = ab(false);
+        check(t != null && t.item == rs && "ab:second".equals(t.action), "a Champion, a Round Shield in the pack: worn as the second weapon: " + t);
+        h.belongings.backpack.items.remove(rs); h.belongings.secondWep = rs; rs.activate(h);   // (as act's equipSecondary, without taking the turn)
+        g = brute(near); h.HP = 40; ch.charges = 2;
+        t = ab(true);
+        check(t != null && t.item == rs && com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "the Champion low beside a strong foe: the second weapon's guard: " + t);
+        gone(g); h.belongings.secondWep = null; h.HP = 100; ch.charges = 0; h.subClass = sub0; g = null;
+        // 2c. the Sniper (WD): a strong foe at range, a dart in the pack: thrown first (it marks the foe for the special shot)
+        h.heroClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.HUNTRESS; h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.SNIPER;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow bow = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow(); bow.identify();
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.Dart dart = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.Dart();
+        h.belongings.backpack.items.add(bow); h.belongings.backpack.items.add(dart);
+        g = brute(far);
+        t = ab(true);
+        check(t != null && t.item == dart && com.shatteredpixel.shatteredpixeldungeon.items.Item.AC_THROW.equals(t.action) && t.cell == far, "the Sniper, a strong foe at range: a dart thrown to mark it: " + t);
+        gone(g); h.belongings.backpack.items.clear(); h.heroClass = cls0; h.subClass = sub0;
+        // 2d. the Rogue's cloak as an escape (WD): dying beside a strong foe, no Healing: the cloak goes on
+        h.heroClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.ROGUE;
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows(); ck.identify();
+        Field cf = com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact.class.getDeclaredField("charge"); cf.setAccessible(true); cf.setInt(ck, 5);
+        h.belongings.artifact = ck; ck.activate(h);
+        g = brute(near); h.HP = 20;
+        t = ab(true);
+        check(t != null && t.item == ck && com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.AC_STEALTH.equals(t.action), "the Rogue dying beside a strong foe: the cloak as an escape: " + t);
+        gone(g); ck.doUnequip(h, false, false); h.belongings.artifact = null; h.HP = 100; h.heroClass = cls0;
+        g = brute(near);
         ch.detach(); h.heroClass = cls0;
         // 3. the Berserker at full rage, low, a strong foe beside: Berserk; at full health against a weak one: not
         com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor arm = new ClothArmor(); arm.affixSeal(new com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal()); h.belongings.armor = arm;
@@ -815,7 +930,7 @@ public final class RefinementTest {
         check(t != null && t.item == crown && "WEAR".equals(t.action), "the King's Crown is put on: " + t);
         h.belongings.backpack.items.clear(); h.belongings.weapon = null; h.belongings.armor = new ClothArmor();
         Gallery.calm(); Assist.reset();
-        System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, Berserk when low (not at full health), the Crown put on: ok");
+        System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, the Champion's second weapon and its guard, the Sniper's marking throw, the Rogue's cloak escape, Berserk when low (not at full health), the Crown put on: ok");
     }
 
     static Assist.Target arts() throws Exception {
@@ -910,6 +1025,7 @@ public final class RefinementTest {
         chestFromBeside();
         abilities();
         items();
+        clues();
 
         Link link = new Link(new Assets()); Controls controls = new Controls(); Touches touches = new Touches();
         pebxel.ui.WndWatchMenu menu = new pebxel.ui.WndWatchMenu(); GameScene.show(menu);

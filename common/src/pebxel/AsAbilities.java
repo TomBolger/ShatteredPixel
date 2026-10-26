@@ -61,6 +61,7 @@ final class AsAbilities {
 	static final boolean PATIENT = Assist.opt("PATIENT", false);
 	static final boolean SNEAKSLEEP = Assist.opt("SNEAKSLEEP", false), SNEAKUP = Assist.opt("SNEAKUP", true), OPENERS = Assist.opt("OPENERS", true);
 	public static final String AB = "ab:";
+	static final boolean ESCAPE = Assist.opt("CLOAKESC", true), PREPWAIT = Assist.opt("PREPWAIT", true);
 
 	// ---- per turn ----
 	static Hero H; static Level L; static int hp; static float hpf;
@@ -143,12 +144,14 @@ final class AsAbilities {
 	 *  range...): held back a while. */
 	static Target offered(Target t, int hook) {
 		if (t == null || t.item == null) return t;
+		// (counted per entry while no time passes and the hero stays put: two entries taking turns, a monk move and a
+		// weapon ability that does nothing, kept each other's count at 0 (WD-a1: 480 harvests in one turn))
 		String k = key(t.item, t.action); float now = Actor.now(); int p = Dungeon.hero.pos;
-		if (k.equals(offerKey[hook]) && now == offerT[hook] && p == offerPos[hook]) { if (++offerN[hook] >= 3) { ban.put(k, now + 20); offerKey[hook] = null; return null; } }
-		else { offerKey[hook] = k; offerT[hook] = now; offerPos[hook] = p; offerN[hook] = 0; }
+		if (now != offerT0 || p != offerPos0) { offerN.clear(); offerT0 = now; offerPos0 = p; }
+		if (offerN.merge(k, 1, Integer::sum) > 3) { ban.put(k, now + 20); return null; }
 		return t;
 	}
-	static final String[] offerKey = new String[2]; static final float[] offerT = new float[2]; static final int[] offerPos = new int[2], offerN = new int[2];
+	static final Map<String, Integer> offerN = new HashMap<>(); static float offerT0 = -1; static int offerPos0 = -1;
 
 	static Target urgent0(Target planA) {
 		if (!ON) return null;
@@ -161,6 +164,8 @@ final class AsAbilities {
 			if ((t = berserk()) != null) return t;
 			if ((t = layOnHands()) != null) return t;
 			if ((t = escapeAbility()) != null) return t;
+			if (ESCAPE && (t = cloakEscape()) != null) return t;
+			if (ESCAPE && (t = unseenAway()) != null) return t;
 			if ((t = meal()) != null) return t;
 			// (the fight's own: before the hands' throws and zaps, which would otherwise always come first; not when the
 			// hands are about to drink Healing)
@@ -173,7 +178,9 @@ final class AsAbilities {
 			if ((t = weaponAbility()) != null) return t;
 			if ((t = meleeSpells()) != null) return t;
 			if ((t = snipe()) != null) return t;
+			if ((t = snipeMark()) != null) return t;
 			if ((t = preparation()) != null) return t;
+			if (PREPWAIT && (t = prepWait()) != null) return t;
 			return null;
 		} catch (Throwable e) { Assist.lastError = e; return null; }
 	}
@@ -186,6 +193,8 @@ final class AsAbilities {
 			if (Assist.foul(hp) || Assist.burning()) return null;
 			Target t;
 			if (foes.isEmpty() && (t = crown()) != null) return t;
+			if (foes.isEmpty() && (t = second()) != null) return t;
+			if (foes.isEmpty() && (t = beacon()) != null) return t;
 			if ((t = battery()) != null) return t;
 			if ((t = liquidWillpower()) != null) return t;
 			if ((t = pointBlank()) != null) return t;
@@ -228,6 +237,8 @@ final class AsAbilities {
 				if (Controls.aiming()) GameScene.handleCell(h.pos);
 				return true;
 			}
+			if (a.equals("second")) { if (!(t.item instanceof KindOfWeapon) || h.subClass != HeroSubClass.CHAMPION || !h.belongings.backpack.contains(t.item)) return false; return ((KindOfWeapon) t.item).equipSecondary(h); }
+			if (a.equals("beaconclear")) { Buff b = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class); if (b == null) return false; b.detach(); return true; }   // (its window's Clear)
 			if (a.equals("wait")) { h.rest(false); return true; }
 			if (a.equals("sneak")) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 		} catch (Throwable e) { Assist.lastError = e; return false; }
@@ -332,8 +343,7 @@ final class AsAbilities {
 		Berserk b = H.buff(Berserk.class); if (b == null || adj.isEmpty()) return null;
 		Object pw = Assist.field(b, "power"), st = Assist.field(b, "state");
 		if (!(pw instanceof Float) || (Float) pw < 1f || st == null || !st.toString().equals("NORMAL")) return null;
-		com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield ws = H.buff(com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield.class);
-		if (ws == null || ws.maxShield() <= 0) return null;
+		// (the berserk shield is the rage's own, 8 + 2 x the armour's level: no seal needed)
 		boolean bossAdj = false; for (Mob m : adj) bossAdj |= Assist.boss(m);
 		// (rage decays once the fight is over and the shield is bigger the lower his health: spent in the fight it came
 		// from, once it's a hard one; with Deathless Fury it fires by itself at death, so then later)
@@ -408,6 +418,23 @@ final class AsAbilities {
 		return ab(carrier(), AB + "prep", best.pos, "prep: blink and strike (level " + lvl + (p.canKO(best) ? ", a kill" : "") + ")");
 	}
 
+	/** The Assassin unseen with a strong foe in sight that hasn't got him: a few turns' wait build the preparation
+	 *  (level 3 at 5 turns unseen: a big blow and a blink, a kill below 20-50% of its health) before the blink-strike,
+	 *  rather than walking up for a level-1 blow. Not with the cloak nearly spent. */
+	static Target prepWait() {
+		Preparation p = H.buff(Preparation.class); if (p == null || !adj.isEmpty() || H.invisible <= 0 || p.attackLevel() >= 3) return null;
+		Mob s = null;
+		for (Mob m : foes) if (!Assist.boss(m) && !(m instanceof NPC) && strong(m) && L.heroFOV[m.pos] && Assist.distance(m.pos, hp) <= 6 && !p.canKO(m)) s = m;
+		if (s == null) return null;
+		com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = H.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.class);
+		Object ch = ck == null ? null : Assist.field(ck, "charge");
+		if (H.buff(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.cloakStealth.class) != null && ch instanceof Integer && (Integer) ch < 2) return null;
+		if (s.id() != waitId) { waitId = s.id(); waits = 0; }
+		if (++waits > 6) return null;
+		Item k = carrier(); if (k == null) return null;
+		return ab(k, AB + "wait", -1, "prepwait: unseen, the preparation builds (level " + p.attackLevel() + ")");
+	}
+
 	/** The Freerunner: freerun to get away when low and chased (plan A walks off). */
 	static Target freerun(Target planA) {
 		Momentum mo = H.buff(Momentum.class); if (mo == null || planA == null || planA.kind != Assist.GO || hpf >= 0.4f) return null;
@@ -415,6 +442,30 @@ final class AsAbilities {
 		if (!(s instanceof Integer) || (Integer) s < 2 || !Integer.valueOf(0).equals(ft) || !Integer.valueOf(0).equals(cd)) return null;
 		boolean chased = false; for (Mob m : near) chased |= Assist.hunting(m) && Assist.distance(m.pos, hp) <= 3;
 		return chased ? ab(carrier(), AB + "freerun", -1, "freerun: away") : null;
+	}
+
+	/** The Rogue's cloak as an escape (strategy-reference 3.3, coverage gap 24): unseen, a foe beside him can't strike
+	 *  (it loses him: Mob.Hunting), so dying in a losing fight with no Healing, the cloak goes on; then {@link #unseenAway}. */
+	static Target cloakEscape() {
+		if (adj.isEmpty() || hpf >= 0.35f || !(losing() || strongFight()) || H.invisible > 0) return null;
+		PotionOfHealing ph = H.belongings.getItem(PotionOfHealing.class); if (ph != null && ph.isKnown()) return null;
+		com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = H.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.class);
+		if (ck == null || ck.cursed || !(ck.isEquipped(H) || H.hasTalent(Talent.LIGHT_CLOAK))) return null;
+		Object ch = Assist.field(ck, "charge"); if (!(ch instanceof Integer) || (Integer) ch < 2) return null;
+		boolean seer = false; for (Mob m : adj) seer |= Assist.boss(m);   // (bosses keep after him)
+		if (seer || away(6, false) < 0) return null;
+		return ab0(ck, com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.AC_STEALTH, "cloakescape: unseen, they lose him");
+	}
+	/** Unseen (the cloak, a potion of Invisibility) and hurt, foes close: step away from them (they lose him and wander)
+	 *  rather than strike (a blow ends it). Not when the Assassin's blink-strike would kill. */
+	static Target unseenAway() {
+		if (H.invisible <= 0 || hpf >= 0.5f || near.isEmpty()) return null;
+		Preparation p = H.buff(Preparation.class);
+		if (p != null) for (Mob m : near) if (p.canKO(m)) return null;
+		int close = 99; for (Mob m : foes) close = Math.min(close, Assist.distance(m.pos, hp));
+		if (close > 3) return null;
+		int c = away(6, false); if (c < 0 || c == hp) return null;
+		return new Target(c, Assist.GO, AB + "unseen: away while they've lost him");
 	}
 
 	/** A sleeper struck first is a surprise blow (the Rogue's sneak attacks; Silent Steps keeps it asleep longer). */
@@ -445,6 +496,25 @@ final class AsAbilities {
 		if (b < m * 0.95) return null;
 		Target t = ab0(bow, SpiritBow.AC_SHOOT, "pointblank: shoot beside"); if (t != null) t.cell = e.pos;
 		return t;
+	}
+
+	/** The Sniper's opener: only a thrown weapon's hit (not the bow's) marks a foe for the special shot, and the hands
+	 *  shoot the bow: a strong foe at range gets a thrown weapon first, then {@link #snipe}. */
+	static Target snipeMark() {
+		if (H.subClass != HeroSubClass.SNIPER || has(SnipersMark.class) || H.belongings.getItem(SpiritBow.class) == null) return null;
+		Mob best = null;
+		for (Mob m : near) {
+			int d = Assist.distance(m.pos, hp);
+			if (d < 2 || m instanceof NPC || !L.heroFOV[m.pos] || !(strong(m) || fightCost >= H.HP * 0.3)) continue;
+			if (new Ballistica(hp, m.pos, Ballistica.PROJECTILE).collisionPos != m.pos) continue;
+			if (best == null || cost(m) > cost(best)) best = m;
+		}
+		if (best == null) return null;
+		Item th = null;
+		for (Item i : H.belongings.backpack) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.MissileWeapon && !(i instanceof SpiritBow.SpiritArrow) && ok(i, Item.AC_THROW)
+				&& (th == null || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.Dart)) th = i;   // (a plain dart first: the cheapest)
+		if (th == null) return null;
+		return Assist.use(th, Item.AC_THROW, best.pos, AB + "snipemark: a thrown hit marks it for the special shot");
 	}
 
 	/** The Sniper's special shot, after a thrown or shot hit marked the foe. */
@@ -482,8 +552,17 @@ final class AsAbilities {
 	/** The Duelist's weapon ability, by the weapon's kind: on strong foes, and on any once the charges are full (they'd
 	 *  go to waste); the Sneak kinds to get away when dying; a free Cleave after a Cleave kill always. */
 	static Target weaponAbility() {
-		if (H.heroClass != HeroClass.DUELIST || !(H.belongings.weapon() instanceof MeleeWeapon) || foes.isEmpty()) return null;
-		MeleeWeapon w = (MeleeWeapon) H.belongings.weapon();
+		if (H.heroClass != HeroClass.DUELIST || foes.isEmpty()) return null;
+		// (the Champion: either weapon's ability, the second's without a swap; its defence first when low)
+		Item w1 = H.belongings.weapon(), w2 = H.subClass == HeroSubClass.CHAMPION ? H.belongings.secondWep() : null;
+		Target a = w1 instanceof MeleeWeapon ? weaponAbility((MeleeWeapon) w1) : null;
+		Target b = w2 instanceof MeleeWeapon ? weaponAbility((MeleeWeapon) w2) : null;
+		if (b != null) b.why = b.why.replace(AB + "wep:", AB + "wep2:");
+		if (a != null && b != null && hpf < 0.5f && DEFENSIVE.contains(w2.getClass().getSimpleName()) && !DEFENSIVE.contains(w1.getClass().getSimpleName())) return b;
+		return a != null ? a : b;
+	}
+	static final Set<String> DEFENSIVE = new HashSet<>(Arrays.asList("RoundShield", "Greatshield", "Quarterstaff", "Dagger", "Dirk", "AssassinsBlade"));
+	static Target weaponAbility(MeleeWeapon w) {
 		if (w instanceof MagesStaff || w.STRReq() > H.STR() || !ok(w, MeleeWeapon.AC_ABILITY)) return null;
 		MeleeWeapon.Charger ch = H.buff(MeleeWeapon.Charger.class); if (ch == null) return null;
 		Mob e = adj.isEmpty() ? null : strongest(adj);
@@ -498,7 +577,7 @@ final class AsAbilities {
 		} else if (LUNGE.contains(n)) {
 			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) == 2 && (strong(m) || full || FoeView.shooter(m)) && lungeOk(m)) { cell = m.pos; why = "lunge"; break; }
 		} else if (SPIKE.contains(n)) {
-			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && H.canAttack(m) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
+			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && w.canReach(H, m.pos) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
 		} else if (SNEAK.contains(n)) {
 			if (e != null && hpf < 0.3f && losing()) { cell = away(5, false); why = "sneak away"; }
 			else if (SNEAKUP && adj.isEmpty() && H.invisible <= 0 && hpf > 0.6f) for (Mob m : near) if (strong(m) && Assist.distance(m.pos, hp) >= 2 && (cell = beside(m, 5)) >= 0) { why = "sneak up: a surprise blow"; break; }
@@ -518,13 +597,65 @@ final class AsAbilities {
 			int spins = sp instanceof Integer ? (Integer) sp : 0;
 			if (adj.isEmpty() && spins < 3) for (Mob m : near) if (Assist.hunting(m) && Assist.walk(m.pos) <= 4 && !FoeView.shooter(m) && (spins > 0 || strong(m) || full)) { cell = hp; why = "spin (" + (spins + 1) + ")"; break; }
 		} else if (n.equals("Whip")) {
-			int r = 0; for (Mob m : foes) if (H.canAttack(m)) r++;
+			int r = 0; for (Mob m : foes) if (w.canReach(H, m.pos)) r++;
 			if (r >= 2 || (r >= 1 && (st || full))) { cell = hp; why = "lash"; }
 		}
 		if (why == null || cell < 0) return null;
 		Target t = Assist.use(w, MeleeWeapon.AC_ABILITY, cell, AB + "wep:" + why + (full ? " (full)" : ""));
 		return t;
 	}
+	/** The Champion's second weapon (strategy-reference 3.5: a utility one, a shield or a spear, beside the main one;
+	 *  Twin Upgrades gives the lower-tier one the higher's level): the pack's best for it, worn in the second slot when
+	 *  the slot is empty or it beats the one there. Only what the player sees (its kind, tier, shown level and curse). */
+	static Target second() {
+		if (H.subClass != HeroSubClass.CHAMPION || !(H.belongings.weapon() instanceof MeleeWeapon)) return null;
+		MeleeWeapon main = (MeleeWeapon) H.belongings.weapon();
+		KindOfWeapon cur = H.belongings.secondWep();
+		if (cur != null && cur.cursed && cur.cursedKnown) return null;   // (stuck there)
+		double have = cur instanceof MeleeWeapon ? secondWorth((MeleeWeapon) cur, main) : -1e9;
+		MeleeWeapon best = null; double bv = Math.max(0, have + 1);
+		for (Item i : H.belongings.backpack) {
+			if (!(i instanceof MeleeWeapon) || i instanceof MagesStaff || !ok(i, AB + "second")) continue;
+			double v = secondWorth((MeleeWeapon) i, main);
+			if (v > bv) { bv = v; best = (MeleeWeapon) i; }
+		}
+		if (best == null) return null;
+		boolean twin = twinOk(best, main);
+		return ab(best, AB + "second", -1, "second: the Champion's second weapon (" + kindName(best) + (twin ? ", Twin Upgrades" : "") + ")");
+	}
+	/** The worth of w as the Champion's second weapon beside main: its ability's use (a kind main hasn't), its level
+	 *  (Twin Upgrades: main's, when w's tier is low enough). Below 0: not worth the slot (cursed, too heavy). */
+	static double secondWorth(MeleeWeapon w, MeleeWeapon main) {
+		if (w.cursedKnown && w.cursed) return -1e9;
+		if (w.levelKnown && w.level() < 0) return -1e9;
+		if (w.STRReq(w.levelKnown ? w.level() : 0) > H.STR()) return -1e9;   // (its ability needs the strength)
+		String k = kindName(w), km = kindName(main);
+		Double kv = SECOND_KIND.get(k); double v = kv == null ? 1 : kv;
+		if (k.equals(km)) v -= 2;   // (no new ability)
+		int lv = twinOk(w, main) ? Math.max(main.buffedLvl(), w.levelKnown ? w.level() : 0) : w.levelKnown ? w.level() : 0;
+		v += 0.5 * lv + 0.25 * w.tier;
+		if (!w.cursedKnown) v -= 1.5;   // (unknown: a curse would stick it there)
+		return v;
+	}
+	static boolean twinOk(MeleeWeapon w, MeleeWeapon main) {
+		int p = H.pointsInTalent(Talent.TWIN_UPGRADES);
+		return p > 0 && w.tier + (3 - p) <= main.tier;
+	}
+	static String kindName(MeleeWeapon w) {
+		String n = w.getClass().getSimpleName();
+		if (GUARD.contains(n)) return "guard"; if (SPIKE.contains(n)) return "spike"; if (SNEAK.contains(n)) return "sneak"; if (LUNGE.contains(n)) return "lunge";
+		if (CLEAVE.contains(n)) return "cleave"; if (HEAVY.contains(n)) return "heavy"; if (HARVEST.contains(n)) return "harvest"; if (STANCE.contains(n)) return n.equals("Scimitar") ? "dance" : "stance";
+		if (COMBO.contains(n)) return "combo"; if (HIT.contains(n)) return n.equals("Greataxe") ? "retribution" : "runic";
+		return n.toLowerCase(Locale.ROOT);
+	}
+	/** Each ability's worth as the second one (the guide: a shield or a spear; the dagger's sneak is an escape). */
+	static final Map<String, Double> SECOND_KIND = new HashMap<>();
+	static {
+		SECOND_KIND.put("guard", 4.0); SECOND_KIND.put("spike", 3.0); SECOND_KIND.put("sneak", 2.5); SECOND_KIND.put("stance", 2.5);
+		SECOND_KIND.put("heavy", 2.0); SECOND_KIND.put("cleave", 2.0); SECOND_KIND.put("lunge", 2.0); SECOND_KIND.put("harvest", 2.0);
+		SECOND_KIND.put("runic", 2.0); SECOND_KIND.put("dance", 1.5); SECOND_KIND.put("whip", 2.0); SECOND_KIND.put("combo", 1.0); SECOND_KIND.put("retribution", 1.0);
+	}
+
 	/** An empty cell beside m within reach steps of the hero, or -1. */
 	static int beside(Mob m, int reach) {
 		int best = -1;
@@ -596,7 +727,10 @@ final class AsAbilities {
 		int hostile = 0; for (Mob m : foes) if (!(m instanceof NPC)) hostile++;
 		if (H.subClass == HeroSubClass.PRIEST && (hostile >= 2 || (strong(s) && adj.isEmpty())) && (t = cast(Radiance.INSTANCE, -1, "radiance")) != null) return t;
 		if (strong(s) && new Ballistica(hp, s.pos, Ballistica.PROJECTILE).collisionPos == s.pos && (t = cast(HolyLance.INSTANCE, s.pos, "holy lance")) != null) return t;
-		if (strong(s) && !blinded(s) && new Ballistica(hp, s.pos, Ballistica.MAGIC_BOLT).collisionPos == s.pos && (t = cast(Sunray.INSTANCE, s.pos, "sunray")) != null) return t;
+		// (Sunray blinds a foe once (SunRayUsedTracker stays), and a second cast while that lasts paralyses it; any other
+		// cast is a plain 4-12 for a charge, worth less than Guiding Light's sure next blow: K2's runs cast it 13 times a game)
+		if (strong(s) && new Ballistica(hp, s.pos, Ballistica.MAGIC_BOLT).collisionPos == s.pos && (s.buff(Sunray.SunRayUsedTracker.class) == null || s.buff(Sunray.SunRayRecentlyBlindedTracker.class) != null)
+				&& (t = cast(Sunray.INSTANCE, s.pos, s.buff(Sunray.SunRayUsedTracker.class) == null ? "sunray" : "sunray paralyse")) != null) return t;
 		if (!has(Bless.class) && (t = cast(BlessSpell.INSTANCE, hp, "bless")) != null) return t;
 		if (strong(s) && !has(HolyWard.HolyArmBuff.class) && ch >= 2 && (t = cast(HolyWard.INSTANCE, -1, "holy ward")) != null) return t;
 		if (strong(s) && !has(HolyWeapon.HolyWepBuff.class) && ch >= 3 && (t = cast(HolyWeapon.INSTANCE, -1, "holy weapon")) != null) return t;
@@ -625,6 +759,33 @@ final class AsAbilities {
 	static ClassArmor classArmor() { return H.belongings.armor() instanceof ClassArmor ? (ClassArmor) H.belongings.armor() : null; }
 	static boolean abilityReady(ClassArmor ca) { ArmorAbility a = H.armorAbility; return ca != null && a != null && ca.charge >= a.chargeUse(H) && ok(ca, "ABILITY"); }
 
+	/** Feint's cell: an empty one beside the hero, still beside e if there is one (the hero strikes on from it). */
+	static int feintCell(Mob e) {
+		int best = -1;
+		for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (!L.passable[c] || L.solid[c] || L.avoid[c] || Actor.findChar(c) != null) continue;
+			if (best < 0 || (Assist.distance(c, e.pos) <= 1 && Assist.distance(best, e.pos) > 1)) best = c; }
+		return best;
+	}
+
+	/** The Warp Beacon: set where the hero stands when nothing is about (it costs no charge), moved to each new floor (a
+	 *  beacon on another floor can't be reached without Longrange Warp); used as an escape by {@link #escapeAbility}. */
+	static Target beacon() {
+		ClassArmor ca = classArmor(); if (ca == null || H.armorAbility == null || !H.armorAbility.getClass().getSimpleName().equals("WarpBeacon") || !ok(ca, "ABILITY")) return null;
+		Buff tr = H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class);
+		if (tr != null) {
+			Object d = Assist.field(tr, "depth");
+			if (d instanceof Integer && (Integer) d != Dungeon.depth && !H.hasTalent(Talent.LONGRANGE_WARP) && !Dungeon.bossLevel()) return ab(ca, AB + "beaconclear", -1, "beacon: cleared (it's on another floor)");
+			return null;
+		}
+		if (ca.charge < H.armorAbility.chargeUse(H) || Dungeon.bossLevel()) return null;   // (the ability needs the charge to be used at all)
+		return Assist.use(ca, "ABILITY", hp, AB + "armor:WarpBeacon set: a way out for later");
+	}
+	static Buff beaconHere() {
+		Buff tr = H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class);
+		Object d = tr == null ? null : Assist.field(tr, "depth"), p = tr == null ? null : Assist.field(tr, "pos");
+		return d instanceof Integer && (Integer) d == Dungeon.depth && p instanceof Integer && Assist.distance((Integer) p, hp) > 6 ? tr : null;
+	}
+
 	/** Dying beside a foe with no Healing: Heroic Leap or Smoke Bomb away. */
 	static Target escapeAbility() {
 		ClassArmor ca = classArmor(); if (!abilityReady(ca) || adj.isEmpty() || hpf >= 0.3f || !losing()) return null;
@@ -632,6 +793,11 @@ final class AsAbilities {
 		String n = H.armorAbility.getClass().getSimpleName(); int c = -1;
 		if (n.equals("HeroicLeap")) c = away(8, true);
 		else if (n.equals("SmokeBomb")) c = away(6, false);
+		else if (n.equals("WarpBeacon") && beaconHere() != null) {
+			int bp = (Integer) Assist.field(beaconHere(), "pos"); boolean foeThere = false;
+			for (Mob m : foes) foeThere |= Assist.distance(m.pos, bp) <= 2;
+			if (!foeThere) c = hp;   // (its window: Teleport)
+		}
 		if (c < 0) return null;
 		return Assist.use(ca, "ABILITY", c, AB + "armor:" + n + " away");
 	}
@@ -662,7 +828,14 @@ final class AsAbilities {
 				if (!ally) { cell = hp; if (H.armorAbility.targetingPrompt() != null) for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (L.passable[c] && Actor.findChar(c) == null) { cell = c; break; } } }
 				break;
 			}
-			default: break;   // (Warp Beacon, Feint, Trinity, Power of Many, and the escapes: not in a fight's middle)
+			case "Feint": if (e != null && strong(e)) cell = feintCell(e); break;   // (a step aside: the afterimage takes the blows)
+			case "PowerOfMany": {   // (an ally made or empowered: its kills count on the climb, strategy-v4 3.3)
+				if (com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany.getPoweredAlly() != null) break;
+				for (Mob m : Assist.mobs()) if (m.alignment == Char.Alignment.ALLY && L.heroFOV[m.pos] && Assist.distance(m.pos, hp) <= 6) { cell = m.pos; break; }
+				if (cell < 0) for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (L.passable[c] && !L.avoid[c] && Actor.findChar(c) == null) { cell = c; if (Assist.distance(c, s.pos) < Assist.distance(hp, s.pos)) break; } }
+				break;
+			}
+			default: break;   // (Warp Beacon: set and used as an escape, {@link #beacon}; Trinity's forms: not yet; the escapes: not in a fight's middle)
 		}
 		if (cell < 0) return null;
 		return Assist.use(ca, "ABILITY", cell, AB + "armor:" + n);

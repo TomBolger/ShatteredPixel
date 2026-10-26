@@ -53,8 +53,27 @@ static const uint8_t BAYER[16] = {8, 136, 40, 168, 200, 72, 232, 104, 56, 184, 2
 #define A_HALF 43
 static bool s_fine;
 static inline bool dot(int A, int x, int y) { return s_fine ? A > BAYER[((y & 3) << 2) | (x & 3)] : A >= A_SOLID || (A >= A_HALF && ((x ^ y) & 1)); }
+// faint pictures (F_FAINT, an item on the floor at 5% to 17%: the Cracked Spyglass's hidden heaps, which Shattered draws
+// at 10%): each solid pixel of the picture is the pixel already under it moved one shade toward the picture's colour:
+// one of the watch's four steps, in the one channel (red, green or blue) where the two differ most, so the item is a
+// ghost of its shape on whatever floor it lies on. Where the floor is already that colour, green a step away from it
+// (lighter on a dark pixel, darker on a light one), so it still shows on black or white.
+#define FAINT_MIN 13   // alpha FAINT_MIN..A_HALF-1: faint; below, gone (the last moment of a fade)
+static bool s_faint;
+static uint8_t faint(uint8_t b, uint8_t s) {
+  int dr = ((s >> 4) & 3) - ((b >> 4) & 3), dg = ((s >> 2) & 3) - ((b >> 2) & 3), db = (s & 3) - (b & 3);
+  int ar = dr < 0 ? -dr : dr, ag = dg < 0 ? -dg : dg, ab = db < 0 ? -db : db;
+  b |= 0xC0;
+  if (ar >= ag && ar >= ab && ar) return b + (dr > 0 ? 16 : -16);   // (ties: red, then green, then blue)
+  if (ag >= ab && ag) return b + (dg > 0 ? 4 : -4);
+  if (ab) return b + (db > 0 ? 1 : -1);
+  int l = ((b >> 4) & 3) + ((b >> 2) & 3) + (b & 3), g = (b >> 2) & 3;
+  return l < 5 ? (g < 3 ? b + 4 : b - 4) : (g > 0 ? b - 4 : b + 4);
+}
+
 static inline void put(uint8_t *d, uint8_t c, int x, int y) {
   int A;
+  if (s_faint) { if ((c >> 6) >= 2) *d = faint(*d, s_lc[c]); return; }   // (a solid pixel of the art, by its own alpha)
   if (s_plain) {
     A = c >> 6;
     if (A == 3) { *d = c; return; }
@@ -122,7 +141,7 @@ static void blit(int tex, int tx, int ty, int tw, int th, int32_t L, int32_t T, 
       for (int x = xa; x < xb; x++, d++) { uint8_t c = *sp++; if ((c >> 6) == 3) *d = c; else if (c >> 6) put(d, c, x, y); }
       continue;
     }
-    if (tw <= 32) {   // a stretched piece of one colour (a window's or a button's middle)
+    if (tw <= 32 && !s_faint) {   // a stretched piece of one colour (a window's or a button's middle)
       int k = 1; while (k < tw && row[k] == row[0]) k++;
       if (k == tw) { span(d, xa, xb, y, row[0]); continue; }
     }
@@ -483,13 +502,14 @@ static void draw_obj(Obj *o) {
   if (s_cx0 < 0) s_cx0 = 0; if (s_cy0 < 0) s_cy0 = 0; if (s_cx1 > s_W) s_cx1 = s_W; if (s_cy1 > s_H) s_cy1 = s_H;
   int alpha = obj_dyn(o, 2, s_now);
   s_fine = o->kind == K_RECT;
+  s_faint = o->kind == K_IMG && (o->flags & F_FAINT) && alpha >= FAINT_MIN && alpha < A_HALF && !o->col[6];
   if (o->kind == K_TEXT) { draw_text(o); return; }
   if (o->kind == K_FLOAT) { draw_float(o, alpha); return; }
   fb_take();
   if (!s_fb) return;
   if (o->kind == K_EMIT) { draw_emit(o); return; }
   if (o->kind == K_SHAPE) { draw_shape(o); return; }
-  if (alpha < 30 && !o->col[6]) return;
+  if (alpha < 30 && !o->col[6] && !s_faint) return;
   uint8_t fc[7]; const uint8_t *col = o->col;
   if (scene_flash(s_id, s_now)) { memcpy(fc, o->col, 7); fc[3] = fc[4] = fc[5] = 255; col = fc; }   // (hit: white a moment)
   colour_setup(col, alpha);
