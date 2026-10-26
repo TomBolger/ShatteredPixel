@@ -80,7 +80,7 @@ final class AsItems {
 		if (H == null || L == null || !H.isAlive() || !Assist.setupOk(L)) return false;
 		float now = Actor.now();
 		if (prepAt == now && prepPos == H.pos && prepL == L) return true;
-		if (prepL != L) { ban.clear(); cross = null; }
+		if (prepL != L) { ban.clear(); tries.clear(); cross = null; }
 		prepAt = now; prepPos = H.pos; prepL = L;
 		hp = H.pos; W = L.width(); LEN = L.length(); hpf = H.HP / (float) Math.max(1, H.HT);
 		ban.values().removeIf(t -> t < now);
@@ -111,6 +111,18 @@ final class AsItems {
 		else { offerKey[hook] = k; offerT[hook] = now; offerPos[hook] = p; offerN[hook] = 0; }
 		return t;
 	}
+	/** Offered again and again over turns with the item never used up (a selector that won't take it, a window
+	 *  that comes to nothing): held back a long while. */
+	static Target tried(Target t) {
+		if (t == null || t.item == null) return t;
+		String k = key(t.item, t.action); float now = Actor.now();
+		int[] r = tries.get(k); int q = t.item.quantity();
+		if (r == null || q < r[1] || r[2] != System.identityHashCode(t.item)) { tries.put(k, new int[]{1, q, System.identityHashCode(t.item), (int) now}); return t; }
+		if ((int) now != r[3]) { r[0]++; r[3] = (int) now; }
+		if (r[0] > 8) { ban.put(k, now + 300); tries.remove(k); return null; }
+		return t;
+	}
+	static final Map<String, int[]> tries = new HashMap<>();
 	static final String[] offerKey = new String[2]; static final float[] offerT = new float[2]; static final int[] offerPos = new int[2], offerN = new int[2];
 
 	/** A known potion or scroll of this kind in the pack (exotics: known with their plain kind), or null. */
@@ -126,8 +138,8 @@ final class AsItems {
 	// the hooks
 	// =============================================================================================================
 
-	static Target urgent(Target planA) { return offered(urgent0(planA), 0); }
-	static Target suggest(Target planA) { return offered(suggest0(planA), 1); }
+	static Target urgent(Target planA) { return offered(tried(urgent0(planA)), 0); }
+	static Target suggest(Target planA) { return offered(tried(suggest0(planA)), 1); }
 
 	static Target urgent0(Target planA) {
 		if (!ON || !FIGHT) return null;
@@ -783,9 +795,10 @@ final class AsItems {
 	/** Mastery's target: worn gear that asks more strength than the hero has, else the worn armour. */
 	static Item masteryTarget() {
 		Item a = H.belongings.armor(), w = H.belongings.weapon();
-		if (w instanceof MeleeWeapon && ((MeleeWeapon) w).STRReq() > H.STR() && !(w instanceof MagesStaff)) return w;
-		if (a instanceof Armor && ((Armor) a).STRReq() > H.STR()) return a;
-		return a != null && !(a instanceof com.shatteredpixel.shatteredpixeldungeon.items.armor.ClassArmor) ? a : null;
+		boolean wo = w instanceof MeleeWeapon && !(w instanceof MagesStaff) && !((Weapon) w).masteryPotionBonus, ao = a instanceof Armor && !((Armor) a).masteryPotionBonus;
+		if (wo && ((MeleeWeapon) w).STRReq() > H.STR()) return w;
+		if (ao && ((Armor) a).STRReq() > H.STR()) return a;
+		return ao ? a : wo ? w : null;
 	}
 
 	static Target calmScrolls() {
@@ -836,6 +849,8 @@ final class AsItems {
 		return best;
 	}
 	static Class<?> likeliest(Item i) {
+		if (i instanceof ExoticPotion) { Class<?> r = ExoticPotion.exoToReg.get(i.getClass()); if (r == null) return null; Set<?> unk = Potion.getUnknown(); Class<?> b = null; double bp = -1; for (Object o : unk) { double p = Identify.p(r, (Class<?>) o); if (p > bp) { bp = p; b = (Class<?>) o; } } return b; }
+		if (i instanceof ExoticScroll) { Class<?> r = ExoticScroll.exoToReg.get(i.getClass()); if (r == null) return null; Set<?> unk = Scroll.getUnknown(); Class<?> b = null; double bp = -1; for (Object o : unk) { double p = Identify.p(r, (Class<?>) o); if (p > bp) { bp = p; b = (Class<?>) o; } } return b; }
 		Set<?> unk = i instanceof Potion ? Potion.getUnknown() : Scroll.getUnknown(); Class<?> b = null; double bp = -1;
 		for (Object o : unk) { Class<?> k = (Class<?>) o; double p = Identify.p(i.getClass(), k); if (p > bp) { bp = p; b = k; } }
 		return b;
@@ -889,6 +904,16 @@ final class AsItems {
 				Item wpn = h.belongings.weapon();
 				if (n.contains("WndAugment")) for (Ui.Part p : bs) { String t = p.text.toLowerCase(Locale.ROOT); if (t.contains("damage") || t.contains("speed")) { want = wpn instanceof MeleeWeapon && ((MeleeWeapon) wpn).tier >= 4 ? "damage" : "speed"; break; } }
 				for (Ui.Part p : bs) if (p.text.toLowerCase(Locale.ROOT).contains(want)) return p;
+			}
+			if (n.contains("StoneOfIntuition")) {   // the guess: the label's likeliest kind (Identify's odds), then the guess button
+				Object mem = Assist.field(w, "members"); if (!(mem instanceof List)) return null;
+				for (Object g : new ArrayList<>((List<?>) mem)) if (g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) {
+					Object it = Assist.field(g, "val$item"); if (!(it instanceof Item)) continue;
+					Item i = (Item) it; Class<?> k = likeliest(i); if (k == null) return null;
+					if (i instanceof ExoticPotion) k = ExoticPotion.regToExo.get(k); else if (i instanceof ExoticScroll) k = ExoticScroll.regToExo.get(k);
+					java.lang.reflect.Field f = StoneOfIntuition.class.getDeclaredField("curGuess"); f.setAccessible(true); f.set(null, k);
+					return new Ui.Part((com.watabou.noosa.Gizmo) g, "guess", true);
+				}
 			}
 			if (n.contains("BeaconOfReturning")) { String want = beaconReturn ? "return" : "set"; for (Ui.Part p : bs) if (p.text.toLowerCase(Locale.ROOT).contains(want)) return p; }
 		} catch (Throwable e) { Assist.lastError = e; }

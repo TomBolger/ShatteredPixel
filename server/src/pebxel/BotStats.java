@@ -44,7 +44,7 @@ public final class BotStats {
 		i = w.indexOf(" ("); if (i >= 0) w = w.substring(0, i);
 		return w.replaceAll("[;=,]", " ").trim();
 	}
-	/** Item uses (agent K5): every USE entry acted on, by item class and action ("used="), and AsItems' own by key ("it="). */
+	/** Item uses (agent K5): every USE entry acted on, by item class and action ("uses="), and AsItems' own by key ("it="). */
 	static final Map<String, Integer> used = new TreeMap<>(), items = new TreeMap<>();
 	static String itemKey(Assist.Target t) {
 		if (t == null || t.why == null || !t.why.startsWith(AsItems.IT)) return null;
@@ -99,7 +99,7 @@ public final class BotStats {
 		sb.append("by="); for (Map.Entry<String, Integer> e : lost.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("turnsBy="); for (Map.Entry<String, Integer> e : turnsBy.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("abil="); for (Map.Entry<String, Integer> e : abil.entrySet()) sb.append(e.getKey().replace(':', '/')).append(':').append(e.getValue()).append(','); sb.append(';');
-		sb.append("used="); for (Map.Entry<String, Integer> e : used.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
+		sb.append("uses="); for (Map.Entry<String, Integer> e : used.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("it="); for (Map.Entry<String, Integer> e : items.entrySet()) sb.append(e.getKey()).append(':').append(e.getValue()).append(','); sb.append(';');
 		sb.append("lostAt="); for (int i = 1; i < 27; i++) if (lostAt[i] > 0 || turnsAt[i] > 0) sb.append(i).append(':').append(lostAt[i]).append('/').append(turnsAt[i]).append(','); sb.append(';');
 		if (h != null) {
