@@ -1780,7 +1780,7 @@ public final class Assist {
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
-			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
+			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
 		if (scrollsOk) {   // the known scrolls that sat unread: Remove Curse, Identify, Magic Mapping
 			boolean cw = false; Item unid = null;
