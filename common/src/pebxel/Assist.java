@@ -1261,7 +1261,7 @@ public final class Assist {
 			if (adj) stepBackWaited = false;
 			if ((m.state == m.PASSIVE && (!adj || m instanceof Statue)) || (m instanceof Piranha && !adj) || (Char.hasProp(m, Char.Property.IMMOVABLE) && !adj)) continue;
 			if (!adj && walk(m.pos) > 2 * distance(m.pos, hp) + 4) continue;
-			if (!adj && !hunting(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;
+			if (!adj && !hunting(m) && !boss(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;   // (a boss always: Tengu jumps, never seen stepping nearer, and was left for "search spot" walks round his arena, 2,300 of them)
 			if (m.state == m.SLEEPING && !adj && !boss(m) && distance(m.pos, hp) > 2 && floorLeft()) continue;
 			if ((OFIGHT || ODIFF) && !adj && !hunting(m) && !boss(m) && oPick("avoid", FightModel.evaluate(H, Collections.singletonList(m)).pDeath * 100 >= OAVOID, false)) continue;   // (O: a fight it would likely lose: not started)
 			int k = adj ? (boss(m) ? 0 : 1 + m.HP) : walk(m.pos) < INF ? 1000 + walk(m.pos) * 64 + m.HP : INF;

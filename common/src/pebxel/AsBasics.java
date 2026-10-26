@@ -41,7 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
-		foodSeen(); hazNote(); shotNote(); fishNote();
+		foodSeen(); hazNote(); shotNote(); fishNote(); hidNote();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -79,6 +79,7 @@ final class AsBasics {
 		if (stuck instanceof GreatCrab && !adjacent(stuck.pos, hp)) { Target r = harmfulAt(stuck); if (r != null) return r; }
 		int c = stepAwayFrom(stuck.pos);
 		if (c >= 0) return new Target(c, GO, "stalled: away from it");
+		if (stuck instanceof GreatCrab) { Target r = crabCornered(stuck); if (r != null) return r; }
 		// cornered by a foe no blow gets through (the crab sees it coming): unseen (its blows land), away, or a gamble
 		Class<?>[] esc = { PotionOfInvisibility.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfMirrorImage.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class };
 		boolean read = !blind();
@@ -324,6 +325,21 @@ final class AsBasics {
 			if (((it instanceof PotionOfToxicGas) && d >= 3) || (it instanceof PotionOfLiquidFlame && d >= 2 && !L.flamable[h.pos]))
 				return use(it, Potion.AC_THROW, m.pos, "stalled: a potion at it");
 		}
+		return null;
+	}
+
+	/** The Great Crab beside the hero with no step away (a dead end: the brief's seed 1048, 300+ blows all parried).
+	 *  It parries the hero's blows, shots and wands' damage while it sees him (GreatCrab.defenseSkill / damage), but
+	 *  not what else they do, nor what isn't a blow: a wand's knockback (Blast Wave) or gas (Corrosion), a ward's or a
+	 *  living earth's blows (it parries only its own target), a Blindweed under it (blind, it sees no blow coming), a
+	 *  Sorrowmoss (poison), a bomb (from beside it, the blast is the hero's too: only with health to spare). */
+	static Target crabCornered(Mob crab) {
+		Hero h = Dungeon.hero;
+		for (Class<?> c : new Class<?>[]{ WandOfBlastWave.class, WandOfCorrosion.class, WandOfWarding.class, WandOfLivingEarth.class, WandOfFrost.class })
+			for (Item i : h.belongings.backpack) if (c.isInstance(i) && ((Wand) i).curCharges > 0 && !i.cursed) return use(i, Wand.AC_ZAP, crab.pos, "the crab, cornered: " + c.getSimpleName().replace("WandOf", ""));
+		for (Class<?> c : new Class<?>[]{ com.shatteredpixel.shatteredpixeldungeon.plants.Blindweed.Seed.class, com.shatteredpixel.shatteredpixeldungeon.plants.Sorrowmoss.Seed.class })
+			for (Item i : h.belongings.backpack) if (c.isInstance(i)) return use(i, Item.AC_THROW, crab.pos, "the crab, cornered: a seed under it");
+		if (h.HP * 2 > h.HT) for (Item i : h.belongings.backpack) if (i.getClass() == com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb.class) return use(i, "LIGHTTHROW", crab.pos, "the crab, cornered: a bomb");
 		return null;
 	}
 
@@ -683,5 +699,93 @@ final class AsBasics {
 		for (int c = 0; c < L.length(); c++) if (in[c] && known[c] && Actor.findChar(c) == null && walk(c) < bd) { bd = walk(c); best = c; }
 		if (best < 0 || bd >= INF) return null;
 		return new Target(best, GO, "pit jump: down through the weak floor, into the room below");
+	}
+
+	// =============================================================================================================
+	// a room the floor hides (OG's evidence_hidden): the level makes every ordinary floor a food item, put in one of
+	// its standard rooms (Level.create: addItemToSpawn(FOOD); RegularLevel.randomDropCell), and an iron key for every
+	// locked door it paints; the "secrets" feeling says a secret room is there. The floor done (plan A the stairs),
+	// with no food seen on it, a locked door and no key, or that feeling: the walls with the unknown behind them are
+	// searched (an intentional search always finds what is within reach: Hero.search), the most promising first, to a
+	// budget, before going on.
+	// =============================================================================================================
+	static final boolean HIDDEN = opt("BHIDDEN", true);
+	static final int HIDSRCH = optInt("BHIDSRCH", 24), HIDTURNS = optInt("BHIDTURNS", 160);
+	static Level hidL; static int hidN, hidDepth = -1; static float hidT0 = -1, hidLast = -1; static boolean hidFood, hidKey; static Object hidHero;
+	static final Set<Integer> hidDone = new HashSet<>(), hidSeen = new HashSet<>();   // (floors whose hunt is over, or left: a floor gone back up to isn't hunted again)
+	static void hidNote() {
+		if (hidHero != Dungeon.hero) { hidHero = Dungeon.hero; hidDone.clear(); hidSeen.clear(); hidDepth = -1; }
+		if (hidL != L) { if (hidDepth >= 0) hidDone.add(hidDepth); if (!hidSeen.add(Dungeon.depth * 100 + Dungeon.branch)) hidDone.add(Dungeon.depth); hidL = L; hidDepth = Dungeon.depth; hidN = 0; hidT0 = -1; hidLast = -1; hidFood = false; hidKey = false; }
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hh : L.heaps.valueList()) if (hh.seen && hh.type == com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP && !hh.isEmpty()) {
+			Item top = hh.peek();
+			if (top instanceof Food && !(top instanceof Blandfruit)) hidFood = true;
+			if (top instanceof com.shatteredpixel.shatteredpixeldungeon.items.keys.IronKey) hidKey = true;
+		}
+		if (foodHere) hidFood = true;
+		if (com.shatteredpixel.shatteredpixeldungeon.journal.Notes.keyCount(new com.shatteredpixel.shatteredpixeldungeon.items.keys.IronKey(Dungeon.depth)) > 0) hidKey = true;
+	}
+	/** What says a room is hidden, or null. */
+	static String hidEvidence() {
+		if (!hidFood) return "hidden room: the floor's food not seen";
+		if (!hidKey) for (int c = 0; c < L.length(); c++) if (known[c] && L.map[c] == Terrain.LOCKED_DOOR) return "hidden room: a locked door, its key not seen";
+		if (L.feeling == Level.Feeling.SECRETS) return "hidden room: the floor's secret";
+		return null;
+	}
+	static Target hiddenRoom(Target planA) {
+		if (!HIDDEN || planA == null || !"stairs".equals(planA.why) || Dungeon.bossLevel() || Dungeon.depth <= 1 || Dungeon.branch != 0 || seenFoe || inDanger) return null;
+		Hero h = Dungeon.hero;
+		if (h.HP * 2 < h.HT || bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return null;
+		hidNote();
+		if (hidDone.contains(Dungeon.depth)) return null;
+		String ev = hidEvidence(); if (ev == null) return null;
+		float now = Actor.now();
+		if (hidT0 < 0) hidT0 = now;
+		if (hidN >= HIDSRCH || now - hidT0 > HIDTURNS) return null;
+		boolean foodHunt = ev.contains("food");
+		if (starving() && !(foodHunt && !hasFood())) return null;   // (starving with food in the pack: on down; with none, the floor's food is the hunt)
+		if (!foodHunt && shortOfFood()) return null;
+		// the best spot: unsearched walls with the unknown behind (Assist.wallWorth), for the walk there
+		int best = -1; long bk = 0;
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] >= INF || !open[c] || c == L.entrance() || c == L.exit() || (c != h.pos && seenChar(c) != null) || bad.containsKey(c)) continue;
+			int g = 0; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && distance(n, c) == 1) g += wallWorth(n); }
+			if (g <= 0) continue;
+			long sc = (long) g * 1024 / (dist[c] + 3);
+			if (sc > bk) { bk = sc; best = c; }
+		}
+		if (best < 0) { hidN = HIDSRCH; return null; }   // (no wall left with the unknown behind it)
+		if (best == h.pos) { if (now != hidLast) { hidN++; hidLast = now; } Target t = new Target(h.pos, WAIT, ev + ": search"); t.action = SEARCH_ACT; return t; }
+		return new Target(best, GO, ev + ": to search");
+	}
+
+	// =============================================================================================================
+	// kiting (OG's "hit and step back"): a lone foe that walks slower than the hero (crippled, slowed, chilled, or
+	// the hero hasted: Char.speed, as its status shows) and fights hand to hand. Beside it, a step back to a cell it
+	// isn't beside: it spends more than the hero's turn catching up, and the shots (bow, staff, thrown: the hands'
+	// own "shoot" / "zap" / "throw") land while it comes.
+	// =============================================================================================================
+	static final boolean KITE = opt("BKITE", true);
+	static final int KITEN = optInt("BKITEN", 12);   // steps back from one foe at most
+	static int kiteId = -1, kiteN; static Level kiteL;
+	static Target kite(Target planA) {
+		if (!KITE || planA == null || planA.kind != ENEMY || inDanger) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.rooted || h.paralysed > 0) return null;
+		Mob foe = null; int n = 0;
+		for (Mob m : mobs()) if (hostile(m) && (hunting(m) || adjacent(m.pos, hp))) { n++; foe = m; }
+		if (n != 1 || !adjacent(foe.pos, hp) || ranged(foe) || boss(foe) || Char.hasProp(foe, Char.Property.IMMOVABLE) || foe instanceof Piranha || foe instanceof GreatCrab) return null;
+		if (foe.speed() > h.speed() * 0.67f) return null;
+		if (kiteL != L || kiteId != foe.id()) { kiteL = L; kiteId = foe.id(); kiteN = 0; }
+		if (kiteN >= KITEN) return null;
+		if (!rangedToHand()) return null;   // (hand to hand only, a step back buys little: the shots are the gain)
+		int best = -1, bs = -INF;
+		for (int k : PathFinder.NEIGHBOURS8) { int c = hp + k;
+			if (c < 0 || c >= L.length() || distance(c, hp) != 1 || !open[c] || seenChar(c) != null || danger[c] || adjacent(c, foe.pos) || (water(c) && Assist.fishSeen)) continue;
+			int sc = distance(c, foe.pos) * 4;
+			for (int k2 : PathFinder.NEIGHBOURS8) { int m2 = c + k2; if (m2 >= 0 && m2 < L.length() && open[m2] && distance(m2, c) == 1) sc++; }   // (room to go on stepping back)
+			if (sc > bs) { bs = sc; best = c; } }
+		if (best < 0) return null;
+		kiteN++;
+		return new Target(best, GO, "kite: a step back from the slower " + foe.getClass().getSimpleName());
 	}
 }

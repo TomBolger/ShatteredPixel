@@ -808,14 +808,18 @@ final class AsItems {
 			return use(g, Item.AC_THROW, best, "magical fire: an unknown potion found here (the room's Frost is among the floor's)");
 		}
 		// out of sight or out of line: to the nearest spot it can be thrown from (an aim in line, 3 to 5 off)
+		if (spotL != L) { spotL = L; spotFail.clear(); }
+		if (spotGo == hp) { spotFail.add(hp); spotGo = -1; }   // (sent here and no throw came of it)
+		if (spotFail.size() >= 3) return null;
 		int s = throwSpot(aims, 3, 5); if (s < 0) s = throwSpot(aims, 2, 5);
+		if (s >= 0 && s != hp) spotGo = s;
 		if (K8DBG) System.out.println("    FIRE spot " + s + " hp " + hp + " aims " + aims);
 		if (s < 0 || s == hp) return null;
 		Target t = new Target(s, Assist.GO, IT + "magical fire: to a spot to throw " + (rem != null ? "the remedy" : "a guess") + " from"); t.obj = s; return t;
 	}
 	/** Out of the eternal fire's reach (it sets alight whoever stands on or beside it). */
 	static boolean fireOff(int c) { for (int f : fireSeen) if (dist(f, c) < 2) return false; return true; }
-	static final Set<Integer> fireSeen = new HashSet<>(); static Level fireL;
+	static final Set<Integer> fireSeen = new HashSet<>(), spotFail = new HashSet<>(); static Level fireL, spotL; static int spotGo = -1;
 	/** The nearest cell the hero can walk to (none of the danger) from which a throw lands on one of the cells, dmin to dmax off. */
 	static int throwSpot(Collection<Integer> cells, int dmin, int dmax) {
 		int best = -1, bd = Assist.INF;
@@ -823,7 +827,7 @@ final class AsItems {
 			int d = Math.max(Math.abs(dx), Math.abs(dy)); if (d < dmin) continue;
 			int sx = x(t) + dx, sy = y(t) + dy; if (sx < 0 || sy < 0 || sx >= W || sy >= L.height()) continue;
 			int c = sx + sy * W;
-			if (Assist.dist[c] >= bd || !Assist.open[c] || Actor.findChar(c) != null && c != hp || L.flamable[c] || !fireOff(c)) continue;
+			if (Assist.dist[c] >= bd || !Assist.open[c] || Actor.findChar(c) != null && c != hp || L.flamable[c] || !fireOff(c) || spotFail.contains(c)) continue;
 			if (Assist.line(c, t)) { bd = Assist.dist[c]; best = c; }
 		}
 		return bd <= 40 ? best : -1;
@@ -918,8 +922,12 @@ final class AsItems {
 			for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && L.passable[n] && !L.solid[n] && Assist.known[n] && Assist.dist[n] < Assist.INF && Actor.findChar(n) == null) aims.add(n); }
 		}
 		if (aims.isEmpty()) return null;
+		if (spotL != L) { spotL = L; spotFail.clear(); }
+		if (spotGo == hp) { spotFail.add(hp); spotGo = -1; }   // (sent here and no throw came of it: K8, sent back and forth between it and a pickup 120 times)
+		if (spotFail.size() >= 3) return null;
 		int s = throwSpot(aims, 3, 4);
 		if (s < 0 || s == hp) return null;
+		spotGo = s;
 		Target t = new Target(s, Assist.GO, IT + "barricade: to a spot to throw from"); t.obj = s; return t;
 	}
 

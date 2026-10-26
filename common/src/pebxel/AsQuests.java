@@ -67,7 +67,9 @@ final class AsQuests {
 			if (b == null) b = AsBasics.spawner(planA);
 			if (b == null) b = AsBasics.sacrifice(planA);
 			if (b == null) b = AsBasics.sleeper(planA);
+			if (b == null) b = AsBasics.kite(planA);   // (K8: hit and step back from a slower foe)
 			if (b == null) b = AsBasics.pitJump(planA);   // (K8: the pit jump puzzle)
+			if (b == null) b = AsBasics.hiddenRoom(planA);   // (K8: a room the floor hides, searched for)
 			if (b != null) return b;
 			if (!ON) return AsBasics.hurry(planA);
 			remember();
