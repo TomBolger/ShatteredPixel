@@ -103,8 +103,11 @@ final class AsBolts {
 	/** The tactic's step out of one line ends in another's. */
 	static boolean intoAnother(Brain.Cand c) {
 		if (!ON || !c.t.why.equals("tactic: out of its line")) return false;
+		if (failed(c.t.cell)) return true;   // (the same step offered again with the hero where he was, no time gone: K7-e, two loops)
 		List<Mob> sh = shooters();
-		return sh.size() >= 2 && inLine(sh, c.t.cell) > 0;
+		if (sh.size() >= 2 && inLine(sh, c.t.cell) > 0) return true;
+		tried(c.t);
+		return false;
 	}
 	/** Rules: plan A leaves the hero in two or more lines (no foe beside him), or is a step from one line to another. */
 	static boolean manyLines(Brain.Cand c) {
