@@ -181,6 +181,36 @@ final class AsBasics {
 		Target r = new Target(hp, WAIT, "piranha: wait on the shore for it"); r.action = WAIT_ACT; return r;
 	}
 
+	// =============================================================================================================
+	// demon spawners (depths 21-24; strategy-reference 4.5: "kill the demon spawners on 21-24 first"): each one left
+	// alive is a ripper demon in Yog's summons in place of a larva, and it drops a Healing potion. It never moves and
+	// never strikes: the bot passed it by as a foe that can't come. Struck at good health with nothing else about.
+	// =============================================================================================================
+	static final boolean SPAWNERS = opt("BSPAWN", true);
+	static final int SPAWNHP = optInt("BSPAWNHP", 70);   // health share to start on one (it sends a ripper as it's hurt)
+	static final Set<Integer> spawnAt = new HashSet<>(); static Level spawnL;
+
+	static Target spawner(Target planA) {
+		if (!SPAWNERS) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (spawnL != L) { spawnL = L; spawnAt.clear(); }
+		for (Mob m : mobs()) if (m instanceof DemonSpawner && m.isAlive() && L.heroFOV[m.pos]) spawnAt.add(m.pos);
+		spawnAt.removeIf(c -> L.heroFOV[c] && !(Actor.findChar(c) instanceof DemonSpawner));   // (seen gone)
+		if (spawnAt.isEmpty()) return null;
+		for (Mob m : mobs()) if (enemy(m) && hostile(m) && !(m instanceof DemonSpawner) && (hunting(m) || adjacent(m.pos, hp))) return null;   // (a fight on: the usual rules)
+		if (inDanger || h.rooted) return null;
+		int best = -1, bd = INF;
+		for (int c : spawnAt) { int w = AsBosses.walkNear(c); if (w < bd) { bd = w; best = c; } }
+		if (best < 0) return null;
+		Char sp = Actor.findChar(best);
+		boolean fighting = adjacent(best, hp) && sp instanceof DemonSpawner && sp.HP < sp.HT;
+		if (h.HP * 100 < h.HT * (fighting ? 40 : SPAWNHP)) return null;   // (rest first: Assist's own rules)
+		if (adjacent(best, hp)) return sp instanceof DemonSpawner ? new Target(best, ENEMY, "spawner: destroy it") : null;
+		if (bd >= INF) return null;
+		int st = AsBosses.besideStep(best);
+		return st >= 0 ? new Target(st, GO, "spawner: to it (Yog's demons, a Healing potion)") : null;
+	}
+
 	static boolean shoreCell(int c) { for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && L.water[n]) return true; } return false; }
 
 	/** A missile or a charged attack wand at m, if the way is clear. */
