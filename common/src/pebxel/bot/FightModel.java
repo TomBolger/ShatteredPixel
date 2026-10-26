@@ -40,10 +40,26 @@ public final class FightModel {
 
 	/** healAt: drink a known Healing below this share of health (0: never). */
 	public static Result evaluate(Hero h, List<Mob> mobs, double healAt) {
+		// (M2) the same fight asked about again in the same turn (the Assist's rules each ask: avoid, sneak, casters):
+		// worked out once (a mob's place and health, the hero's; nothing that isn't shown)
+		long key = memoKey(h, mobs, healAt); float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		if (now != memoT || h != memoH) { memo.clear(); memoT = now; memoH = h; }
+		Result c = memo.get(key); if (c != null) return c;
 		Fighter me = HeroView.of(h);
 		List<Fighter> fs = new ArrayList<>();
 		for (Mob m : mobs) fs.add(FoeView.of(m, h));
-		return simulate(me, fs, healAt, RUNS, seedFor(h));
+		Result r = simulate(me, fs, healAt, RUNS, seedFor(h));
+		if (memo.size() < 64) memo.put(key, r);
+		return r;
+	}
+	private static final Map<Long, Result> memo = new HashMap<>(); private static float memoT = -1; private static Hero memoH;
+	static long memoKey(Hero h, List<Mob> mobs, double healAt) {
+		long k = 1469598103934665603L;
+		k = (k ^ h.pos) * 1099511628211L; k = (k ^ h.HP) * 1099511628211L; k = (k ^ h.HT) * 1099511628211L; k = (k ^ Double.doubleToLongBits(healAt)) * 1099511628211L;
+		k = (k ^ h.buffs().size()) * 1099511628211L; Object w = h.belongings.weapon(), a = h.belongings.armor(); k = (k ^ (w == null ? 0 : w.getClass().getName().hashCode() * 31 + ((com.shatteredpixel.shatteredpixeldungeon.items.Item) w).level())) * 1099511628211L; k = (k ^ (a == null ? 0 : a.getClass().getName().hashCode() * 31 + ((com.shatteredpixel.shatteredpixeldungeon.items.Item) a).level())) * 1099511628211L;
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Item i : h.belongings.backpack.items) k = (k ^ (i.getClass().getName().hashCode() + i.quantity())) * 1099511628211L;   // (no identity hashes: they'd differ run to run)
+		for (Mob m : mobs) { k = (k ^ m.id()) * 1099511628211L; k = (k ^ m.pos) * 1099511628211L; k = (k ^ m.HP) * 1099511628211L; k = (k ^ m.state.getClass().getName().hashCode()) * 1099511628211L; k = (k ^ m.buffs().size()) * 1099511628211L; }
+		return k;
 	}
 
 	static long seedFor(Hero h) { return 0x9E3779B97F4A7C15L ^ (Dungeon.depth * 1000003L) ^ (h == null ? 0 : h.pos * 7919L); }
@@ -102,20 +118,43 @@ public final class FightModel {
 	 */
 	static void core(Fighter me, List<Fighter> foes0, Look.Plan p, int runs, long seed, double maxT, Result r, Look.Out o) {
 		long t0 = PROF ? System.nanoTime() : 0;
+		runs = runsFor(me, foes0, runs, maxT);
+		if (r != null) r.runs = runs;
 		try { core0(me, foes0, p, runs, seed, maxT, r, o); }
 		finally { if (PROF) { long dt = System.nanoTime() - t0; calls++; nanos += dt; String k = caller(); prof.merge(k, dt, Long::sum); } }
 	}
 
+	/** (M2) The phone's budget: a simulation's runs cut so that its steps (the loop's events: the hero's turns and the
+	 *  foes' over the fight's expected length) stay within AS_OWORK (a crowd of the Dwarf King's minions: 12 looks of
+	 *  300 runs took 55 ms here; a plan has ~20 ms on the phone). The estimate is from the fighters alone, not the plan,
+	 *  so every option of a look gets the same runs (their futures stay paired); at least AS_OMINRUNS. */
+	static int runsFor(Fighter me, List<Fighter> fs, int runs, double maxT) {
+		if (WORK <= 0 || fs.isEmpty()) return runs;
+		double rate = 1 / Math.max(0.05, me.delay), T = 0, arrive = 0;
+		for (Fighter f : fs) {
+			if (f.asleep) continue;
+			rate += 1 / Math.max(0.05, f.delay);
+			double d = dps(me, f); T += d > 1e-6 ? (f.hp + f.shield + f.rageHp) / d : 30;
+			arrive = Math.max(arrive, f.dist - 1);
+		}
+		T = Math.min(Math.min(maxT, 100), T + arrive);
+		double per = Math.max(1, T * rate);
+		return (int) Math.max(Math.min(runs, MINRUNS), Math.min(runs, WORK / per));
+	}
+	public static final double WORK = Tune.get("OWORK", 8000); public static final int MINRUNS = (int) Tune.get("OMINRUNS", 40);
+
 	// (M2) the profiler (env PROF=1): time in the simulation by the first caller outside pebxel.bot, for SLOWPLAN lines
 	public static final boolean PROF = Tune.on("PROF", false) || "1".equals(System.getenv("PROF"));
-	public static int calls; public static long nanos; public static final Map<String, Long> prof = new TreeMap<>();
+	public static int calls; public static long nanos;
+	/** (M2) Events simulated so far (the loop's steps): the work a plan costs, counted the same on every machine (the brain's budget). */
+	public static long events; static long ev0; public static final Map<String, Long> prof = new TreeMap<>();
 	static String caller() {
 		for (StackTraceElement e : new Throwable().getStackTrace()) { String c = e.getClassName(); if (!c.startsWith("pebxel.bot.")) return c.substring(c.lastIndexOf('.') + 1) + "." + e.getMethodName() + ":" + e.getLineNumber(); }
 		return "?";
 	}
 	/** The profile since the last call, cleared. */
 	public static String profile() {
-		StringBuilder b = new StringBuilder(String.format(Locale.ROOT, "sims %d %.1f ms:", calls, nanos / 1e6));
+		StringBuilder b = new StringBuilder(String.format(Locale.ROOT, "sims %d %.1f ms ev %d:", calls, nanos / 1e6, events - ev0)); ev0 = events;
 		prof.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue(), x.getValue())).limit(6).forEach(e -> b.append(String.format(Locale.ROOT, " %s %.1f", e.getKey(), e.getValue() / 1e6)));
 		calls = 0; nanos = 0; prof.clear();
 		return b.toString();
@@ -154,6 +193,7 @@ public final class FightModel {
 		int deaths = 0, wins = 0, done = 0, used = 0, usedLive = 0; double tsum = 0, left = 0, leftO = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		double[] zapEnd = new double[n], rageT = new double[n], burstAt = new double[n]; boolean[] pumpFirst = new boolean[n];   // (M2: Tune.KINDS)
+		long ev0r = events; int planned = runs;
 		for (int run = 0; run < runs; run++) {
 			int myHp = me.hp, sh = me.shield, heals = me.heals, shots = fleeing ? 0 : me.rangedShots, hl = Math.max(me.healLeft, p.healing), usedR = 0;   // (the same buff, whichever gave it)
 			boolean drink = p.drink && heals > 0;
@@ -178,6 +218,7 @@ public final class FightModel {
 			else for (int i = 0; i < n; i++) { queued[i] = false; held[i] = false; }
 			double t = 0, tH = 0; boolean dead = false, gone = false; int alive = n, lost = p.lose, steps = p.flee;
 			for (int guard = 0; guard < 600 && alive > 0 && !dead && !gone && t < horizon; guard++) {
+				events++;
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {
@@ -249,9 +290,10 @@ public final class FightModel {
 			else if (alive == 0) { wins++; done++; }
 			else if (gone) done++;
 			losses[run] = me.hp - Math.max(0, myHp); tsum += t; left += Math.max(0, myHp); leftO += dead ? 0 : Math.min(me.ht, myHp + hl); used += usedR; if (!dead) usedLive += usedR;
+			if (WORK > 0 && run + 1 >= Math.min(planned, MINRUNS) && events - ev0r >= WORK * 1.5) { runs = run + 1; break; }   // (M2: the budget spent: these runs are the sample)
 		}
 		if (r != null) {
-			Arrays.sort(losses);
+			losses = Arrays.copyOf(losses, runs); Arrays.sort(losses); r.runs = runs;
 			double s = 0; for (double l : losses) s += l;
 			r.pDeath = deaths / (double) runs; r.pWin = wins / (double) runs; r.lossMean = s / runs; r.loss90 = losses[Math.min(runs - 1, (int) (runs * 0.9))];
 			r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs; r.healsLive = usedLive / (double) runs;
@@ -301,7 +343,7 @@ public final class FightModel {
 		return cache = evaluate(h, mobs);
 	}
 
-	static final double[] HEALAT = { 0.15, 0.25, 0.35, 0.5, 0.7 };
+	static final double[] HEALAT = { 0.15, 0.25, 0.35, 0.5, 0.7 }, HEALAT_HEAVY = { 0.25, 0.5 };
 	private static double planC = -1; private static float planT = -1; private static int planPos = -1, planKey = -1; private static Hero planH;
 
 	/** When to drink a known Healing in this fight (MT): the policy "drink below k of the most health" that the
@@ -324,7 +366,7 @@ public final class FightModel {
 		// before it), as a share of a death (the floors ahead), on the runs the hero lives through; AS_BHEALK scales it
 		double c1 = Tune.HEALCOST, c2 = Tune.HEALCOST;
 		if (Tune.HEALBUD) { double R = Math.max(1, Budget.ahead(h)); c1 = Tune.HEALK * Budget.rescue(h, me.heals, 1) / R; c2 = me.heals > 1 ? Tune.HEALK * Budget.rescue(h, me.heals - 1, 1) / R : c1; }
-		for (double k : HEALAT) {
+		for (double k : r0.runs < runs ? HEALAT_HEAVY : HEALAT) {   // (M2: a heavy fight, its runs cut: fewer thresholds tried)
 			Result r = simulate(me, fs, k, runs, sd);
 			double u = r.healsLive, sc = Tune.HEALBUD ? r.pDeath + (u <= 1 ? u * c1 : c1 + (u - 1) * c2) : r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);
 			if (r0.pDeath >= 0.5 && r.healsUsed > 0) sc -= Tune.HOPE;   // (MT: a fight it likely loses: drinking buys turns the simulation doesn't use (a step away, the stairs, an ally): near-ties go to drinking)   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
