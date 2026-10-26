@@ -71,13 +71,17 @@ public final class Build {
 		HeroSubClass[] s = c.subClasses();
 		String f = null; try { f = System.getenv("SUBCLASS"); } catch (Throwable e) { }
 		if (f != null && (f.equals("0") || f.equals("1"))) return s[Integer.parseInt(f)];
+		// (measured, not the guides' picks where they differ: WD-base0 + WD-b1, 216 head-start games from depth 21, wins
+		// out of games: Gladiator 9/18 vs Berserker 2/18 (the v3.2 rage nerf: full rage takes 4x max HP of damage),
+		// Freerunner 8/20 vs Assassin 2/16, Priest 5/20 vs Paladin 1/16, Warlock 3/16 vs Battlemage 0/20, Sniper 1/20 vs
+		// Warden 0/16; Champion 4/16 vs Monk 4/20, kept for its second weapon)
 		switch (c) {
-			case WARRIOR: return HeroSubClass.BERSERKER;
+			case WARRIOR: return HeroSubClass.GLADIATOR;
 			case MAGE: return HeroSubClass.WARLOCK;
-			case ROGUE: return HeroSubClass.ASSASSIN;
+			case ROGUE: return HeroSubClass.FREERUNNER;
 			case HUNTRESS: return HeroSubClass.SNIPER;
 			case DUELIST: return HeroSubClass.CHAMPION;
-			default: return HeroSubClass.PALADIN;
+			default: return HeroSubClass.PRIEST;
 		}
 	}
 
