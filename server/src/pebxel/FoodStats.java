@@ -26,7 +26,7 @@ import java.util.*;
 final class FoodStats {
 	private FoodStats() {}
 
-	static final class Floor { int depth, branch; float t0; int turns, starve, eaten, found, steps, hungerAt0, packAt0, locked; Set<Integer> cells = new HashSet<>(); Map<String, Integer> why = new TreeMap<>(); String left = ""; }
+	static final class Floor { int depth, branch; float t0; int turns, starve, starveFed, eaten, found, steps, hungerAt0, packAt0, locked; Set<Integer> cells = new HashSet<>(); Map<String, Integer> why = new TreeMap<>(); String left = ""; }
 	static final List<Floor> floors = new ArrayList<>();
 	static Floor cur; static float lastT; static int lastHunger, lastPack, lastPos; static String lastWhy = "";
 	// the fight going on: since a foe came into sight after 10 turns or more with none
@@ -48,7 +48,7 @@ final class FoodStats {
 			float dt = Math.max(0, now - lastT);
 			cur.turns += Math.round(dt);
 			if (L.locked) cur.locked += Math.round(dt);
-			if (hu != null && hu.isStarving()) cur.starve += Math.round(dt);
+			if (hu != null && hu.isStarving()) { cur.starve += Math.round(dt); if (lastPack > 0) cur.starveFed += Math.round(dt); }
 			if (hg < lastHunger) cur.eaten += lastHunger - hg;
 			if (pk > lastPack) cur.found += pk - lastPack;
 			if (h.pos != lastPos) { cur.steps++; cur.cells.add(h.pos); }
@@ -96,7 +96,7 @@ final class FoodStats {
 		if (cur != null && cur.left.isEmpty()) cur.left = foodLeft(Dungeon.level);
 		for (Floor f : floors) {
 			StringBuilder sb = new StringBuilder("FLOOR d").append(f.depth).append(f.branch != 0 ? "b" + f.branch : "")
-					.append(" turns ").append(f.turns).append(" locked ").append(f.locked).append(" starve ").append(f.starve)
+					.append(" turns ").append(f.turns).append(" locked ").append(f.locked).append(" starve ").append(f.starve).append(" starveFed ").append(f.starveFed)
 					.append(" eaten ").append(f.eaten).append(" found ").append(f.found).append(" hunger0 ").append(f.hungerAt0).append(" pack0 ").append(f.packAt0)
 					.append(" steps ").append(f.steps).append(" cells ").append(f.cells.size()).append(" left ").append(f.left).append(" |");
 			for (Map.Entry<String, Integer> e : f.why.entrySet()) if (e.getValue() > 0) sb.append(' ').append(e.getKey()).append(':').append(e.getValue()).append(',');

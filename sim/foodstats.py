@@ -60,7 +60,7 @@ def summary(path):
         for f in fl:
             for w, v in f["why"].items(): c[cat(w)] += v
         tt = sum(f["turns"] for f in fl)
-        print(f"  {label}: {n} floors, turns/floor {tt/n:.0f} (locked {sum(f['locked'] for f in fl)/n:.0f}), starving {sum(f['starve'] for f in fl)/n:.0f}, "
+        print(f"  {label}: {n} floors, turns/floor {tt/n:.0f} (locked {sum(f['locked'] for f in fl)/n:.0f}), starving {sum(f['starve'] for f in fl)/n:.0f} (with food {sum(f.get('starveFed',0) for f in fl)/n:.0f}), "
               f"food found {sum(f['found'] for f in fl)/n:.0f} eaten {sum(f['eaten'] for f in fl)/n:.0f}, steps {sum(f['steps'] for f in fl)/n:.0f} cells {sum(f['cells'] for f in fl)/n:.0f}")
         print("     by activity: " + ", ".join(f"{k} {v/n:.0f}" for k, v in c.most_common()))
     table(allf, "all floors")
