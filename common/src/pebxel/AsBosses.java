@@ -252,9 +252,49 @@ final class AsBosses {
 	/** The hook before the escapes (Assist.planList's skills): a boss fight's own plan where the usual rules (fleeing
 	 *  fire, exploring, searching) would lose it. Only Yog's floor so far. */
 	static Target suggest(Target first) {
-		if (!ON || !YOG || !(L instanceof HallsBossLevel) || Dungeon.hero == null) return null;
+		if (!ON || Dungeon.hero == null) return null;
+		if (PREP && !(L instanceof HallsBossLevel)) { Target p = prep(first); if (p != null) return p; }
+		if (!YOG || !(L instanceof HallsBossLevel)) return null;
 		return yogPlan();
 	}
+
+	// =============================================================================================================
+	// the boss kit (strategy-reference 4.0): the floor before a boss's done, plan A the stairs down: the Ankh blessed
+	// (WP-B's AsEconomy.blessAnkh, when it's there), the Waterskin filled from the dew in sight and the tall grass near
+	// (a few dozen turns at most, never short of food). Rest and the region's upgrades: Rules' "boss next" rows.
+	// =============================================================================================================
+	static final boolean PREP = opt("BPREP", true);
+	static final int PREPGRASS = optInt("BPREPGRASS", 40);   // turns of walking grass for dew, at most, a floor
+	static int prepSteps; static Level prepL; static final Set<Integer> prepGrass = new HashSet<>();
+
+	static Target prep(Target first) {
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (Dungeon.depth % 5 != 4 || Dungeon.depth >= 25 || L.locked || first == null || bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return null;
+		int ex = L.exit(); if (ex < 0 || !(first.obj == ex || first.cell == ex) || (first.kind != GO && first.kind != PICKUP)) return null;
+		for (Mob m : mobs()) if (enemy(m) && (hunting(m) || L.distance(m.pos, hp) <= 4)) return null;
+		if (prepL != L) { prepL = L; prepSteps = 0; prepGrass.clear(); }
+		Target a = blessAnkh(); if (a != null) return a;
+		com.shatteredpixel.shatteredpixeldungeon.items.Waterskin ws = bag(com.shatteredpixel.shatteredpixeldungeon.items.Waterskin.class);
+		if (ws == null || ws.isFull() || AsBasics.shortOfFood()) return null;
+		int best = -1, bk = INF;   // the dew lying about
+		for (Heap hh : L.heaps.valueList()) if (hh.seen && hh.type == Heap.Type.HEAP && hh.pos >= 0) for (Item i : hh.items) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.Dewdrop) {
+			int w = hh.pos == hp ? 0 : walk(hh.pos); if (w < bk && w <= 40 && !bad.containsKey(hh.pos)) { bk = w; best = hh.pos; } }
+		if (best >= 0) return new Target(best, PICKUP, "boss next: dew for the waterskin");
+		if (prepSteps >= PREPGRASS) return null;   // tall grass trampled (it drops dew), the nearest not walked yet
+		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.HIGH_GRASS && known[c] && !prepGrass.contains(c) && dist[c] > 0 && dist[c] <= 12 && !danger[c] && dist[c] < bk) { bk = dist[c]; best = c; }
+		if (L.map[hp] == Terrain.HIGH_GRASS || L.map[hp] == Terrain.GRASS) prepGrass.add(hp);
+		if (best < 0) return null;
+		prepSteps++;
+		return new Target(best, GO, "boss next: through the grass for dew");
+	}
+
+	/** WP-B's Ankh blessing (AsEconomy.blessAnkh(): a Target, or null), called by name so either side builds alone. */
+	static Target blessAnkh() {
+		if (!ankhLooked) { ankhLooked = true; try { ankhM = Class.forName("pebxel.AsEconomy").getDeclaredMethod("blessAnkh"); ankhM.setAccessible(true); } catch (Throwable e) { ankhM = null; } }
+		if (ankhM == null) return null;
+		try { Object t = ankhM.invoke(null); return t instanceof Target ? (Target) t : null; } catch (Throwable e) { return null; }
+	}
+	static boolean ankhLooked; static java.lang.reflect.Method ankhM;
 
 	// =============================================================================================================
 	// Yog-Dzewa (strategy-reference 4.5; YogDzewa, YogFist). Yog sits for good at the seat (the exit + 3 rows), his
