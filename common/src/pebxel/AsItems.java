@@ -796,17 +796,23 @@ final class AsItems {
 	 *  grave is AsQuests'.) */
 	static Target barricade() {
 		if (AsQuests.graveOpen()) return null;
-		int bar = -1, bd = 99;
+		// (a barricade is solid: a throw stops on the cell before it, so the aim is a free floor cell beside it, on the
+		// hero's side; Liquid Flame's 3x3 of flames, a bomb's blast or a Fireblast cone there reaches it: K4's finding)
+		int aim = -1, bar = -1, bd = 99;
 		for (int c = 0; c < LEN; c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c] && L.heroFOV[c]) {
 			boolean behind = false; for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && !Assist.known[n]) behind = true; }
-			int d = dist(c, hp); if (behind && d >= 2 && d <= 5 && lands(c) && d < bd) { bd = d; bar = c; } }
-		if (bar < 0) return null;
-		if (!fireReaches(bar, 0) || bd >= 3) {
-			PotionOfLiquidFlame lf = has(PotionOfLiquidFlame.class); if (lf != null) return use(lf, Item.AC_THROW, bar, "barricade: burn it");
-			Item fb = wand(WandOfFireblast.class); if (fb != null && fireOk()) return use(fb, zapAct(fb), bar, "barricade: burn it");
-			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, bar, "barricade: burn it");
+			if (!behind) continue;
+			for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k];
+				if (!Assist.nb(c, n) || !L.passable[n] || L.solid[n] || Actor.findChar(n) != null || !lands(n)) continue;
+				int d = dist(n, hp); if (d >= 2 && d <= 4 && d < bd) { bd = d; aim = n; bar = c; } }
 		}
-		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd > 2) return use(i, "LIGHTTHROW", bar, "barricade: blow it up");
+		if (aim < 0) return null;
+		if (!L.flamable[hp] && !fireReaches(aim, 1) || bd >= 3) {
+			PotionOfLiquidFlame lf = has(PotionOfLiquidFlame.class); if (lf != null && !L.flamable[hp]) return use(lf, Item.AC_THROW, aim, "barricade: burn it");
+			Item fb = wand(WandOfFireblast.class); if (fb != null && fireOk()) return use(fb, zapAct(fb), aim, "barricade: burn it");
+			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, aim, "barricade: burn it");
+		}
+		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd >= 3) return use(i, "LIGHTTHROW", aim, "barricade: blow it up");
 		return null;
 	}
 
