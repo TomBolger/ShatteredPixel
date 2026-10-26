@@ -486,7 +486,7 @@ public final class Assist {
 		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
 		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
 		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
-		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = UpgradePlan.target(h); if (u != null && sel.itemSelectable(u)) return u; }
+		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = AsWeapon.target(h, UpgradePlan.target(h)); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfIdentify && OIDENT) { Item u = Identify.identifyTarget(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfUpgrade) {
 			for (Item i : worn) if (sel.itemSelectable(i) && !(i.cursed && i.cursedKnown)) return i;
@@ -1929,6 +1929,7 @@ public final class Assist {
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
+			on = AsWeapon.target(H, on);   // (MD: the armour to a mark, then the weapon close behind)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
