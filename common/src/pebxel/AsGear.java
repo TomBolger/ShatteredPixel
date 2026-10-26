@@ -32,7 +32,9 @@ final class AsGear {
 	static final int HYST = Assist.optInt("ARMHYST", 50);       // (hundredths of a block point a new armour must win by)
 	// (HE-f1: with FUT 1 a cloth+3 still beat an unknown mail at STR 12, and 52 of 77 prison deaths still wore
 	// cloth. From LONGD on, the commit looks further: LFUT scrolls and LSTR Strength ahead, the rest of the run's)
-	static final int LONGD = Assist.optInt("ARMLONGD", 99), LFUT = Assist.optInt("ARMLFUT", 3), LSTR = Assist.optInt("ARMLSTR", 2);
+	// (MD-arm1, 288 full mild games each: LONGD 1 mean depth 16.20, reach 21 18%, against 15.49 / 10% with it off; the
+	// cloth+4 of the first scrolls no longer outbids the mail and scale found later)
+	static final int LONGD = Assist.optInt("ARMLONGD", 1), LFUT = Assist.optInt("ARMLFUT", 3), LSTR = Assist.optInt("ARMLSTR", 2);
 	static final int ENCMAX = Assist.optInt("ARMENC", 1);      // (STR points short a piece may be worn at now)
 	static final boolean HOLD1 = Assist.opt("ARMHOLD1", false); // (hold the scrolls while only cloth is worn, till the boss)
 
