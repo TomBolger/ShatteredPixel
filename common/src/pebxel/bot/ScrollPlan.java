@@ -51,7 +51,7 @@ public final class ScrollPlan {
 	static final int HOLDMIN = (int) Tune.get("UPHOLDMIN", 1);   // (the first floor a scroll may be held on)
 	static final double UNK = Tune.get("UPUNK", 40) / 100;   // (an unknown piece's level counted this much below its shown +0: a third are cursed, -1..-3)
 	public static final boolean SPLIT = Tune.on("UPSPLIT", true);   // (off: MD's split (AsWeapon) once the planner spends)
-	public static final boolean HOLD = Tune.on("UPHOLDON", true), WPLAN = Tune.on("UPWPLAN", false), PCOMMIT = Tune.on("UPCOMMIT", false);
+	public static final boolean HOLD = Tune.on("UPHOLDON", false), WPLAN = Tune.on("UPWPLAN", false), PCOMMIT = Tune.on("UPCOMMIT", false);
 	/** The armour plan's own commit (AsGear's, HE's) when the planner's isn't used (PCOMMIT off: UP-a1, 288 full games:
 	 *  the planner's 12-floor commit kept cloth+n over mail on 68% of heroes at depth 17, against 33%; 15.44 against 16.26). */
 	public static java.util.function.Function<Hero, Armor> armourCommit;
@@ -224,7 +224,7 @@ public final class ScrollPlan {
 	static final boolean ANCHOR = Tune.on("UPANCHOR", true), SQ = Tune.on("UPSQ", false);
 	static final double D0 = Tune.get("UPD0", 20) / 100;   // (the damping: a floor's health lost, in whole bars, added to both sides)
 	static double lastTurns;
-	static final double GAM = Tune.get("UPGAM", 100) / 100, BOSSK = Tune.get("UPBOSSK", 100) / 100, TIME = Tune.get("UPTIME", 0) / 1000;
+	static final double GAM = Tune.get("UPGAM", 100) / 100, BOSSK = Tune.get("UPBOSSK", 100) / 100, TIME = Tune.get("UPTIME", 8) / 1000;
 	/** Each floor's survival as the bot plays now (MD-base2 and HE-final honest games, 192; the deep floors from the full
 	 *  games, a little lower): the anchor. */
 	/** The same with half again the health (the MILD training set-up: UP-a1, MD-base2, HE-final, MD-fin1 full games, 768):
