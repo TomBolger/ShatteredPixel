@@ -69,7 +69,16 @@ public final class FightModel {
 	}
 
 	/** The simulation. */
-	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed) {
+	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed) { return simulate(me0, foes0, healAt, runs, seed, 1e9); }
+
+	/** The next few turns of the fight as the hero stands now (FightCal's damage-rate check; BR's short looks ahead). */
+	public static Result next(Hero h, List<Mob> mobs, double turns) {
+		Fighter me = HeroView.of(h); List<Fighter> fs = new ArrayList<>(); for (Mob m : mobs) fs.add(FoeView.of(m, h));
+		return simulate(me, fs, 0, RUNS, seedFor(h), turns);
+	}
+
+	/** maxT: the turns simulated at most. */
+	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed, double maxT) {
 		Result r = new Result(); r.runs = runs;
 		if (foes0.isEmpty()) { r.pWin = 1; r.hpLeft = me0.hp; return r; }
 		SplittableRandom rnd = new SplittableRandom(seed);
@@ -95,7 +104,7 @@ public final class FightModel {
 		Arrays.sort(ord, (a, b) -> Double.compare(arrOf[a], arrOf[b]));
 		boolean[] queued = new boolean[n], held = new boolean[n]; double[] arrQ = new double[n];
 		boolean hurtable = false; for (int i = 0; i < n; i++) hurtable |= pH[i] > 0 || pR[i] > 0 || foes0.get(i).asleep;
-		double horizon = hurtable ? 100 : 30;   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
+		double horizon = Math.min(maxT, hurtable ? 100 : 30);   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
 		double[] losses = new double[runs];
 		int deaths = 0, wins = 0, used = 0; double tsum = 0, left = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
