@@ -56,6 +56,7 @@ final class AsQuests {
 	static Target suggest0(Target planA) {
 		try {
 			Target b = AsBasics.fightLoop(planA);
+			if (b == null) b = AsBasics.restStairs();
 			if (b != null) return b;
 			b = AsBasics.crab(planA);
 			if (b == null) b = AsBasics.piranha(planA);
@@ -86,6 +87,7 @@ final class AsQuests {
 	static boolean veto(Target hk) {
 		try {
 			if (ON && hk != null && "drink to learn".equals(hk.why) && graveOpen()) return true;   // (unknown potions kept for the barricade: one is the floor's Liquid Flame)
+			if (AsBosses.vetoAim(hk)) return true;
 			return AsBasics.veto(hk);
 		} catch (Throwable e) { lastError = e; return false; }
 	}
@@ -158,6 +160,9 @@ final class AsQuests {
 		return null;
 	}
 
+	static final int THROWWALKS = optInt("QTHROWWALKS", 150);   // walks towards a throwing spot on a floor, at most
+	static int throwWalks; static Level throwL;
+
 	/** The mass grave: the corpse dust behind its barricade (it burns). */
 	static Target grave() {
 		Heap dust = null;
@@ -188,12 +193,15 @@ final class AsQuests {
 			return use(fire, act, bar, known(fire) ? "quest: burn the barricade" : "quest: an unknown potion at the barricade");
 		}
 		int best = -1, bb = INF;   // a spot 2-3 off with a clear throw
-		for (int c = 0; c < L.length(); c++) if (dist[c] < INF && open[c] && seenChar(c) == null && distance(c, bar) >= 1 && distance(c, bar) <= 4 && !(distance(c, bar) == 1 && L.flamable[c]) && new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) {
+		for (int c = 0; c < L.length(); c++) if (dist[c] < INF && open[c] && seenChar(c) == null && distance(c, bar) >= 1 && distance(c, bar) <= 4 && (!L.flamable[c] || distance(c, bar) >= 3) && line(c, bar)) {   // (the throw's own test, below: a spot where it can't be thrown was walked to for ever)
 			int k = dist[c] + (L.flamable[c] ? 6 : 0) + (distance(c, bar) <= 2 ? 2 : 0); if (k < bb) { bb = k; best = c; } }   // (off grass if it can be: the fire spreads)
 		if (DBG) { int a = 0, b2 = 0, c3 = 0; for (int c = 0; c < L.length(); c++) if (distance(c, bar) >= 2 && distance(c, bar) <= 4) { if (dist[c] < INF && open[c]) { a++; if (new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos == bar) b2++; else c3 = new Ballistica(c, bar, Ballistica.PROJECTILE).collisionPos; } }
 			System.out.println("    GRAVE spots " + a + " in line " + b2 + " e.g. stops at " + c3 + " best " + best); }
 		if (best < 0) { int bk = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && open[c] && seenChar(c) == null) { int k = distance(c, bar) * 6 + dist[c]; if (k < bk) { bk = k; best = c; } } }   // (none known: nearer it, to see round it)
-		return best >= 0 && best != h.pos ? new Target(best, GO, "quest: to throw at the barricade") : null;
+		if (best < 0 || best == h.pos) return null;
+		if (throwL != L) { throwL = L; throwWalks = 0; }
+		if (++throwWalks > THROWWALKS) return null;   // (no spot it can be thrown from comes: given up)
+		return new Target(best, GO, "quest: to throw at the barricade");
 	}
 
 	/** The ritual: a candle onto each of the four cells round the marked spot (thrown, as a player would). */

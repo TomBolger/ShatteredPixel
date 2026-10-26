@@ -294,10 +294,33 @@ final class AsBasics {
 		if (!FOOD || hk == null) return false;
 		Hero h = Dungeon.hero;
 		if (hk.kind == WAIT && REST_ACT.equals(hk.action) && hk.why.startsWith("hurt")) {
-			if (h.HP * 4 < h.HT || L.locked) return false;
-			return foodTurns() < restTurns() + FOODRESERVE;
+			if (h.HP * 4 < h.HT || L.locked) return stairsRest(hk);
+			if (foodTurns() < restTurns() + FOODRESERVE) return true;
+			return stairsRest(hk);
 		}
 		return false;
+	}
+
+	// =============================================================================================================
+	// resting on the stairs up (Pebble PD's bot): a long rest where a foe that turns up can be left behind (only allies
+	// follow up the stairs: strategy-reference 2.3, Assist.upstairs), when the stairs are a short walk off.
+	// =============================================================================================================
+	static final boolean STAIRSREST = opt("BSTAIRSREST", true);
+	static final int STAIRSWALK = optInt("BSTAIRSWALK", 12);   // steps walked to rest on the stairs
+	static float stairsAt = -1; static int stairsCell = -1;
+
+	/** The rest vetoed for the walk to the stairs up first (AsBasics.restStairs suggests it). */
+	static boolean stairsRest(Target hk) {
+		if (!STAIRSREST || Dungeon.depth <= 1 || Dungeon.bossLevel() || seenFoe || inDanger) return false;
+		int ent = L.entrance(), hp = Dungeon.hero.pos;
+		if (ent < 0 || ent >= L.length() || ent == hp || !known[ent] || walk(ent) > STAIRSWALK || bad.containsKey(ent)) return false;
+		if (Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return false;
+		stairsAt = Actor.now(); stairsCell = ent;
+		return true;
+	}
+	static Target restStairs() {
+		if (stairsAt != Actor.now() || stairsCell < 0) return null;
+		return new Target(stairsCell, GO, "hurt: rest on the stairs up (a way out if one comes)");
 	}
 
 	/** Short of food: plan A on grass, a look round or a search is put off for the way on, when that's known. */

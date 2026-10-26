@@ -33,7 +33,7 @@ final class AsBosses {
 	private AsBosses() {}
 
 	static final boolean ON = opt("BOSSES", true);
-	static final boolean PYLON = opt("BPYLON", true), KING2 = opt("BKING2", true), FISTS = opt("BFISTS", true), LEAPS = opt("BLEAPS", true), YOG = opt("BYOG", true);
+	static final boolean PYLON = opt("BPYLON", true), KING2 = opt("BKING2", true), FISTS = opt("BFISTS", true), LEAPS = opt("BLEAPS", true), YOG = opt("BYOG", true), SOON = opt("BSOON", true);
 	static final int YOGHEAL = optInt("BYOGHEAL", 45);   // (Yog's floor: Healing below this share of health with a foe at hand or bleeding)
 
 	// =============================================================================================================
@@ -48,7 +48,7 @@ final class AsBosses {
 		if (!ON) return false;
 		Level l = Dungeon.level; if (l == null || Dungeon.hero == null) return false;
 		if (dzL != l || dzAt != Actor.now() || dzPos != Dungeon.hero.pos || dz.length != l.length()) compute(l);
-		return c >= 0 && c < dz.length && dz[c];
+		return c >= 0 && c < dz.length && (dz[c] || (SOON && soon[c]));   // (a shocker's ring too, lit every other turn: a walk through it when dark was dodged back out of when lit, for ever)
 	}
 
 	static void compute(Level l) {
@@ -240,6 +240,11 @@ final class AsBosses {
 		int from = -1; Mob rf = fist;
 		if (fist != null) from = fist.pos;
 		else for (Map.Entry<Integer, Integer> e : boltFrom.entrySet()) { Actor a = Actor.findById(e.getKey()); if (a instanceof YogFist.BrightFist || a instanceof YogFist.DarkFist) { from = e.getValue(); rf = (Mob) a; } }
+		if (fist != null) {   // one that doesn't come (the large Rusted one can't pass narrow ways): another place to wait
+			if (fist.pos != stillPos) { stillPos = fist.pos; stillSince = Actor.now(); }
+			else if (Actor.now() - stillSince > 8) { badSpots.add(hp); stillSince = Actor.now(); }
+		}
+		if (badL != L) { badL = L; badSpots.clear(); }
 		int spot = -1;
 		for (int r = rangedFist(rf) ? 11 : 6; r >= 6 && spot < 0; r -= 2) spot = lureSpot(rf, from, yp, r);
 		if (spot < 0 || spot == hp) return wait(hp, "Yog: wait for the fist");
@@ -257,6 +262,8 @@ final class AsBosses {
 		boolean ranged = rangedFist(fist);
 		for (int c = 0; c < L.length(); c++) {
 			if (dist[c] >= INF || L.distance(c, yp) < r || !L.passable[c] || L.avoid[c] || danger[c] || (seenChar(c) != null && c != hp)) continue;
+			if (fist != null && Char.hasProp(fist, Char.Property.LARGE) && !L.openSpace[c]) continue;   // (it can't stand beside a narrow cell's)
+			boolean bad = false; for (int b : badSpots) bad |= L.distance(b, c) <= 2; if (bad) continue;
 			int s = dist[c] * 2;
 			if (fist instanceof YogFist.RottingFist && L.water[c]) s += 6;
 			if (fist instanceof YogFist.BurningFist && !L.water[c]) s += 3;
@@ -267,6 +274,16 @@ final class AsBosses {
 	}
 
 	static final Map<Integer, Integer> boltFrom = new HashMap<>(); static int boltHP = -1; static float boltAt, fistSeenAt; static Level boltL;
+
+	static final Set<Integer> badSpots = new HashSet<>(); static int stillPos = -1; static float stillSince; static Level badL;
+
+	/** A shot, throw or zap at a foe shown immune (a fist by Yog, Yog while a fist lives, the Dwarf King behind his
+	 *  barrier): wasted turns (a Huntress shot an immune fist till she died). */
+	static boolean vetoAim(Target hk) {
+		if (!ON || hk == null || hk.kind != USE || hk.cell < 0 || hk.cell == Dungeon.hero.pos) return false;
+		Char c = Actor.findChar(hk.cell);
+		return c instanceof Mob && L.heroFOV[c.pos] && Char.hasProp(c, Char.Property.BOSS) && c.isInvulnerable(Hero.class);
+	}
 
 	static boolean nearSeat(int c) { return L.distance(c, seat()) <= 4; }
 	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
