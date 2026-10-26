@@ -199,7 +199,7 @@ public class AssistBot {
 		WatchSettings.assist(Integer.parseInt(System.getenv().getOrDefault("MODE", "1")));
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
-		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); IdStats.newGame(); FoodStats.newGame(); FightCal.newGame(); Cheat.newGame(seed); HumanTalents.newGame(seed);
+		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); IdStats.newGame(); FoodStats.newGame(); FightCal.newGame(); GearStats.newGame(); Cheat.newGame(seed); HumanTalents.newGame(seed);
 		Random talentR = new Random(seed * 13 + 5);
 
 		GamesInProgress.selectedClass = cls; GamesInProgress.curSlot = 1;
@@ -339,7 +339,7 @@ public class AssistBot {
 			}
 			lastPos = Dungeon.hero.pos; lastKey = key;
 			if (DeterminismTest.trace != null) DeterminismTest.trace.add(Math.round(Statistics.duration) + "/" + Actor.now() + " d" + Dungeon.depth + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + " " + key + " r" + rngState() + " " + actorState());   // (DeterminismTest)
-			BotStats.decision(t); IdStats.decision(t); FoodStats.decision(t); FightCal.decision(); BotItems.decided(t);
+			BotStats.decision(t); IdStats.decision(t); FoodStats.decision(t); FightCal.decision(); GearStats.decision(); BotItems.decided(t);
 			whys.merge(t.why, 1, Integer::sum);
 			if (v && System.getenv("VMOBS") != null) { StringBuilder sb = new StringBuilder("    mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.HP); sb.append(" f").append(Lockstep.frames); System.out.println(sb); }
 			String line = "  t" + Math.round(Statistics.duration) + "/" + Math.round(Actor.now()) + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + "/" + Dungeon.hero.HT + ": " + t + (plan.size() > 1 ? "   | B: " + plan.get(1) : "");   // (not String.format: 4% of a game)
@@ -385,6 +385,7 @@ public class AssistBot {
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);
 		System.out.println(BotStats.line());
+		System.out.println(GearStats.line());
 		System.out.println(IdStats.line(end));
 		FoodStats.print(end, cause);
 		System.out.println(BotItems.artLine());
