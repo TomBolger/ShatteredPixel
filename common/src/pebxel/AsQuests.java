@@ -57,6 +57,8 @@ final class AsQuests {
 		try {
 			Target b = AsBasics.fightLoop(planA);
 			if (b != null) return b;
+			b = AsBasics.crab(planA);
+			if (b != null) return b;
 			if (!ON) return AsBasics.hurry(planA);
 			remember();
 			boolean fightOn = false; for (Mob m : mobs()) if (hostile(m) && (adjacent(m.pos, Dungeon.hero.pos) || hunting(m))) fightOn = true;
