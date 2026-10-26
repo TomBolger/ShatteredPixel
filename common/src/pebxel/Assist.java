@@ -216,6 +216,7 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);
+	static final int EATHMAX = optInt("EATHMAX", 99);   // (HE: the deepest floor EATHUNGRY eats on)
 	static final boolean EATHUNGRY = opt("EATHUNGRY", false), MMSAVE = opt("MMSAVE", true);   // (K8, SR's audit gaps 9 and 21)   // (a known Healing potion is drunk in a fight below this share of health)
 	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
 	// On by default (Thomas: the models are the way to a solved game; tune them, don't switch them off). Untuned after the
@@ -1887,7 +1888,7 @@ public final class Assist {
 		// cooked meat) is eaten now, not at Starving: none of it goes to waste, and a rest or a fight after it won't run
 		// into starving, where regeneration stops (strategy-reference 2.6; SR's audit, gap 9). Off by default: K8-e1, 90
 		// head-start-6 games, mean depth 10.38 on against 10.71 off (the food budget's rest vetoes see less food held)
-		if (EATHUNGRY && !Dungeon.bossLevel() && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
+		if (EATHUNGRY && !Dungeon.bossLevel() && Dungeon.depth <= EATHMAX && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
 			Item f = null; float fe = 0;
 			for (Item i : H.belongings.backpack) if (foodItem(i) && !(i instanceof MysteryMeat)) { float e = ((Food) i).energy; if (e <= Hunger.HUNGRY && e > fe) { fe = e; f = i; } }
 			if (f != null) return use(f, Food.AC_EAT, -1, "hungry: eat (none of it wasted)");
