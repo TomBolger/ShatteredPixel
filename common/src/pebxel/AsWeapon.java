@@ -8,6 +8,7 @@ import com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor;
 import com.shatteredpixel.shatteredpixeldungeon.items.armor.ClassArmor;
 import com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff;
 import com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon;
+import pebxel.bot.HeroView;
 import static pebxel.Assist.*;
 
 /**
@@ -34,18 +35,75 @@ final class AsWeapon {
 		if (!ON) return dflt;
 		Armor a = h.belongings.armor(); KindOfWeapon w = h.belongings.weapon();
 		boolean aOk = a != null && !(a instanceof ClassArmor) && a.isUpgradable() && !(a.cursed && a.cursedKnown) && a.levelKnown;
-		boolean wOk = w instanceof MeleeWeapon && w.isUpgradable() && !(w.cursed && w.cursedKnown) && w.levelKnown;
 		if (dflt == null || !(dflt == a || dflt == w)) return dflt;   // (a hold, or a piece in the pack: the plan's own call)
 		if (w instanceof MagesStaff && w.level() < STAFF1) return dflt;   // (the Mage: the staff first, to +3)
-		if (DBG) System.out.println("    MDUP d" + Dungeon.depth + " a " + (a == null ? "-" : a.getClass().getSimpleName() + a.level() + " ok " + aOk) + " w " + (w == null ? "-" : w.getClass().getSimpleName() + w.level() + " ok " + wOk));
+		Item c = w instanceof MagesStaff ? w : commit(h);   // (the weapon the coming scrolls are for: worn, or a better one carried)
+		boolean wOk = c instanceof MeleeWeapon && c.isUpgradable() && !(c.cursed && c.cursedKnown) && (c.levelKnown || c != w);
+		if (DBG) System.out.println("    MDUP d" + Dungeon.depth + " a " + (a == null ? "-" : a.getClass().getSimpleName() + a.level() + " ok " + aOk) + " w " + (c == null ? "-" : c.getClass().getSimpleName() + HeroView.visLevel(c) + " ok " + wOk));
 		if (!aOk || !wOk) return dflt;
-		int al = a.level(), wl = w.level(), mark = ARMBASE + Dungeon.depth / Math.max(1, ARMDIV);
+		int al = a.level(), wl = Math.max(0, HeroView.visLevel(c)), mark = ARMBASE + Dungeon.depth / Math.max(1, ARMDIV);
 		// a low-tier weapon takes no scrolls (MD-he1: with the split from depth 1, 57 of 161 heroes at 16 swung a tier-1
 		// weapon at +5, kept for its upgrades over the tier-3 and -4 ones found): a scroll goes into a tier WPNTIER weapon
 		// or better (from LATE on, tier 2), upgrades on a higher tier counting for more (max +tier+1 a level)
-		if (!(w instanceof MagesStaff) && ((MeleeWeapon) w).tier < (Dungeon.depth >= LATE ? 2 : WPNTIER)) return dflt;
+		if (!(c instanceof MagesStaff) && ((MeleeWeapon) c).tier < (Dungeon.depth >= LATE ? 2 : WPNTIER)) return dflt;
 		if (al < mark) { why = "upgrade: the armour, to +" + mark + " by this depth (its block meets every hit)"; return a; }
-		if (wl + WPNGAP < al) { why = "upgrade: the weapon, +" + wl + " behind the armour's +" + al + " (shorter fights: less taken, less rested)"; return w; }
+		if (wl + WPNGAP < al) { why = "upgrade: the weapon, +" + wl + " behind the armour's +" + al + " (shorter fights: less taken, less rested)"; return c; }
 		why = "upgrade: the armour (the weapon is close behind)"; return a;
+	}
+
+	// ---- the weapon plan: which weapon the scrolls are for, and when it goes on ----
+	// MD-he1: at depth 16, 103 of 125 heroes (not Mages) carried a higher-tier weapon than the one they swung: a +6 tier-2
+	// beat any unknown tier-4 as it stood, and the one point of STR it lacked. As HE's armour plan does for armour: each
+	// weapon counted at the level it will reach (its shown level plus FUT scrolls), its need at that level (upgrades lower
+	// it), and worn once it hits as hard as the worn one does now.
+	static final boolean PLAN = opt("MDWPLAN", true);
+	static { if (PLAN && ON) pebxel.bot.GearValue.weaponElsewhere = true; }
+	static final int FUT = optInt("MDWFUT", 2), HYST = optInt("MDWHYST", 10);   // (scrolls ahead counted; percent a new one must win by)
+
+	/** A blow's worth: mean damage (and the STR to spare) times accuracy over delay, the STR it lacks costing both. */
+	static double worth(Hero h, MeleeWeapon m, int lvl) {
+		int enc = m.STRReq(lvl) - h.STR();
+		if (enc >= 2) return -1;
+		double dmg = (m.min(lvl) + m.max(lvl)) / 2.0 + (enc < 0 ? -enc / 2.0 : 0);
+		double v = dmg * m.ACC / m.DLY;
+		if (enc == 1) v /= 1.5 * 1.2;
+		return v;
+	}
+	static boolean liftable(Hero h) {
+		com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse rc = h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse.class);
+		com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade up = h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
+		return (rc != null && rc.isKnown()) || (up != null && up.isKnown());
+	}
+	static boolean usable(Item i) { return i instanceof MeleeWeapon && !(i instanceof MagesStaff) && !(i.cursed && i.cursedKnown) && !(i.levelKnown && i.level() < 0); }
+	/** What a weapon will be worth with the scrolls ahead. */
+	static double ahead(Hero h, MeleeWeapon m) {
+		int lv = Math.max(0, HeroView.visLevel(m));
+		double v = worth(h, m, lv + FUT);
+		if (v > 0 && m != h.belongings.weapon() && !m.cursedKnown && !liftable(h)) v *= 0.85;   // (an unknown one may be cursed)
+		return v;
+	}
+	/** The weapon the coming scrolls go into: the worn one, or a better one carried. */
+	static Item commit(Hero h) {
+		KindOfWeapon w = h.belongings.weapon();
+		if (!PLAN || !(w instanceof MeleeWeapon) || w instanceof MagesStaff || (w.cursed && w.cursedKnown)) return w;
+		Item best = w; double bv = ahead(h, (MeleeWeapon) w) * (1 + HYST / 100.0);
+		for (Item i : h.belongings.backpack) if (usable(i)) { double v = ahead(h, (MeleeWeapon) i); if (v > bv) { bv = v; best = i; } }
+		pebxel.bot.GearValue.keepWeapon = best;
+		return best;
+	}
+	/** A weapon to put on now: the commit piece, once it hits as hard as the worn one now (or the worn one is no use). */
+	static Item wear(Hero h) {
+		if (!PLAN || !ON) return null;
+		KindOfWeapon w = h.belongings.weapon();
+		if (w instanceof MagesStaff || (w != null && w.cursed && w.cursedKnown)) return null;
+		if (w != null && !(w instanceof MeleeWeapon)) return null;
+		Item c = commit(h);
+		if (w == null) { Item b = null; double bv = 0; for (Item i : h.belongings.backpack) if (usable(i)) { double v = worth(h, (MeleeWeapon) i, Math.max(0, HeroView.visLevel(i))); if (v > bv) { bv = v; b = i; } } return b; }
+		if (c == null || c == w) return null;
+		double nc = worth(h, (MeleeWeapon) c, Math.max(0, HeroView.visLevel(c))), nw = worth(h, (MeleeWeapon) w, Math.max(0, HeroView.visLevel(w)));
+		return nc > 0 && nc >= nw ? c : null;
+	}
+	static String wearWhy(Hero h, Item c) {
+		return String.format(java.util.Locale.ROOT, "weapon plan: %s (about %.0f a blow with the scrolls ahead)", c.name(), worth(h, (MeleeWeapon) c, Math.max(0, HeroView.visLevel(c)) + FUT));
 	}
 }
