@@ -41,7 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
-		foodSeen(); hazNote();
+		foodSeen(); hazNote(); shotNote();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -400,8 +400,14 @@ final class AsBasics {
 		}
 		java.util.List<Mob> fs = new ArrayList<>(); for (Mob m : mobs()) if (hostile(m) && hunting(m)) fs.add(m);
 		double pd = 0; try { pd = pebxel.bot.FightModel.evaluate(h, fs).pDeath * 100; } catch (Throwable e) { }
-		if (pd > CASTRISK || walk(sh.pos) > 12) return null;
-		return new Target(sh.pos, ENEMY, "caster: close in (its bolt ignores armour)");
+		if (pd <= CASTRISK && walk(sh.pos) <= 12) return new Target(sh.pos, ENEMY, "caster: close in (its bolt ignores armour)");
+		// a fight it would lose: out of its bolts' way for a while (no cell it can reach in two steps sees there), the
+		// rules' escapes have their say before this (the stairs, Healing): not picking things up under its bolts
+		int hide = -1, hd = INF;
+		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 6 && dist[c] < hd && open[c] && seenChar(c) == null && !danger[c] && !bad.containsKey(c)) {
+			boolean seen = false; for (int x = 0; x < L.length() && !seen; x++) if (ds[x] <= 2 && bolts(x, c)) seen = true;
+			if (!seen) { hd = dist[c]; hide = c; } }
+		return hide >= 0 && bolts(sh.pos, hp) ? new Target(hide, GO, "caster: out of its bolts' way (a fight to lose)") : null;
 	}
 	static final Set<Integer> cornerFailed = new HashSet<>(); static Level cornerL;
 	static int cornerAt = -1, cornerId = -1; static float cornerUntil = -1;
@@ -411,11 +417,27 @@ final class AsBasics {
 		if (!(t.why.startsWith("tactic: out of its line") || t.why.startsWith("tactic: wait round the corner"))) return false;
 		Mob sh = casterNear(); return sh != null;
 	}
-	/** A wait (any) in a caster's line, not beside a foe: every turn a bolt for nothing. */
+	/** Hit since the last decision by nothing beside the hero nor on him (no burning, poison, bleeding, hunger): a bolt
+	 *  or a missile from out of sight (dark floors: a warlock sees farther than the hero). Turns it lasts. */
+	static int shotHp = -1; static float shotAt = -99, shotT = -1; static Level shotL;
+	static void shotNote() {
+		Hero h = Dungeon.hero; float now = Actor.now();
+		if (shotL != L) { shotL = L; shotHp = -1; shotAt = -99; }
+		if (now == shotT) return;
+		boolean adj = false; for (Mob m : mobs()) if (m.isAlive() && m.alignment == Char.Alignment.ENEMY && adjacent(m.pos, h.pos)) adj = true;
+		boolean dot = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Burning.class) != null || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Poison.class) != null
+				|| h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Bleeding.class) != null || Assist.starving() || Assist.hazMem != null && h.pos < Assist.hazMem.length && Assist.hazMem[h.pos];
+		if (shotHp >= 0 && h.HP < shotHp && !adj && !dot) shotAt = now;
+		shotHp = h.HP; shotT = now;
+	}
+	static boolean shotLately() { return Actor.now() - shotAt <= 3 && Actor.now() >= shotAt; }
+	/** A wait (any) in a caster's line, or with bolts coming from out of sight, not beside a foe: a bolt a turn for nothing. */
 	static boolean waitInLine(Target t) {
-		if (!CASTER || t == null || t.kind != WAIT || (t.why != null && t.why.startsWith("caster"))) return false;
+		if (!CASTER || t == null || t.kind != WAIT || REST_ACT.equals(t.action)) return false;
 		int hp = Dungeon.hero.pos;
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return false;
+		if (shotLately()) return true;
+		if (t.why != null && t.why.startsWith("caster")) return false;
 		for (Mob m : mobs()) if (caster(m) && hostile(m) && bolts(m.pos, hp)) return true;
 		return false;
 	}
@@ -476,7 +498,15 @@ final class AsBasics {
 	}
 	/** Turns a rest to full health takes (1 HP a 10 turns: Regeneration). */
 	static int restTurns() { Hero h = Dungeon.hero; return Math.max(0, h.HT - h.HP) * 10; }
-	static boolean shortOfFood() { return foodTurns() < (int) Hunger.STARVING + FOODRESERVE / 2; }
+	static boolean shortOfFood() {
+		if (!BUDGET) return foodTurns() < (int) Hunger.STARVING + FOODRESERVE / 2;
+		// (K6) the run's budget: the turns of food before starving, plus the floor's own food while it's still to find,
+		// against the rest of this floor's walk and a reserve: short, nothing optional (the next floor has food too)
+		int f = foodTurns() - (int) Hunger.STARVING + (foodHere ? 0 : FLOORMEAL);
+		return f < FOODRESERVE / 2 + floorNeed();
+	}
+	static final boolean BUDGET = opt("BBUDGET", true);
+	static final int FLOORMEAL = optInt("BFLOORMEAL", 300);   // the food a floor holds (a ration, 4 in 5; a pasty, 1 in 5)
 
 	/** A hands suggestion vetoed (Assist planList's one hook): a long rest the food can't pay for, unless dying. */
 	static boolean veto(Target hk) {
