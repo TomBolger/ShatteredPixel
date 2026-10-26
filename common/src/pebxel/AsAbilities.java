@@ -144,12 +144,14 @@ final class AsAbilities {
 	 *  range...): held back a while. */
 	static Target offered(Target t, int hook) {
 		if (t == null || t.item == null) return t;
+		// (counted per entry while no time passes and the hero stays put: two entries taking turns, a monk move and a
+		// weapon ability that does nothing, kept each other's count at 0 (WD-a1: 480 harvests in one turn))
 		String k = key(t.item, t.action); float now = Actor.now(); int p = Dungeon.hero.pos;
-		if (k.equals(offerKey[hook]) && now == offerT[hook] && p == offerPos[hook]) { if (++offerN[hook] >= 3) { ban.put(k, now + 20); offerKey[hook] = null; return null; } }
-		else { offerKey[hook] = k; offerT[hook] = now; offerPos[hook] = p; offerN[hook] = 0; }
+		if (now != offerT0 || p != offerPos0) { offerN.clear(); offerT0 = now; offerPos0 = p; }
+		if (offerN.merge(k, 1, Integer::sum) > 3) { ban.put(k, now + 20); return null; }
 		return t;
 	}
-	static final String[] offerKey = new String[2]; static final float[] offerT = new float[2]; static final int[] offerPos = new int[2], offerN = new int[2];
+	static final Map<String, Integer> offerN = new HashMap<>(); static float offerT0 = -1; static int offerPos0 = -1;
 
 	static Target urgent0(Target planA) {
 		if (!ON) return null;

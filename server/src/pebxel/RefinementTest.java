@@ -654,7 +654,7 @@ public final class RefinementTest {
     static Assist.Target ab(boolean urgent) throws Exception {
         Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
         setup.setAccessible(true); setup.invoke(null, new Object[]{null});
-        AsAbilities.prepAt = -1; AsAbilities.ban.clear();
+        AsAbilities.prepAt = -1; AsAbilities.ban.clear(); AsAbilities.offerN.clear();
         return urgent ? AsAbilities.urgent(null) : AsAbilities.suggest(null);
     }
 
