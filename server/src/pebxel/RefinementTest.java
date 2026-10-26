@@ -767,9 +767,11 @@ public final class RefinementTest {
             hi.destroy();
             // 3. an unknown scroll: not read with nothing to gain; read with a cursed armour worn (Remove Curse)
             sk.add(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
-            sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse.class); sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class);
+            sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse.class); sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution.class);
+            for (Class<?> e : Arrays.asList(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTerror.class,
+                    com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfMirrorImage.class)) sk.add(e);   // (the escapes known: nothing to learn there)
             for (Item i : h.belongings) i.identify();
-            com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby lu = new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby(); h.belongings.backpack.items.add(lu);
+            com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution lu = new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRetribution(); h.belongings.backpack.items.add(lu);
             Assist.reset(); t = hands();
             check(t == null || t.item != lu, "an unknown scroll isn't read with nothing to gain: " + t);
             Armor a0 = h.belongings.armor; Armor ca = new LeatherArmor(); ca.cursed = true; ca.cursedKnown = true; h.belongings.armor = ca;
