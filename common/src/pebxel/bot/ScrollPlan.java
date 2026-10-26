@@ -307,7 +307,7 @@ public final class ScrollPlan {
 		// BrokenSeal.affixToArmor): that scroll isn't lost when the armour changes
 		boolean seal = arm && p == c.a0 && ((Armor) p).checkSeal() != null && ((Armor) p).checkSeal().level() == 0;
 		// (a hold is a plan kept: its deadline, set when it began, isn't pushed back floor after floor; none with a boss next)
-		int Wn = HOLD && arrivals && !bossNear(c.d0) ? (holdUntil >= 0 && holdHero == c.h ? Math.min(WMAX, holdUntil - c.d0) : WMAX) : 0;
+		int Wn = arrivals && !bossNear(c.d0) ? (holdUntil >= 0 && holdHero == c.h ? Math.min(WMAX, holdUntil - c.d0) : WMAX) : 0;
 		// (each option's floors less the floors without this scroll at all, under the same arrivals: the scroll's own
 		// worth, comparable between the slots; UP-d1's first form compared the slots' totals, the finds of each in them)
 		double e0 = 0; r.now = r.hold = Double.NEGATIVE_INFINITY;
@@ -373,7 +373,10 @@ public final class ScrollPlan {
 		} else {
 			t = p;
 			if (holdHero == h) holdUntil = -1;   // (the hold over: the scroll spent)
-			why = String.format(Locale.ROOT, "upgrade %s%s (%s next best by %.2f floors)", nm, p != null && !p.isEquipped(h) ? " (" + p.name() + ", to wear)" : "", (aBest ? (vw.none ? "holding" : "the weapon") : "the armour"), now - Math.max((aBest ? vw : va).none ? -1e9 : (aBest ? vw.now : va.now), vh.hold));
+			Val vo = aBest ? vw : va;
+			why = String.format(Locale.ROOT, "upgrade %s%s: about %.2f floors of run (%s%s)", nm, p != null && !p.isEquipped(h) ? " (" + p.name() + ", to wear)" : "", now,
+					vo.none ? "" : String.format(Locale.ROOT, "%s %.2f", aBest ? "the weapon" : "the armour", vo.now),
+					vh.hold > 0 && vh.holdW > 0 ? String.format(Locale.ROOT, "%sholding for %s %.2f", vo.none ? "" : ", ", tierName(hArm, vh.holdT), vh.hold) : "");
 		}
 		last = String.format(Locale.ROOT, "d%d kh %d rate %.2f arm %s now %.3f hold %.3f(W%d) | wpn %s now %.3f hold %.3f(W%d) -> %s", c.d0, c.kh, rate(),
 				c.cA == null ? "-" : c.cA.getClass().getSimpleName() + HeroView.visLevel(c.cA), va.now, va.hold, va.holdW,
