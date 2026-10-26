@@ -200,6 +200,7 @@ public class AssistBot {
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
 		if (watch != null) watch.human = new Random(seed * 7 + 3);
+		if (watch != null && WILFUL) watch.newWilful(seed);
 		obey = OBEY > 0 && watch == null ? new Obey() : null; obeyN = 0;
 		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); IdStats.newGame(); FoodStats.newGame(); FightCal.newGame(); FightX.newGame(); GearStats.newGame(); Cheat.newGame(seed); HumanTalents.newGame(seed);
 		Random talentR = new Random(seed * 13 + 5);
@@ -271,7 +272,7 @@ public class AssistBot {
 				// answered on its 2nd frame (laid out by then), again every 30 frames it stays; for ever: gone
 				if (PLAYER && watch != null) {   // (the player: Select, the frame on the Assistant's pick; what Select can't answer is a bug)
 					if (wndFrames % 30 == 2) { Lockstep.doing = "window " + w.getClass().getName(); watch.playerWindow(w, HUMANP); }
-					if (watch.wndNoTurn > 40) { Coverage.problem("select-only: windows round and round: " + w.getClass().getName()); System.out.println("  SELECT LOOP windows " + w.getClass().getName() + " why " + Controls.windowWhy); watch.wndNoTurn = 0; while (Ui.topWindow() != null) Ui.topWindow().hide(); continue; }
+					if (watch.wndNoTurn > 150) { Coverage.problem("select-only: windows round and round: " + w.getClass().getName()); System.out.println("  SELECT LOOP windows " + w.getClass().getName() + " why " + Controls.windowWhy); watch.wndNoTurn = 0; while (Ui.topWindow() != null) Ui.topWindow().hide(); continue; }
 					if (wndFrames > 400) { System.out.println("  SELECT STUCK " + w.getClass().getName() + " why " + Controls.windowWhy + " buttons " + Controls.buttons(w).size()); Coverage.problem("select-only: window stuck: " + w.getClass().getName()); w.hide(); }
 				}
 				else if (wndFrames % 30 == 2) { Lockstep.doing = "window " + w.getClass().getName(); BotWindows.Answer an = BotWindows.decide(w); if (v) System.out.println("    -> " + an); if (watch == null || !watch.answer(w, an)) { if (Ui.topWindow() == w) BotWindows.doDirect(w, an); } }
@@ -366,7 +367,7 @@ public class AssistBot {
 			if (t.kind == Assist.USE && t.item != null) BotItems.pending(t.item, t.action);
 			Lockstep.doing = "acting on " + t + " at depth " + Dungeon.depth;
 			if (decisions == TEST_HANG) synchronized (AssistBot.class) { try { AssistBot.class.wait(); } catch (InterruptedException e) { } }   // (tests: the watchdog)
-			boolean ok = watch != null && Controls.aiming() == false && (HUMANP ? watch.humanPlayer(t) : SELECTONLY ? watch.selectOnly(t) : watch.act(t));
+			boolean ok = watch != null && Controls.aiming() == false && (WILFUL ? watch.wilfulPlayer(t) : HUMANP ? watch.humanPlayer(t) : SELECTONLY ? watch.selectOnly(t) : watch.act(t));
 			if (!ok && Ui.topWindow() == null && Dungeon.hero.ready && Actor.now() == tn && Dungeon.hero.pos == pn) ok = Assist.act(t);
 			// (the actor thread picks the action up on a later frame: until then hero.ready still reads true. Once it has
 			// and the action came to nothing, the hero is the actor waiting again with no action: no use waiting longer.
@@ -397,7 +398,7 @@ public class AssistBot {
 		if (!end.equals("WIN") && !end.equals("died") && !v) { System.out.println("last decisions:"); for (String l : recent) System.out.println(l); }
 		if (watch != null) System.out.println("WATCH " + watch.summary());
 		if (obey != null) System.out.println("OBEY every " + OBEY + ": " + obey.line());
-		if (watch != null && PLAYER) System.out.println("PLAYER " + (HUMANP ? "human" : "select") + " " + watch.playerSummary());
+		if (watch != null && PLAYER) System.out.println("PLAYER " + (WILFUL ? "wilful" : HUMANP ? "human" : "select") + " " + watch.playerSummary());
 		if (watch != null) System.out.println("LIST " + (Controls.legacy != null ? "old" : "new") + (HUMANP ? " human" : SELECTONLY ? " select-only" : " bot") + " mode " + WatchSettings.assist() + " " + watch.listSummary() + " plans " + Controls.plans);
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);
@@ -442,7 +443,7 @@ public class AssistBot {
 	 *  before the Assistant drove it (OldTargets), to compare presses on the same seeds. */
 	static final boolean SELECTONLY = "select".equals(System.getenv("PLAYER"));
 	/** PLAYER=human: a simulated player, mostly Select, now and then the 2nd or 3rd choice or a tap (WatchDriver.humanPlayer). */
-	static final boolean HUMANP = "human".equals(System.getenv("PLAYER")), PLAYER = SELECTONLY || HUMANP;
+	static final boolean HUMANP = "human".equals(System.getenv("PLAYER")), WILFUL = "wilful".equals(System.getenv("PLAYER")), PLAYER = SELECTONLY || HUMANP || WILFUL;
 	/** OBEY=n (no watch): every n-th suggestion that isn't a fight is passed over (plan B taken), and plan A coming back
 	 *  within Obey.WINDOW decisions is counted as insisting, by the skill that proposed it. */
 	static final int OBEY = Integer.parseInt(System.getenv().getOrDefault("OBEY", "0")); static Obey obey; static int obeyN;

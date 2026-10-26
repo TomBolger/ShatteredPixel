@@ -20,7 +20,7 @@ final class Obey {
 	/** A use: the floor; a wait, a skill's step or anything passed in a fight: AsObey's while; a walk: Assist.DEMOTE. */
 	static int turns(Passed p) { return p.t.kind == Assist.USE ? USE_TURNS : p.t.kind == Assist.WAIT || p.t.src != null || p.fight ? SHORT_TURNS : WALK_TURNS; }
 	final List<Passed> open = new ArrayList<>();
-	final Map<String, Integer> passes = new TreeMap<>(), insist = new TreeMap<>(), safe = new TreeMap<>();
+	final Map<String, Integer> passes = new TreeMap<>(), insist = new TreeMap<>(), safe = new TreeMap<>(), onWay = new TreeMap<>();
 	final List<String> examples = new ArrayList<>();
 	long n;
 
@@ -41,6 +41,7 @@ final class Obey {
 	/** Would passing this over be a test of obedience (not a fight, not a plain step)? */
 	static boolean testable(Assist.Target a) {
 		if (a == null || a.kind == Assist.ENEMY || keyOf(a).isEmpty()) return false;
+		if (a.why != null && (a.why.startsWith("your") || a.why.startsWith("resume"))) return false;   // (his own walk, echoed: no suggestion of ours)
 		if (a.kind == Assist.USE && a.item != null && a.cell >= 0 && Dungeon.hero != null && a.cell != Dungeon.hero.pos && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(a.cell) != null) return false;   // (a throw or zap at a foe: the fight's, no choice to remember, as Controls.passOne)
 		return true;
 	}
@@ -51,7 +52,7 @@ final class Obey {
 	void passed(Assist.Target a, Assist.Target chosen) {
 		if (!testable(a)) return;
 		Passed p = new Passed(keyOf(a), src(a), n, Dungeon.depth, a);
-		p.went = chosen != null && chosen.cell >= 0 ? chosen.cell : p.from;   // (as Assist.chose: where the choice goes)
+		p.went = chosen != null && chosen.cell >= 0 && !"tap".equals(chosen.why) ? chosen.cell : -1;   // (as Assist.chose: where the choice goes; a tap or something else: where he is next, Controls.obeyed)
 		p.sit = a.kind == Assist.USE && a.item != null ? Assist.situation(a.item.getClass(), a.action) : 0;
 		open.add(p);
 	}
@@ -66,13 +67,14 @@ final class Obey {
 			if (!p.checked) {   // (as Assist.passed: a walk that went towards it, or the item used after all, was no pass)
 				p.checked = true;
 				com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; int h = Dungeon.hero.pos;
-				boolean towards = (p.t.kind == Assist.GO || p.t.kind == Assist.PICKUP) && p.obj >= 0 && L.distance(p.went, p.obj) < L.distance(p.from, p.obj);
+				boolean towards = (p.t.kind == Assist.GO || p.t.kind == Assist.PICKUP) && p.obj >= 0 && L.distance(p.went >= 0 ? p.went : h, p.obj) < L.distance(p.from, p.obj);
 				boolean used = p.t.kind == Assist.USE && p.t.item != null && !Dungeon.hero.belongings.contains(p.t.item);
 				if (towards || used) { it.remove(); continue; }
 				passes.merge(p.src, 1, Integer::sum);
 			}
 			if (p.fight && !Assist.seenFoe && !Assist.inDanger && p.t.kind != Assist.USE) { it.remove(); continue; }   // (passed in a fight: held only till it's over, by design: "combat caused us to ignore pickups")
 			if (p.t.kind == Assist.USE && p.t.item != null && Assist.situation(p.t.item.getClass(), p.t.action) > p.sit) { it.remove(); continue; }   // (things changed: more of it, or worse off for a drink or a meal)
+			if (!k.isEmpty() && k.equals(p.key) && a.why != null && a.why.startsWith("on the way")) { onWay.merge(p.src, 1, Integer::sum); it.remove(); continue; }   // (offered once more, on his way: by design)
 			if (!k.isEmpty() && k.equals(p.key)) {
 				if (safety(p.t) || safety(a)) safe.merge(p.src, 1, Integer::sum); else {
 				insist.merge(p.src, 1, Integer::sum);
@@ -81,5 +83,5 @@ final class Obey {
 			}
 		}
 	}
-	String line() { return ("passes " + passes + " insist " + insist + " safety " + safe).replace(", ", ","); }
+	String line() { return ("passes " + passes + " insist " + insist + " safety " + safe + " onway " + onWay).replace(", ", ","); }
 }

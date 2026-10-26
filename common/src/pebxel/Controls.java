@@ -644,11 +644,24 @@ public class Controls {
 		long t0 = System.nanoTime();
 		try { makeTargets(aiming); }
 		finally { long dn = System.nanoTime() - t0; planNs += dn; if (dn > planMaxNs) planMaxNs = dn; if (dn > 16_000_000) slowPlans++; if (dn > 33_000_000) slowerPlans++;
+			budget(dn);
 			if (slowLogMs > 0 && dn > slowLogMs * 1_000_000L) System.out.printf("SLOWLIST %.1f ms d%d t%d hp %d/%d: %s%n", dn / 1e6, Dungeon.depth, Math.round(com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now()), Dungeon.hero.HP, Dungeon.hero.HT, (plan.isEmpty() ? "-" : plan.get(0).why) + " | " + Assist.timing()); }
 	}
 	/** The lists' cost (the phone's frame budget: Thomas's phone may be 3-5 times slower than the PC): total, worst,
 	 *  how many took over 16 ms and over 33 ms (a frame at 30 a second). */
 	public static long planNs, planMaxNs, slowPlans, slowerPlans; public static int slowLogMs;
+	/** The phone's budget: a list's cost, smoothed over the last twenty or so (the first few left out: the code still
+	 *  being compiled). A phone slow enough that lists average over 20 ms (40 ms) plays the brain's fights out fewer times
+	 *  (bot.Look.RUNS: 150, 100 of 300): its lookahead is most of a list in a fight. A PC averages 2-3 ms: never. */
+	static double emaMs = -1; static final int RUNS0 = pebxel.bot.Look.RUNS;
+	private static void budget(long dn) {
+		if (plans <= 5) return;
+		double ms = dn / 1e6; emaMs = emaMs < 0 ? ms : emaMs * 0.95 + ms * 0.05;
+		int want = emaMs > 40 ? Math.min(RUNS0, 100) : emaMs > 20 ? Math.min(RUNS0, 150) : RUNS0;
+		if (emaMs < 12 && pebxel.bot.Look.RUNS < RUNS0) want = RUNS0;   // (back to the full count once it's quick again)
+		else if (want > pebxel.bot.Look.RUNS) want = pebxel.bot.Look.RUNS;   // (between the marks: as it is)
+		if (want != pebxel.bot.Look.RUNS) { System.out.println("pebxel: lists average " + Math.round(emaMs) + " ms: the lookahead plays fights out " + want + " times"); pebxel.bot.Look.RUNS = want; }
+	}
 	/** WatchSession (and the tests' watch): a list due when the hero is ready is made after the frame has been sent
 	 *  (idle), not before it: the frame that shows him arrive goes out at once, the list a frame later. A press still
 	 *  makes the list there and then, as it must. */

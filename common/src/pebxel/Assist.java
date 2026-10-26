@@ -293,6 +293,7 @@ public final class Assist {
 			// a blow chosen (an attack, a throw or zap at someone): a fight, never a pass over what lies about, nor over the
 			// entries cycled past on the way to it (Thomas: "combat caused us to ignore pickups")
 			if ((t.kind == ENEMY && t.action == null) || (t.kind == USE && t.cell >= 0 && t.cell != p && Actor.findChar(t.cell) != null)) { strikeAt = Actor.now(); strikePos = p; }
+			AsIntent.chose(t, planA);   // (agent DS: his way and his liking, for the entries after plan A)
 			if (t.same(planA)) return;
 			resumeCell = -1;
 			mindFloor = null;   // (the mind is read afresh from here: a reading from before the choice took the walk the player chose for one towards another objective)
@@ -335,7 +336,7 @@ public final class Assist {
 
 	static void pass(Target e, int went, int from) {
 		Level l = Dungeon.level; Hero h = Dungeon.hero;
-		AsObey.passed(e, went, from);
+		AsObey.passed(e, went, from); AsIntent.skipped(e);
 		if (e.kind == USE && e.item != null) decline(e.item.getClass(), e.action);
 		if (e.kind == WAIT && REST_ACT.equals(e.action)) decline(null, REST_ACT);
 		if (e.kind == WAIT && e.why.startsWith("hold") && went != from) holdOff = true;   // (walked off instead of holding: the player's call)
@@ -350,7 +351,7 @@ public final class Assist {
 			if (e.kind == PICKUP && keyAt(o)) demoted.put(o, Actor.now() + DEMOTE);   // (a key opens a locked room: back a while, never gone for the floor)
 			else if (e.kind == PICKUP) skippedHeaps.add(o);
 			else if (l.map[o] == Terrain.HIGH_GRASS) { grassSkip = true; grassKey = h.exp + h.lvl * 101; }   // (Pebble PD: grass skipped till a kill)
-			else demoted.put(o, Actor.now() + DEMOTE);
+			else demoted.put(o, Actor.now() + DEMOTE * AsIntent.demoteMult(o));   // (passed over again: longer)
 			if (goal == o) goal = -1;
 		}
 	}
@@ -378,7 +379,7 @@ public final class Assist {
 			Hero h = Dungeon.hero; Level l = Dungeon.level; if (h == null || l == null || cell < 0) return;
 			int dx = l.cellToPoint(cell).x - l.cellToPoint(h.pos).x, dy = l.cellToPoint(cell).y - l.cellToPoint(h.pos).y;
 			if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-			ovrC = cell; ovrObj = false; ovrDir = pang(dx, dy); goal = -1; resumeCell = -1;
+			ovrC = cell; ovrObj = false; ovrDir = pang(dx, dy); goal = -1; resumeCell = -1; AsIntent.tapped(cell, h.pos);
 		} catch (Throwable e) { lastError = e; }
 	}
 
@@ -397,7 +398,7 @@ public final class Assist {
 	public static void newTurn() { }
 
 	/** Forget everything (a new game). */
-	public static void reset() { floor = null; mindFloor = null; last = new ArrayList<>(); }
+	public static void reset() { floor = null; mindFloor = null; last = new ArrayList<>(); AsIntent.reset(); }
 
 	/** Do it, as the game would on a tap / item use. Returns false when nothing could be done. Never throws. */
 	public static boolean act(Target t) { return act(t, false); }
@@ -869,6 +870,7 @@ public final class Assist {
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
 		mind();
+		AsIntent.rank(out);   // (agent DS: the entries after plan A as this player's likely next moves)
 		planned.values().removeIf(t -> t < Actor.now());
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
 		if (mode() != 0) AsEyes.stepwise(out);   // (ST: in an eye's sight a walk goes a step at a time)
@@ -1630,10 +1632,12 @@ public final class Assist {
 			for (int c = 0; c < LEN; c++) {
 				int sd = dist[c]; if (sd < 1 || sd >= INF || off(c, wd) > CONE || bad.containsKey(c)) continue;
 				Heap hh = seenHeap(c); Char ch = seenChar(c);
-				int w = (hh != null && heapOk(hh)) || (ch instanceof NPC && L.heroFOV[c]) ? 3 : c == L.exit() || unseenBy(c) || (L.map[c] == Terrain.LOCKED_DOOR && Notes.keyCount(new IronKey(Dungeon.depth)) > 0) ? 4 : 0;
+				int w = (hh != null && heapOk(hh)) || (ch instanceof NPC && L.heroFOV[c]) ? 3 : c == L.exit() || unseenBy(c) || (L.map[c] == Terrain.LOCKED_DOOR && Notes.keyCount(new IronKey(Dungeon.depth)) > 0) ? 4
+						: known[c] && (L.map[c] == Terrain.DOOR || L.map[c] == Terrain.OPEN_DOOR) && sd > 1 ? 5 : 0;   // (DS: a door that way, been through or not)
 				if (w > 0 && sd * w < ns) { ns = sd * w; nt = c; }
 			}
-			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(0, t); } ovrC = WAY; }
+			// (Thomas: the bot's plan A first, his way on as plan B till he takes it: then it leads, "your choice")
+			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(AsIntent.ON ? Math.min(1, out.size()) : 0, t); } ovrC = WAY; }
 			wayOn = -1;
 		}
 		// the interrupted walk, taken up again (30 turns), the fight first
