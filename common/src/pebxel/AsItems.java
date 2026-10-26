@@ -525,7 +525,8 @@ final class AsItems {
 	 *  goes off at once: any group. */
 	static Target bombs() {
 		Item best = null; int bc = -1, bn = 0;
-		for (Item i : H.belongings.backpack) {
+		boolean spend = Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null && AsEconomy.bombSpendOk();   // (the climb's are AsAscent's; going down, emergencies only: AsEconomy)
+		if (spend) for (Item i : H.belongings.backpack) {
 			if (!(i instanceof Bomb) || i instanceof Noisemaker || i instanceof RegrowthBomb || i instanceof WoollyBomb || i instanceof SmokeBomb) continue;
 			if (!ok(i, "LIGHTTHROW")) continue;
 			int r = bombRange(i); if (i instanceof ShrapnelBomb) continue;   // (its 8 cells in sight: it hits the hero too, almost always)
@@ -812,8 +813,7 @@ final class AsItems {
 			Item fb = wand(WandOfFireblast.class); if (fb != null && fireOk()) return use(fb, zapAct(fb), aim, "barricade: burn it");
 			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, aim, "barricade: burn it");
 		}
-		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd >= 3) return use(i, "LIGHTTHROW", aim, "barricade: blow it up");
-		return null;
+		return null;   // (no plain Bomb on a barricade: bombs are kept for the climb, AsEconomy.bombSpendOk)
 	}
 
 	/** Telekinetic Grab: a prize in sight the hero can't walk to (across water with piranhas, a chasm, fire). */

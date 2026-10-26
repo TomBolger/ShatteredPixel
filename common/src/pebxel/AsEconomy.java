@@ -53,7 +53,7 @@ import pebxel.Brain.Role;
  * Only what the player sees: known items, visible characters, the shopkeeper's warning (he yells it).
  * AS_ECON=0 turns the suggestions off (the Rules rows have their own switches).
  */
-final class AsEconomy {
+public final class AsEconomy {
 	private AsEconomy() {}
 
 	static final boolean ON = Assist.opt("ECON", true);
@@ -202,17 +202,55 @@ final class AsEconomy {
 	// bombs kept for the climb
 	// =============================================================================================================
 
-	static final int BOMBKEEP = Assist.optInt("BOMBKEEP", 40);   // P(death) in percent (or health below it) that spends one on the way down
+	static final int BOMBKEEP = Assist.optInt("BOMBKEEP", 10);   // P(death) in percent that spends one on the way down (agent AS2: about 0.1)
 
-	/** Rules: a bomb thrown on the way down that isn't an emergency (strategy-v4 rule 7: on the climb they do 30-90 past
-	 *  the multiplied armour; spend them going down only on a boss or a fight that could kill). */
+	/** May a bomb be spent now on the way down? A boss near, a fight the model sees lost (P(death) 10%+), or dying
+	 *  (strategy-v4 rule 7: on the climb they do 30-90 past its multiplied armour; AsAscent.bomb throws them there). */
+	public static boolean bombSpendOk() {
+		return AsItems.bossNear || AsItems.dying || AsItems.pDeath * 100 >= BOMBKEEP;
+	}
+
+	/** Rules: a bomb thrown on the way down that isn't an emergency (the hands' and the skills' throws alike). */
 	static boolean bombVeto(Cand c) {
 		Target t = c.t;
 		if (t == null || t.kind != Assist.USE || !(t.item instanceof Bomb) || !"LIGHTTHROW".equals(t.action)) return false;
-		Hero h = Dungeon.hero;
-		if (h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return false;
-		if (AsItems.bossNear || AsItems.dying || AsItems.pDeath * 100 >= BOMBKEEP || h.HP * 100 < h.HT * BOMBKEEP) return false;
-		return true;
+		if (Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return false;
+		return !bombSpendOk();
+	}
+
+	// =============================================================================================================
+	// the climb's reserve (agent AS2): what's kept for the climb out with the Amulet
+	// =============================================================================================================
+
+	static final int KEEPFROM = Assist.optInt("KEEPFROM", 21);   // the depth from which the reserve is held (the Halls: the climb's start is near)
+
+	/** How many of this kind the climb wants kept (0: none): 2 known Healing, 1 escape (Teleportation or
+	 *  Invisibility, together), every bomb. For the brain's Budget and the item rules. */
+	public static int climbReserve(Item i) {
+		if (i instanceof PotionOfHealing) return 2;
+		if (i instanceof ScrollOfTeleportation || i instanceof PotionOfInvisibility) return 1;
+		if (i instanceof Bomb) return 99;
+		return 0;
+	}
+	/** Held now of what i's reserve counts (known only; the escapes counted together). */
+	static int held(Item i) {
+		Hero h = Dungeon.hero; int n = 0;
+		for (Item o : h.belongings) {
+			boolean same = i instanceof PotionOfHealing ? o instanceof PotionOfHealing : (i instanceof ScrollOfTeleportation || i instanceof PotionOfInvisibility) ? (o instanceof ScrollOfTeleportation || o instanceof PotionOfInvisibility) : o.getClass() == i.getClass();
+			if (same && Assist.known(o)) n += o.quantity();
+		}
+		return n;
+	}
+	/** Rules: from the Halls on, the climb's Healing and escape not spent when it isn't an emergency (no foe beside
+	 *  the hero and a third of health or more; dying is always an emergency). */
+	static boolean reserveVeto(Cand c) {
+		Target t = c.t; Hero h = Dungeon.hero;
+		if (t == null || t.kind != Assist.USE || t.item == null || Dungeon.depth < KEEPFROM) return false;
+		if (h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return false;   // (on the climb: what it's for)
+		if (!(c.role == Role.HEAL || c.role == Role.ESCAPE)) return false;
+		int keep = climbReserve(t.item); if (keep <= 0 || held(t.item) > keep) return false;
+		boolean adj = false; for (Mob m : Dungeon.level.mobs) if (m.alignment == Char.Alignment.ENEMY && m.isAlive() && d(m.pos, h.pos) <= 1 && Dungeon.level.heroFOV[m.pos]) adj = true;
+		return !adj && h.HP * 3 >= h.HT && !AsItems.dying;
 	}
 
 	static Wand staffWand(MagesStaff st) { Object w = Assist.field(st, "wand"); return w instanceof Wand ? (Wand) w : null; }

@@ -120,6 +120,8 @@ final class Rules {
 		veto("infusion: the upgrade kept for the pot", AsEconomy::upgradeVeto),
 		// strategy-v4 rule 7: bombs do 30-90 on the climb past its multiplied armour; on the way down, emergencies only
 		veto("bombs: kept for the climb", AsEconomy::bombVeto),
+		// agent AS2: the climb starts with 2 Healing and an escape; from the Halls on they're kept unless it's an emergency
+		veto("climb: the reserve kept", AsEconomy::reserveVeto),
 	};
 
 	// =============================================================================================================
