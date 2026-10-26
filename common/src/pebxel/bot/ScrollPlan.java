@@ -48,6 +48,7 @@ public final class ScrollPlan {
 	static final int HOR = (int) Tune.get("UPHOR", 12), WMAX = (int) Tune.get("UPWMAX", 4);
 	static final double SHARE = Tune.get("UPSHARE", 50) / 100, SOUR = Tune.get("UPSOUR", 75) / 100, POSR = Tune.get("UPPOSR", 50) / 100;
 	static final double FIND = Tune.get("UPFIND", 100) / 100, HOLDM = Tune.get("UPHOLDM", 0) / 1000, CHYST = Tune.get("UPCHYST", 10) / 1000;
+	static final int HOLDMIN = (int) Tune.get("UPHOLDMIN", 1);   // (the first floor a scroll may be held on)
 	static final double UNK = Tune.get("UPUNK", 40) / 100;   // (an unknown piece's level counted this much below its shown +0: a third are cursed, -1..-3)
 	public static final boolean HOLD = Tune.on("UPHOLDON", true), WPLAN = Tune.on("UPWPLAN", true);
 	static final boolean DBG = Tune.on("UPDBG", false);
@@ -131,7 +132,7 @@ public final class ScrollPlan {
 		int kh = inHand(h);
 		long key = 1469598103934665603L;
 		key = (key ^ Dungeon.depth) * 1099511628211L; key = (key ^ h.STR()) * 1099511628211L; key = (key ^ kh) * 1099511628211L; key = (key ^ seen) * 1099511628211L;
-		for (Item i : h.belongings) if (i instanceof Armor || i instanceof KindOfWeapon) { key = (key ^ System.identityHashCode(i)) * 1099511628211L; key = (key ^ (HeroView.visLevel(i) * 31 + (i.isEquipped(h) ? 7 : 0) + (i.cursedKnown ? 3 : 0) + (i.levelKnown ? 1 : 0))) * 1099511628211L; }
+		for (Item i : h.belongings) if (i instanceof Armor || i instanceof KindOfWeapon) { key = (key ^ i.getClass().getName().hashCode()) * 1099511628211L; /* (no identity hashes: hashing numbers an object, and the game own numbers would shift) */ key = (key ^ (HeroView.visLevel(i) * 31 + (i.isEquipped(h) ? 7 : 0) + (i.cursedKnown ? 3 : 0) + (i.levelKnown ? 1 : 0))) * 1099511628211L; }
 		if (ctx != null && ctx.h == h && ctx.key == key) return ctx;
 		Item oldA = ctx != null && ctx.h == h ? ctx.cA : null, oldW = ctx != null && ctx.h == h ? ctx.cW : null;
 		templates();
@@ -152,7 +153,10 @@ public final class ScrollPlan {
 			c.wpnB[k] = w; c.wpnL[k] = w == null ? 0 : (int) Math.round(HeroView.visLevel(w) + (c.wSlot ? c.shW * (Math.max(0, kh - 1) + c.m[k]) : 0));
 		}
 		c.base = new double[c.K];
-		for (int k = 0; k < c.K; k++) c.base[k] = load(c, k, c.armB[k], c.armL[k], c.wpnB[k], c.wpnL[k]);
+		StringBuilder db = DBG ? new StringBuilder("    UPLAN base d" + c.d0 + " load/turns") : null;
+		for (int k = 0; k < c.K; k++) { c.memo.clear(); c.base[k] = load(c, k, c.armB[k], c.armL[k], c.wpnB[k], c.wpnL[k]); if (db != null) db.append(String.format(Locale.ROOT, " %.2f/%.0f", c.base[k], lastTurns)); }
+		c.memo.clear();
+		if (db != null) System.out.println(db);
 		// the committed pieces (which one the scrolls go into), then the base trajectory again with them
 		if (c.aSlot || a == null) c.cA = commit(c, true, oldA);
 		if (c.wSlot) c.cW = WPLAN ? commit(c, false, oldW) : w;
@@ -170,7 +174,7 @@ public final class ScrollPlan {
 		long key = ((((long) k * 64 + id(c, a)) * 256 + al + 64) * 64 + id(c, w)) * 256 + wl + 64;
 		Double v = c.memo.get(key); if (v != null) return v;
 		Hero h = c.h; int d = Math.min(26, c.d0 + k);
-		double load;
+		double load, turns = 0;
 		try {
 			Fighter me = HeroView.of(h, w, a, c.str[k], wl, al, k, Ench.of(w), Ench.of(a));
 			me.hp = me.ht; me.heals = 0;
@@ -178,20 +182,21 @@ public final class ScrollPlan {
 			load = 0;
 			if (d % 5 == 0 && d <= 25) {
 				Fighter b = MobTable.fighter(MobTable.boss(d));
-				if (b != null) { if (zap > 0) b.hp = Math.max(1, (int) (b.hp - 3 * zap)); double x = FightModel.duelCost(me, b) / me.ht; load += 0.45 + BOSSK * x * x; }
+				if (b != null) { if (zap > 0) b.hp = Math.max(1, (int) (b.hp - 3 * zap)); double x = FightModel.duelCost(me, b) / me.ht; load += SQ ? 0.45 + BOSSK * x * x : BOSSK * Math.min(x, 5); }
 			} else {
 				String[] ks = MobTable.kinds(d); int nf = 6 + d % 5;
 				for (String kd : ks) {
 					Fighter f = MobTable.fighter(kd); if (f == null) continue;
 					if (zap > 0) f.hp = Math.max(1, (int) (f.hp - zap));
 					double x = FightModel.duelCost(me, f) / me.ht;
-					load += (double) nf / ks.length * x * x;
-					if (TIME > 0) load += TIME * nf / ks.length * Math.min(200, (f.hp + f.shield) / Math.max(0.05, FightModel.dps(me, f)));
+					load += (double) nf / ks.length * (SQ ? x * x : Math.min(x, 3));
+					double tt = nf / (double) ks.length * Math.min(200, (f.hp + f.shield) / Math.max(0.05, FightModel.dps(me, f)));
+					turns += tt; load += TIME * tt;
 				}
 			}
 		} catch (Throwable e) { load = 1; }
 		load = Math.min(load, 20);
-		c.memo.put(key, load);
+		c.memo.put(key, load); lastTurns = turns;
 		return load;
 	}
 	/** A floor's log-survival with this gear: anchored (ANCHOR) on the floor's death rate as the bot plays it now (SEMP,
@@ -201,11 +206,13 @@ public final class ScrollPlan {
 		double L = load(c, k, a, al, w, wl);
 		if (!ANCHOR || c.base == null) return -(HZ0 + HZK * L);
 		int d = Math.max(1, Math.min(25, c.d0 + k));
-		double hz = (1 - SEMP[d - 1]) * Math.pow(Math.max(1e-3, L) / Math.max(1e-3, c.base[k]), GAM);
+		double hz = (1 - SEMP[d - 1]) * Math.pow((L + D0) / (c.base[k] + D0), GAM);
 		return Math.log(1 - Math.min(0.9, hz));
 	}
-	static final boolean ANCHOR = Tune.on("UPANCHOR", true);
-	static final double GAM = Tune.get("UPGAM", 100) / 100, BOSSK = Tune.get("UPBOSSK", 30) / 100, TIME = Tune.get("UPTIME", 0) / 1000;
+	static final boolean ANCHOR = Tune.on("UPANCHOR", true), SQ = Tune.on("UPSQ", false);
+	static final double D0 = Tune.get("UPD0", 20) / 100;   // (the damping: a floor's health lost, in whole bars, added to both sides)
+	static double lastTurns;
+	static final double GAM = Tune.get("UPGAM", 100) / 100, BOSSK = Tune.get("UPBOSSK", 100) / 100, TIME = Tune.get("UPTIME", 0) / 1000;
 	/** Each floor's survival as the bot plays now (MD-base2 and HE-final honest games, 192; the deep floors from the full
 	 *  games, a little lower): the anchor. */
 	static final double[] SEMP = { 0.95, 0.93, 0.90, 0.90, 0.83, 0.91, 0.87, 0.85, 0.85, 0.86,
@@ -279,6 +286,9 @@ public final class ScrollPlan {
 			for (int T = tp + 1; T <= 5; T++) { double pt = (pFloor(arm, f, T) - pFloor(arm, f, T + 1)) * half; if (pt > 0) scn.add(new double[]{ k, T, none * pt }); }
 			none *= 1 - pAny;
 		}
+		// the Warrior's seal takes the first upgrade of the armour it is on and carries it to the next (Armor.upgrade,
+		// BrokenSeal.affixToArmor): that scroll isn't lost when the armour changes
+		boolean seal = arm && p == c.a0 && ((Armor) p).checkSeal() != null && ((Armor) p).checkSeal().level() == 0;
 		int Wn = HOLD && arrivals ? WMAX : 0;
 		for (int W = 0; W <= Wn && W < c.K; W++) {   // (W 0: now)
 			double e = 0;
@@ -295,7 +305,7 @@ public final class ScrollPlan {
 				double lD = lv(p) + sh * (Math.max(0, c.kh - 1) + c.m[D]);
 				for (int k = D; k < c.K; k++) {
 					old[k] = lsP(c, arm, p, k, sh, 1);
-					double nl = (held ? 1 : 0) + sh * (c.m[k] - c.m[D]) + (k > D ? 0 : 0);
+					double nl = (held || seal ? 1 : 0) + sh * (c.m[k] - c.m[D]);
 					neu[k] = Math.max(lsS(c, arm, k, p, lD + (held ? 0 : 1)), lsS(c, arm, k, nw, nl));
 				}
 				e += s[2] * (pre + alive * Math.max(floors(old, D), floors(neu, D)));
@@ -333,7 +343,7 @@ public final class ScrollPlan {
 		Item t;
 		String nm = aBest ? "the armour" : "the weapon";
 		Item p = aBest ? c.cA : c.cW;
-		if (HOLD && vh.hold > now + HOLDM && c.d0 < 25) {
+		if (HOLD && vh.hold > now + HOLDM && c.d0 < 25 && c.d0 >= HOLDMIN && !Budget.climbing(h)) {   // (the climb: nothing new is found on the way up)
 			t = null;
 			why = String.format(Locale.ROOT, "holding the upgrade: %s likely by floor %d (%.0f%%)", tierName(hArm, vh.holdT), c.d0 + vh.holdW, 100 * vh.holdP);
 		} else {
