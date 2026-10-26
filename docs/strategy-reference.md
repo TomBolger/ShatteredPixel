@@ -53,9 +53,16 @@ This is a reference for programmers writing `AssistBot` / `Assist` (the planner)
   * Ascending to the depth-1 surface gives the "happy end" win with a higher score (`S/levels/SewerLevel.java:146-170`).
   * Ascension adds stacks: enemies get stat multipliers of x10 for rats down to x1.1 for scorpios (`S/actors/buffs/AscensionChallenge.java:43-77`).
   * At 4+ stacks enemies move fast, at 6+ the hero is slowed, and at 8+ the hero takes damage over time.
+    * (v4 correction, see strategy-v4.md) Only enemies that are not hunting or fleeing move at 2× speed.
+    * Each new non-boss floor adds 2 stacks; each boosted kill removes 1 (½ for ghouls and rippers); stacks never go below 0.
+    * At 2+ stacks every foe more than 8 tiles away is called to you.
+    * The multiplier applies to enemy HP, damage, accuracy, evasion and armour (`AscensionChallenge.java:128-197,251-259`, `Char.java:390,453,653,669`).
   * Respawns become very fast (`S/levels/Level.java:752-761`).
   * You cannot teleport between floors while holding the Amulet (`S/Dungeon.java:455-460`).
-* **Bot rule: pick up the Amulet, choose Exit.** Do not ascend unless score matters.
+* ~~Bot rule: pick up the Amulet, choose Exit. Do not ascend unless score matters.~~ **(v4 correction, see strategy-v4.md)**
+  * **Our win is the full ascent to the surface (Thomas).** Choose "I'm not done yet", then "Continue!" at the depth-25 stairs.
+  * Once ascending, END THE GAME is gone (`S/items/Amulet.java:51-58`).
+  * Climb protocol: strategy-v4.md §3.
 
 ### 1.3 The resource arc (fixed drops)
 
@@ -93,6 +100,7 @@ A missing STR point is costly:
   
   Sources: `S/actors/hero/Talent.java:436`, `S/actors/hero/Hero.java:393-403`.
 * **Monsters give 0 XP once the hero's level exceeds the monster's `maxLvl`** (`S/actors/mobs/Mob.java:988`). Grinding is pointless; keep moving down.
+  * (v4 correction, see strategy-v4.md) During the ascent, each boosted kill gives 10 × spawning weight XP until level 30 (`Mob.java:993-997`).
 
 ---
 
@@ -418,6 +426,10 @@ Bot policy ☐: keep the Waterskin topped up; drink it in emergencies or before 
   5. Take the exit.
 * Use the time limit honestly: monsters respawn about every 50 turns up to the floor's limit (`S/levels/Level.java:149,752-767`). Dawdling costs food and adds fights.
 * The **Demon Halls (21-24)** are an exception ☐: the community advice is "Demon Halls are usually best rushed"; "save Magic Mapping scrolls for them". Halls loot matters less than survival.
+  * **(v4 correction, see strategy-v4.md)** Don't rush them.
+    * Floors 21-24 carry the 5th region's 3 SoU, 2 PoS, a stylus and food (`S/Dungeon.java:529-563`), and the climb needs that strength.
+    * Explore them, using Magic Mapping to save turns.
+    * Spawners left alive also spawn a ripper every ≤20 turns during the ascent (`DemonSpawner.java:90-92`).
   * Even so, **kill the demon spawners** if you can. Each one alive when you fight Yog adds Ripper Demons to Yog's summon pool, instead of weak larvae (`S/actors/mobs/YogDzewa.java:129-149`). Each also drops a Healing potion (`DemonSpawner.java:54`).
 * Pick up everything that isn't a known hazard. The Velvet Pouch (seeds/stones) and other bags extend the pack.
 * Watch the **level feeling** messages:
@@ -472,7 +484,7 @@ Bot policy ☐: keep the Waterskin topped up; drink it in emergencies or before 
 |---|---|---|
 | T1 | Hearty Meal (eating heals 4/6 HP at ≤33% HP); Veteran's Intuition (ID weapons faster, armor on equip at +2); Provoked Anger (+3/+5 damage after a shield breaks); Iron Will (+1/+2 seal shield) | **Iron Will 2, Hearty Meal 2, Provoked Anger 1** |
 | T2 | Iron Stomach (eat in 1 turn, 75/100% damage resist while eating); Liquid Willpower (6.5/10% max-HP shield per potion); Runic Transference; Lethal Momentum (a kill costs 0 time at 67/100%); Improvised Projectiles (throw a non-weapon to blind 2/3 turns, 50-turn cooldown) | **Lethal Momentum 2, Iron Stomach 2, Liquid Willpower 2** |
-| T3 | Hold Fast (waiting with the seal gives 1-2/2-4/3-6 armor and slows shield/combo decay 50/75/100%, ✔ `S/actors/buffs/HoldFast.java:72-82`; ⚠ CL3:433 says 33/67/100, the code says 50/75/100); Strongman (+8/13/18% STR, rounded down) | **Strongman 3** first (it unlocks heavier gear sooner), then Hold Fast |
+| T3 | Hold Fast (waiting with the seal gives 1-2/2-4/3-6 armor and slows shield/combo decay 50/75/100%, ✔ `S/actors/buffs/HoldFast.java:72-82`; ⚠ CL3:433 says 33/67/100, the code says 50/75/100; (v4 correction, see strategy-v4.md) it works only while the seal's shield buff is on, and its armor bonus is capped at 6, `Hero.java:1507-1511`); Strongman (+8/13/18% STR, rounded down) | **Strongman 3** first (it unlocks heavier gear sooner), then Hold Fast |
 | Berserker | Endless Rage (max rage 116/133/150%); Deathless Fury (auto-berserk on lethal damage at 100% rage, cooldown 3/2/1 levels); Enraged Catalyst | **Deathless Fury 3** (a passive death save) |
 | Gladiator | Cleave (combo lasts 30/45/60 turns after a kill); Lethal Defense; Enhanced Combo | Cleave, Enhanced Combo |
 
@@ -1097,7 +1109,7 @@ Effects come from the source; usage advice is ☐ unless cited. "ID" = how to id
 
 | Stone | Effect | Bot use ☐ |
 |---|---|---|
-| Intuition | Guess an item's type (correct = identified) | Use on the most valuable unknown potion or scroll |
+| Intuition | Guess an item's type (correct = identified). (v4 correction, see strategy-v4.md) Since v2.5 every stone has 2 uses, even after a wrong guess (CL2:120). | Use on the most valuable unknown potion or scroll |
 | Detect Magic | Is an item cursed, upgraded, enchanted? | Before equipping an unknown |
 | Augmentation | Weapon: speed↔damage; armor: defence↔evasion | Damage on slow and heavy weapons ☐ |
 | Enchantment | Random enchantment on a weapon or armor | Main gear |
@@ -1162,7 +1174,10 @@ Scaling is per effective level (+1 at +0); a cursed ring is ≤0 (`Ring.java:389
 
 ✔ `S/items/artifacts/*`
 
-The generated pool (`Generator.java:560-576`): the Cloak, Rose and Tome have 0 weight because they come from class or quest. Artifacts level up by use, not by SoU (usually). 30% cursed.
+The generated pool (`Generator.java:560-576`): ~~the Cloak, Rose and Tome have 0 weight because they come from class or quest~~.
+* **(v4 correction, see strategy-v4.md)** Only the Cloak and Tome (class items) have weight 0.
+* The **Dried Rose has weight 1**: 11 artifacts can be generated, each at most once.
+* Once all are out, an artifact drop becomes a ring (`Generator.java:575,706-710`). Artifacts level up by use, not by SoU (usually). 30% cursed.
 
 | Artifact | Effect | Use ☐ |
 |---|---|---|
@@ -1204,6 +1219,9 @@ The generated pool (`Generator.java:560-576`): the Cloak, Rose and Tome have 0 w
 ### 6.8 Bombs, thrown weapons, darts
 
 * **Bomb:** damages everything adjacent and destroys some terrain and items (`M/items/items.properties` `bomb.desc`). Shops sell bombs.
+  * (v4 correction, see strategy-v4.md) Since v2.5 explosions never destroy unique, upgradable or equipment items (`S/items/Heap.java:287`).
+  * Damage is 4+d to 12+3d minus armour, with no falloff (`Bomb.java:194`), and alchemy bombs cover 5×5.
+  * During the ascent d = 26, so 30-90 damage: save bombs for the climb.
 * **Custom bombs** (crafted): Arcane (Goo-like magic blast in 2 tiles), Fire, Frost, Flashbang (stun 10 turns), Holy (+50% vs undead and demons), Noisemaker (a lure), Smoke (shrouding fog), Regrowth (heals allies), Shrapnel (huge range: hide behind cover), Woolly (sheep wall).
 * **Thrown weapons (v3.2 overhaul)** ✔ `CL3` / steamdb v3.2.0:
   * They spawn in **sets of 3**. An SoU upgrades the whole set and fully repairs it.
@@ -1253,6 +1271,15 @@ The generated pool (`Generator.java:560-576`): the Cloak, Rose and Tome have 0 w
 * Mossy Clump ("still far and away the strongest", CL3:611: more grass/water floors).
 
 Avoid the Mimic Tooth and Cracked Spyglass for a bot: they mean more mimics and hard-to-see items.
+
+**(v4 correction, see strategy-v4.md §6)** The ranking above predates the numbers.
+* **Upgrade costs:** most trinkets cost 6/8/10 energy to +3; Mossy Clump, Parchment Scrap and Wondrous Resin cost 10/15/20.
+* **Parchment Scrap at +3:** random weapons, armour and thrown sets are never cursed and always enchanted (`ParchmentScrap.java:52-84`, `Weapon.java:442-446`).
+* **Salt Cube at +3:** hunger ×0.5, regen ×0.6. That is net less food per HP regenerated.
+* **Cracked Spyglass:** its extra items are ordinary heaps drawn at 10% alpha (`RegularLevel.java:681-688`), so it isn't a downside for a bot (needs a ruling from Thomas).
+* **Mossy Clump:** grassy-floor dew halved in v2.5; floors are ⅓ grass, ⅔ water since v3.0.
+* **Avoid:** Shard of Oblivion (it turns off passive ID), Rat Skull, Vial of Blood, Exotic Crystals, Sundial and Eye of Newt.
+* **Bot order:** Parchment Scrap (if 25-45 energy is reachable), Salt Cube, Spyglass, Clover, Mossy Clump.
 
 ---
 
@@ -1384,7 +1411,7 @@ Stats ✔ from `S/actors/mobs/<Name>.java`. "acc" = attackSkill, "def" = defense
 |---|---|---|
 | Shop | 2.7 | Don't hurt the shopkeeper |
 | Laboratory | Alchemy pot plus 5 energy plus guide pages | |
-| Armory, Treasury, Storage, Library, Runestone, Garden | Free loot (locked rooms need a key from the floor) | |
+| Armory, Treasury, Storage, Library, Runestone, Garden | Free loot (locked rooms need a key from the floor). (v4 correction, see strategy-v4.md) Since v3.3 gardens (and magic wells) are always locked behind the floor's iron key (`GardenRoom.java:42-43`, `MagicWellRoom.java:59-60`). | |
 | **Traps room** | A corridor of traps to a prize (67% item, uncursed, one floor-set higher) (`TrapsRoom.java:129-151`) | Levitation, or throw items to trigger, or search; ⚠ don't walk it blind |
 | **Sentry room** | Sentries zap a dangerous path to the prize (50%, uncursed) (`SentryRoom.java:72-177`) | Invisibility / out-of-sight path |
 | **Pool room** | The prize under deep water with **piranhas** (33%, uncursed) (`PoolRoom.java:106-113`) | Haste, invisibility, or skip |
@@ -1395,7 +1422,7 @@ Stats ✔ from `S/actors/mobs/<Name>.java`. "acc" = attackSkill, "def" = defense
 | **Statue room** | An animated statue guarding its weapon | 7.6 |
 | **Crypt** | Remains plus a **cursed armor** (with a free upgrade) unless glyphed (`CryptRoom.java:76-90`) | Remove Curse ready |
 | **Sacrifice room** | An altar: kill enemies on it for a prize (cursed unless glyphed) | |
-| **Magic well** | Water of Health (heal, feed, **uncurse worn items**, `S/actors/blobs/WaterOfHealth.java:58-65`) or Water of Awareness (identify) | Health: save it for an emergency or before leaving. "Throwing the waterskin into it fills it" (Steam guide, unverified). |
+| **Magic well** | Water of Health (heal, feed, **uncurse worn items**, `S/actors/blobs/WaterOfHealth.java:58-65`) or Water of Awareness (identify). (v4 correction, see strategy-v4.md) Locked behind an iron key since v3.3. | Health: save it for an emergency or before leaving. "Throwing the waterskin into it fills it" (Steam guide, unverified). |
 | **Crystal vault / choice / path** | Crystal doors and keys; a choice of loot; crystal mimics | |
 | **Demon spawner room** (Halls) | The spawner | Kill it |
 | **Secret rooms** (hidden door) | Garden, hoard, honeypot, larder, library, maze, runestone, summoning, well, artillery, chest chasm, laboratory | Found by searching or mapping. ☐ Worth it only when cheap. |
@@ -1484,6 +1511,9 @@ These are ranked by expected impact on a bot that currently dies on floors 3-8. 
     * Do the Blacksmith (single trip, 40 ore, spend favor cheapest-first).
     * **Skip the Imp's vault** for now: all gear stripped, a stealth puzzle, real death.
 19. **Don't waste turns.** No grinding: monsters give 0 XP once you're above their max level (`Mob.java:988`), and respawns about every 50 turns just add fights (`Level.java:149`). Descend when the floor is done. Rush the Halls with Magic Mapping, **but kill the demon spawners**: fewer Rippers at Yog (`YogDzewa.java:129-149`) and Healing drops.
+    * **(v4 correction, see strategy-v4.md)** Explore the Halls rather than rushing them: they hold the region's 3 SoU and 2 PoS.
+    * The pace budget is ~350 turns per regular floor (strategy-v4.md §4).
+    * The win is the ascent (§1.2), so plan the run for the climb.
 20. **Late-boss protocols.**
     * DM-300: fight off the trap tiles; on supercharge run to the pylon, avoiding water and trap tiles; dodge rockfall to the safe cell; Purity for the gas.
     * Dwarf King: kill minions; break the phase-2 barrier by killing all 12 wave minions; expect deferred damage in phase 3.
@@ -1518,6 +1548,12 @@ The source wins in every case.
 | 19 | "Put the seal aside before upgrading armor" | Moot: the seal carries one upgrade only | `M/actors/actors.properties:808` |
 | 20 | The Huntress identifies "all items 1.75x faster" | v3.2+: thrown weapons only (3x, or on use) | talent text; steamdb v3.2.0 |
 | 21 | Goo's drop is the "skeleton key" | Renamed **Worn Key** in v3.3 (the Skeleton Key is now an artifact) | `CL3:17` |
+| 22 | (this file, 1.2) "Choose Exit; don't ascend" | (v4 correction, see strategy-v4.md) Our win is the ascent; END THE GAME is gone once climbing | `Amulet.java:51-58`, `SewerLevel.java:146-170` |
+| 23 | (this file, 6.6) The Dried Rose has 0 generation weight | (v4 correction, see strategy-v4.md) Weight 1; only the Cloak and Tome are 0 | `Generator.java:575` |
+| 24 | "Demon Halls are best rushed" | (v4 correction, see strategy-v4.md) They hold 3 SoU and 2 PoS; spawners also feed the climb | `Dungeon.java:529-563`, `DemonSpawner.java:90-92` |
+| 25 | Gardens and wells are open rooms | (v4 correction, see strategy-v4.md) Locked behind an iron key since v3.3 | `GardenRoom.java:42`, `MagicWellRoom.java:59` |
+| 26 | Bombs destroy items | (v4 correction, see strategy-v4.md) Never equipment, unique or upgradable items (v2.5) | `Heap.java:287` |
+| 27 | Stone of Intuition: one use unless the guess is right | (v4 correction, see strategy-v4.md) Always 2 uses (v2.5) | CL2:120 |
 
 ---
 
