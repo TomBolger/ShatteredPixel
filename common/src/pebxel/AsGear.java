@@ -30,6 +30,7 @@ final class AsGear {
 	static { pebxel.bot.GearValue.armorElsewhere = ON; }
 	static final int FUT = Assist.optInt("ARMFUT", 2);          // (the scrolls still to come counted in the comparison)
 	static final int HYST = Assist.optInt("ARMHYST", 50);       // (hundredths of a block point a new armour must win by)
+	static final int ENCMAX = Assist.optInt("ARMENC", 0);      // (STR points short a piece may be worn at now)
 	static final boolean HOLD1 = Assist.opt("ARMHOLD1", false); // (hold the scrolls while only cloth is worn, till the boss)
 
 	static final boolean DBG = System.getenv("ARMDBG") != null;
@@ -61,25 +62,41 @@ final class AsGear {
 	static Armor commit(Hero h) {
 		Armor cur = h.belongings.armor(), best = cur; double bv = worth(h, cur) + HYST / 100.0;
 		for (Item i : h.belongings.backpack) if (i instanceof Armor) { double v = worth(h, (Armor) i); if (v > bv) { bv = v; best = (Armor) i; } }
+		pebxel.bot.GearValue.keepArmor = best;
 		return best;
 	}
 
-	/** An armour to put on now (the commit piece, when it isn't worn and the worn one can come off), or null. */
+	/** What a piece blocks now, as it would be worn at once: its shown level, the STR it needs now (HE-a1: heavier
+	 *  armour worn 2 STR short in the sewers, evasion / 2.25 and walking / 1.44, cost more sewer deaths than the
+	 *  prison saved). Below 0: not to be worn yet. */
+	static double now(Hero h, Armor a) {
+		if (a == null) return 0;
+		if (a instanceof ClassArmor) return 999;
+		int lv = Math.max(0, HeroView.visLevel(a));
+		int enc = a.STRReq(lv) - h.STR();
+		if (enc > ENCMAX) return -1;
+		double v = block(a.tier, lv);
+		if (enc == 1) v *= 0.75;
+		return v;
+	}
+
+	/** An armour to put on now (the commit piece, once it blocks more than the worn one as it is now), or null. */
 	static Armor wear(Hero h) {
 		if (!ON) return null;
 		Armor cur = h.belongings.armor();
 		if (cur instanceof ClassArmor || (cur != null && cur.cursed && cur.cursedKnown)) return null;
 		Armor c = commit(h);
-		if (DBG) { StringBuilder b = new StringBuilder("    ARMPLAN worn " + (cur == null ? "-" : cur.name() + " " + worth(h, cur)) + " ->"); for (Item i : h.belongings.backpack) if (i instanceof Armor) b.append(' ').append(i.name()).append(' ').append(worth(h, (Armor) i)); System.out.println(b); }
-		return c != null && c != cur ? c : null;
+		if (DBG) { StringBuilder b = new StringBuilder("    ARMPLAN worn " + (cur == null ? "-" : cur.name() + " " + worth(h, cur) + "/" + now(h, cur)) + " ->"); for (Item i : h.belongings.backpack) if (i instanceof Armor) b.append(' ').append(i.name()).append(' ').append(worth(h, (Armor) i)).append('/').append(now(h, (Armor) i)); System.out.println(b); }
+		if (c == null || c == cur) return null;
+		double nc = now(h, c);
+		return nc >= 0 && nc >= now(h, cur) ? c : null;
 	}
 
-	/** The Scroll of Upgrade's target among the armour: the commit piece (worn, or carried while the worn one is a
-	 *  known-cursed one it can't take off), or null to wear it first / to hold. */
+	/** The Scroll of Upgrade's target among the armour: the commit piece, worn or carried (carried: each scroll
+	 *  raises its block and lowers its STR need till it beats the worn one), or null to hold. */
 	static Item upgradeOn(Hero h) {
-		Armor cur = h.belongings.armor(), c = commit(h);
+		Armor c = commit(h);
 		if (c == null) return null;
-		if (c != cur && !(cur != null && cur.cursed && cur.cursedKnown)) return null;   // (put it on first: the swap comes next)
 		if (HOLD1 && c.tier == 1 && !(c instanceof ClassArmor) && !bossNext()) return null;
 		return c;
 	}
