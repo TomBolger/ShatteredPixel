@@ -139,6 +139,50 @@ final class AsBasics {
 		return true;
 	}
 
+	// =============================================================================================================
+	// piranhas (60 honest games to depth 5: 6 of 16 deaths): the plan walked into their water, fled a bite to dry
+	// land out of reach, and walked back in, over and over. Piranhas can't leave the water: from the shore, a blow at
+	// one beside the hero; a way on through the water waits on the shore for the one that's after the hero.
+	// =============================================================================================================
+	static final boolean FISH = opt("BFISH", true);
+	static final int FISHWAIT = optInt("BFISHWAIT", 12);   // turns waited on the shore for one piranha
+	static final Map<Integer, Integer> fishWaited = new HashMap<>(); static float fishLast = -99, fishTurn = -1; static Level fishL;
+
+	static Target piranha(Target planA) {
+		if (!FISH || planA == null) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (fishL != L) { fishL = L; fishWaited.clear(); fishLast = -99; }
+		Mob adj = null, near = null; int nd = INF;
+		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { fishLast = Actor.now();
+			if (adjacent(m.pos, hp)) adj = m; if (distance(m.pos, hp) < nd) { nd = distance(m.pos, hp); near = m; } }
+		if (L.water[hp] || h.rooted) return null;   // (in the water: out of it, Assist's own rules)
+		if (adj != null) return h.HP * 10 >= h.HT * 4 ? new Target(adj.pos, ENEMY, "piranha: strike it from the shore") : null;
+		if (Actor.now() - fishLast > 10 || (planA.kind != GO && planA.kind != PICKUP)) return null;
+		int t = planA.obj >= 0 && planA.obj < L.length() ? planA.obj : planA.cell;
+		if (t < 0 || dist[t] >= INF) return null;
+		// the way there: the last dry cell before the water
+		List<Integer> path = new ArrayList<>(); int c = t;
+		while (c != hp && dist[c] > 0 && dist[c] < INF && path.size() < 200) { path.add(0, c); int b = -1;
+			for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && dist[n] == dist[c] - 1) { b = n; break; } }
+			if (b < 0) break; c = b; }
+		int shore = hp; boolean wet = false;
+		for (int p : path) { if (L.water[p] || (near != null && distance(p, near.pos) <= 2 && shoreCell(p))) { wet = true; break; } shore = p; }   // (the water, or the shore within its reach)
+		if (!wet) return null;
+		int key = near != null ? near.id() : -1;
+		int w = fishWaited.getOrDefault(key, 0);
+		boolean hurt = h.HP * 2 < h.HT;
+		if (w >= (hurt ? FISHWAIT * 5 : FISHWAIT)) return null;   // (it isn't coming: on)
+		if (hurt && !shoreCell(hp)) {   // (hurt: off the shore, the wounds closing, till it goes)
+			if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
+			Target r = new Target(hp, WAIT, "piranha: hurt, wait off the shore"); r.action = WAIT_ACT; return r;
+		}
+		if (shore != hp) return new Target(shore, GO, "piranha: to the shore, for it to come");
+		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
+		Target r = new Target(hp, WAIT, "piranha: wait on the shore for it"); r.action = WAIT_ACT; return r;
+	}
+
+	static boolean shoreCell(int c) { for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && L.water[n]) return true; } return false; }
+
 	/** A missile or a charged attack wand at m, if the way is clear. */
 	static Target rangedAt(Mob m) {
 		Hero h = Dungeon.hero;

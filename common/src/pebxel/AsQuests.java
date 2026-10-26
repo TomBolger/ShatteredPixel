@@ -58,6 +58,7 @@ final class AsQuests {
 			Target b = AsBasics.fightLoop(planA);
 			if (b != null) return b;
 			b = AsBasics.crab(planA);
+			if (b == null) b = AsBasics.piranha(planA);
 			if (b != null) return b;
 			if (!ON) return AsBasics.hurry(planA);
 			remember();
