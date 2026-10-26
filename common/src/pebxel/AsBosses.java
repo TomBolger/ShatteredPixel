@@ -39,7 +39,7 @@ final class AsBosses {
 	// =============================================================================================================
 	// the cells to keep off (worked out once a turn)
 	// =============================================================================================================
-	static boolean[] dz = new boolean[0], soon = new boolean[0]; static boolean dzAny;
+	static boolean[] dz = new boolean[0], soon = new boolean[0], elec = new boolean[0]; static boolean dzAny, elecAny;
 	private static Level dzL; private static float dzAt = -1; private static int dzPos = -1;
 	private static Object tenguState; private static Level stateL;
 
@@ -48,22 +48,22 @@ final class AsBosses {
 		if (!ON) return false;
 		Level l = Dungeon.level; if (l == null || Dungeon.hero == null) return false;
 		if (dzL != l || dzAt != Actor.now() || dzPos != Dungeon.hero.pos || dz.length != l.length()) compute(l);
-		return c >= 0 && c < dz.length && (dz[c] || (SOON && soon[c]));   // (a shocker's ring too, lit every other turn: a walk through it when dark was dodged back out of when lit, for ever)
+		return c >= 0 && c < dz.length && (dz[c] || elec[c] || (SOON && soon[c]));   // (a shocker's ring too, lit every other turn: a walk through it when dark was dodged back out of when lit, for ever)
 	}
 
 	static void compute(Level l) {
 		dzL = l; dzAt = Actor.now(); dzPos = Dungeon.hero.pos;
-		if (dz.length != l.length()) { dz = new boolean[l.length()]; soon = new boolean[l.length()]; } else { Arrays.fill(dz, false); Arrays.fill(soon, false); }
-		dzAny = false;
+		if (dz.length != l.length()) { dz = new boolean[l.length()]; soon = new boolean[l.length()]; elec = new boolean[l.length()]; } else { Arrays.fill(dz, false); Arrays.fill(soon, false); Arrays.fill(elec, false); }
+		dzAny = false; elecAny = false;
 		boolean mine = l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.MiningLevel;
 		if (LEAPS) leaps(l);
 		if (!Dungeon.bossLevel() && !mine) return;
 		rocks(l);   // (falling rocks: DM-300's, the Gnoll Geomancer's)
 		if (mine) return;
 		if (l instanceof PrisonBossLevel) tengu(l);
-		if (l instanceof CavesBossLevel) {   // the electrified floor (traps' tiles and water) while a pylon is lit
+		if (l instanceof CavesBossLevel) {   // the electrified floor (traps' tiles and water) while a pylon is lit (and for good once two are down)
 			Blob e = l.blobs.get(CavesBossLevel.PylonEnergy.class);
-			if (e != null && e.volume > 0 && e.cur != null) for (int c = 0; c < l.length() && c < e.cur.length; c++) if (e.cur[c] > 0) mark(c);
+			if (e != null && e.volume > 0 && e.cur != null) for (int c = 0; c < l.length() && c < e.cur.length; c++) if (e.cur[c] > 0) { elec[c] = true; elecAny = true; }
 		}
 		for (Mob m : new ArrayList<>(l.mobs)) {
 			if (m instanceof DwarfKing) for (DwarfKing.Summoning s : m.buffs(DwarfKing.Summoning.class)) mark(s.getPos());   // (standing on a circle as it finishes: 20-40)
@@ -131,9 +131,11 @@ final class AsBosses {
 	static Target tactics() {
 		if (!ON) return null;
 		int hp = Dungeon.hero.pos, LEN = L.length();
+		if (DBG && (L instanceof PrisonBossLevel || L instanceof CavesBossLevel)) dump();
+		if (PYLON && L instanceof CavesBossLevel) for (Mob m : mobs()) if (m instanceof DM300 && m.isAlive() && ((DM300) m).isSupercharged()) {   // (its own plan dodges: the dodge off the electrified floor and the walk to the pylon over it took turns, for ever)
+			Target t = dm300((DM300) m); if (t != null) return t; }
 		Target dg = dodge(); if (dg != null) return dg;
 		if (!Dungeon.bossLevel()) return null;
-		if (DBG && L instanceof PrisonBossLevel) dump();
 		Target t = null;
 		for (Mob m : mobs()) {
 			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
@@ -149,16 +151,17 @@ final class AsBosses {
 	static Target dodge(int obj) {
 		int hp = Dungeon.hero.pos, LEN = L.length();
 		danger(0);
-		if (dzAny && dz[hp]) {   // a blow coming here: the nearest cell it misses (through the danger, if that's the only way)
+		boolean onElec = elecAny && elec[hp];
+		if ((dzAny && dz[hp]) || onElec) {   // a blow coming here: the nearest cell it misses (through the danger, if that's the only way)
 			// (on the way to plan A's objective when a step or two will do: back and forth through a shocker's sparks
 			// went nowhere, they light every other turn)
 			if (obj < 0) obj = out != null && !out.isEmpty() ? (out.get(0).obj >= 0 ? out.get(0).obj : out.get(0).cell) : -1;
 			if (obj == hp) obj = -1;
 			int best = -1, bk = INF;
-			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
+			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !elec[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
 				int k = (dist[c] == 1 ? (obj >= 0 ? L.distance(c, obj) : 0) : 100 + dist[c] * 8) + (soon[c] ? 4 : 0);   // (out of a shocker's ring, not to its other half)   // (a step at a time: the game's own walk of two might cut through the lit ones)
 				if (k < bk) { bk = k; best = c; } }
-			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
+			if (best >= 0) return new Target(best, GO, onElec && !dz[hp] ? "boss: off the electrified floor" : "boss: out of the blow's way");
 		}
 		return null;
 	}
@@ -289,19 +292,29 @@ final class AsBosses {
 	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
 
 	/** DM-300 supercharged (it sparks, and blows don't hurt it: "the boss can't be hurt"): the lit pylon is what ends
-	 *  it (strategy-reference 4.3): to it and strike it. Pylons never move: one seen is remembered. */
+	 *  it (strategy-reference 4.3): to it and strike it. Pylons never move: one seen is remembered. The electrified
+	 *  floor's sparks fly to the lit pylon (CavesBossLevel.PylonEnergy's DIRECTED_SPARKS): with any of it in sight, the
+	 *  lit one is known. The way there is the cheapest over the floor as it is (6-12 a turn on the electrified cells),
+	 *  kept to from step to step (a dodge off the electrified cells and the walk back over them took turns for ever,
+	 *  the commonest death on depth 15), and the blow struck from a cell off them where there is one. */
 	static Target dm300(DM300 dm) {
 		Hero h = Dungeon.hero; int hp = h.pos;
 		if (pyL != L) { pyL = L; darkSeen.clear(); gone.clear(); wasCharged = false; }
 		for (Mob m : mobs()) if (m instanceof Pylon && L.heroFOV[m.pos] && m.alignment == Char.Alignment.NEUTRAL) darkSeen.put(m.pos, Actor.now());
 		for (int p : CavesBossLevel.pylonPositions) if (p >= 0 && p < L.length() && L.heroFOV[p] && !(Actor.findChar(p) instanceof Pylon)) gone.add(p);
-		if (!dm.isSupercharged() || !dm.isAlive()) { wasCharged = false; return null; }
+		if (!dm.isSupercharged() || !dm.isAlive()) { wasCharged = false; return TRAPS ? dmTraps(dm) : null; }
+		danger(0);
+		boolean sparks = false; for (int c = 0; c < L.length() && !sparks; c++) sparks = elec[c] && L.heroFOV[c];
 		Mob py = null; int bd = INF;
-		for (Mob m : mobs()) if (m instanceof Pylon && m.alignment == Char.Alignment.ENEMY && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos]) && L.distance(m.pos, hp) < bd) { bd = L.distance(m.pos, hp); py = m; }
+		for (Mob m : mobs()) if (m instanceof Pylon && m.alignment == Char.Alignment.ENEMY && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos] || (SPARKS && sparks)) && L.distance(m.pos, hp) < bd) { bd = L.distance(m.pos, hp); py = m; }
 		if (chargeL != L || !wasCharged) { chargeL = L; chargeAt = Actor.now(); aim = -1; }
 		wasCharged = true;
 		if (py != null) {
-			if (L.adjacent(py.pos, hp)) return new Target(py.pos, ENEMY, "boss: strike the lit pylon");
+			if (L.adjacent(py.pos, hp)) {
+				if (elec[hp] && !dz[hp]) for (int k : PathFinder.NEIGHBOURS8) { int n = hp + k;   // (beside it on the electrified floor: a step to a dry cell beside it, once)
+					if (n >= 0 && n < L.length() && L.adjacent(n, py.pos) && !elec[n] && !dz[n] && L.passable[n] && !L.avoid[n] && seenChar(n) == null) return new Target(n, GO, "boss: beside the pylon, off the electrified floor"); }
+				return new Target(py.pos, ENEMY, "boss: strike the lit pylon");
+			}
 			aim = py.pos;
 		} else {   // the lit one not seen: the pylons' places are the arena's (CavesBossLevel.pylonPositions); one not seen dark since the charge began
 			if (aim >= 0 && ((darkSeen.containsKey(aim) && darkSeen.get(aim) >= chargeAt) || gone.contains(aim))) aim = -1;
@@ -311,10 +324,50 @@ final class AsBosses {
 					if (L.distance(p, hp) < ad) { ad = L.distance(p, hp); aim = p; } } }
 		}
 		if (aim < 0) return null;
-		int st = stepTowards(aim);
+		int st = ELECSTEP ? elecStep(aim) : stepTowards(aim);
 		if (st < 0 && py == null) { gone.add(aim); aim = -1; }   // (no way known there, none to explore: another)
 		return st >= 0 ? new Target(st, GO, py != null ? "boss: to the lit pylon" : "boss: find the lit pylon") : null;
 	}
+	static final boolean SPARKS = opt("BSPARKS", true), ELECSTEP = opt("BELECSTEP", true), TRAPS = opt("BTRAPS", true);
+	static final int ELECCOST = optInt("BELEC", 10);   // (a turn on the electrified floor, in steps: 6-12 a turn)
+
+	/** The first step of the cheapest known way to beside c: a turn on the electrified floor costs ELECCOST steps and
+	 *  a cell a blow is coming at 30, others' cells can't be walked; the end cell beside c costs 3 turns more on the
+	 *  electrified floor (it's struck from there). One step at a time, so the game's own walk can't take another way. */
+	static int elecStep(int c) {
+		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
+		int[] cost = new int[N]; Arrays.fill(cost, INF); int[] first = new int[N];
+		PriorityQueue<int[]> q = new PriorityQueue<>((x, y) -> Integer.compare(x[0], y[0]));
+		cost[hp] = 0; first[hp] = -1; q.add(new int[]{0, hp});
+		int best = -1, bs = INF;
+		while (!q.isEmpty()) {
+			int[] e = q.poll(); int u = e[1]; if (e[0] > cost[u]) continue;
+			int sc = L.distance(u, c) <= 1 && u != c ? cost[u] + (elec[u] ? 3 * ELECCOST : 0) : unseenBy(u) ? 1000 + L.distance(u, c) * 2 + cost[u] : INF;
+			if (u != hp && sc < bs) { bs = sc; best = u; }
+			for (int k : PathFinder.NEIGHBOURS8) { int n = u + k;
+				if (n < 0 || n >= N || Math.abs(n % W - u % W) > 1 || !L.passable[n] || L.avoid[n] || !(known[n] || L.heroFOV[n]) || (seenChar(n) != null && n != hp)) continue;
+				int nc = cost[u] + 1 + (elec[n] ? ELECCOST : 0) + (dz[n] ? 30 : !elec[n] && danger[n] ? 4 : 0);
+				if (nc < cost[n]) { cost[n] = nc; first[n] = u == hp ? n : first[u]; q.add(new int[]{nc, n}); } }
+		}
+		return best >= 0 ? first[best] : -1;
+	}
+
+	/** DM-300 not charged: each step it takes onto one of the arena's trap tiles while hunting shields it (30 + a tenth
+	 *  of its lost health: DM300.move), unless the tile is electrified. Coming at the hero, its last step is onto a cell
+	 *  beside him: met where no trap tile is beside the hero (strategy-reference 4.3), a step or two away. */
+	static Target dmTraps(DM300 dm) {
+		int hp = Dungeon.hero.pos;
+		if (!enemy(dm) || !hunting(dm) || L.adjacent(dm.pos, hp) || L.distance(dm.pos, hp) > 6 || L.distance(dm.pos, hp) < 2 || Dungeon.hero.rooted) return null;
+		int here = trapsBeside(hp);
+		if (here == 0) return null;
+		int best = -1, bk = here * 10;
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] <= 0 || dist[c] > 2 || !open[c] || danger[c] || seenChar(c) != null || L.adjacent(c, dm.pos)) continue;
+			int k = trapsBeside(c) * 10 + dist[c] * 3;
+			if (k < bk) { bk = k; best = c; } }
+		return best >= 0 ? new Target(best, GO, "boss: meet DM-300 off its trap tiles") : null;
+	}
+	static int trapsBeside(int c) { int n = 0; for (int k : PathFinder.NEIGHBOURS8) { int x = c + k; if (x >= 0 && x < L.length() && L.map[x] == Terrain.INACTIVE_TRAP && !elec[x]) n++; } return n; }
 
 	/** The first step of the cheapest known way to beside c: the electrified floor and other blows' cells cost 4 a
 	 *  step (better crossed than not reached), the unknown can't be walked; none known that far: the known cell
@@ -399,11 +452,12 @@ final class AsBosses {
 
 	static void dump() {
 		int hp = Dungeon.hero.pos, LEN = L.length();
-		StringBuilder sb = new StringBuilder("    BOSSMAP " + (L instanceof PrisonBossLevel ? ((PrisonBossLevel) L).state() : "") + " hp " + hp + "\n");
+		StringBuilder sb = new StringBuilder("    BOSSMAP " + (L instanceof PrisonBossLevel ? ((PrisonBossLevel) L).state() : "") + " hp " + hp + " t " + Actor.now() + "\n");
 		int W = L.width();
 		for (int y = 0; y < L.height(); y++) { sb.append("    ");
 			for (int x = 0; x < W; x++) { int c = x + y * W; int t = L.map[c];
-				char ch = c == hp ? '@' : dz.length == LEN && dz[c] ? '!' : !known[c] ? ' ' : t == Terrain.WALL || t == Terrain.WALL_DECO ? '#' : t == Terrain.DOOR ? '+' : t == Terrain.LOCKED_DOOR ? 'L' : L.passable[c] ? (dist[c] < INF ? '.' : ',') : '?';
+				Char who = Actor.findChar(c);
+				char ch = c == hp ? '@' : who instanceof DM300 ? 'D' : who instanceof Pylon ? (((Mob) who).alignment == Char.Alignment.ENEMY ? 'P' : 'p') : dz.length == LEN && dz[c] ? '!' : elec.length == LEN && elec[c] ? 'E' : t == Terrain.INACTIVE_TRAP ? '^' : t == Terrain.WATER ? '~' : !known[c] ? ' ' : t == Terrain.WALL || t == Terrain.WALL_DECO ? '#' : t == Terrain.DOOR ? '+' : t == Terrain.LOCKED_DOOR ? 'L' : L.passable[c] ? (dist[c] < INF ? '.' : ',') : '?';
 				sb.append(ch); }
 			sb.append('\n'); }
 		System.out.print(sb);
