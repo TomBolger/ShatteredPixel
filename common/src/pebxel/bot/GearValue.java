@@ -172,6 +172,9 @@ public final class GearValue {
 
 	/** What to put on now (null: nothing): the pack's piece whose cost beats the worn by at least need (a share, e.g.
 	 *  0.05: not for a rounding's worth), the most. Worn pieces known cursed stay (they can't come off). */
+	/** Set by the assistant when its own armour plan (AsGear) chooses the armour. */
+	public static boolean armorElsewhere;
+
 	public static Item bestEquip(Hero h, double need) {
 		Item best = null; double bestGain = 0; Item bestCur = null;
 		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
@@ -179,6 +182,7 @@ public final class GearValue {
 		for (Item i : h.belongings.backpack) {
 			if (!judged(i)) continue;
 			boolean wpn = !(i instanceof Armor);
+			if (!wpn && armorElsewhere) continue;   // (HE: AsGear's armour plan decides the armour)
 			EquipableItem cur = wpn ? h.belongings.weapon() : h.belongings.armor();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
 			if (cur instanceof MagesStaff || cur instanceof ClassArmor) continue;

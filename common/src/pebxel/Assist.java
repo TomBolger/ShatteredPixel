@@ -486,6 +486,7 @@ public final class Assist {
 		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
 		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
 		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
+		if (src instanceof ScrollOfUpgrade && AsGear.ON && !(STAFFUP && h.belongings.weapon() instanceof MagesStaff && h.belongings.weapon().level() < 3)) { Item u = AsGear.commit(h); if (u != null && sel.itemSelectable(u)) return u; }   // (HE: the armour plan)
 		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = UpgradePlan.target(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfIdentify && OIDENT) { Item u = Identify.identifyTarget(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfUpgrade) {
@@ -1049,6 +1050,9 @@ public final class Assist {
 		}
 	}
 	/** A foe in sight that is awake: a fight on (a sleeper, a passive one, isn't). */
+	/** HE: a passive gnoll exile (24 HP, 1-10, reach 2: its description says it won't start a fight) is left alone
+	 *  below this much health; 9 of 288 honest games died to one on depth 2 or 3. */
+	static final int EXILEHT = optInt("EXILEHT", 50);
 	static boolean hostile(Mob m) { return enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC); }
 
 	/** The threats seen lately, brought up to date: each foe in sight coming for the hero (where, which way it was going);
@@ -1325,7 +1329,7 @@ public final class Assist {
 			if (!adj && vetoId == m.id() && Actor.now() < vetoUntil && !(hunting(m) && walk(m.pos) <= 4)) continue;
 			if (bad.containsKey(m.pos) && (!adj || Actor.now() < bad.get(m.pos) - 25)) continue;   // (acted on, nothing happened: one it can't get at, even beside it: round a wall's corner)
 			if (adj) stepBackWaited = false;
-			if ((m.state == m.PASSIVE && (!adj || m instanceof Statue)) || (m instanceof Piranha && !adj) || (Char.hasProp(m, Char.Property.IMMOVABLE) && !adj)) continue;
+			if ((m.state == m.PASSIVE && (!adj || m instanceof Statue || (m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.GnollExile && H.HT < EXILEHT))) || (m instanceof Piranha && !adj) || (Char.hasProp(m, Char.Property.IMMOVABLE) && !adj)) continue;
 			if (!adj && walk(m.pos) > 2 * distance(m.pos, hp) + 4) continue;
 			if (!adj && !hunting(m) && !boss(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;   // (a boss always: Tengu jumps, never seen stepping nearer, and was left for "search spot" walks round his arena, 2,300 of them)
 			if (m.state == m.SLEEPING && !adj && !boss(m) && distance(m.pos, hp) > 2 && floorLeft()) continue;
@@ -1928,6 +1932,7 @@ public final class Assist {
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
+			if (AsGear.ON && a != null) { on = AsGear.upgradeOn(H); if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn; }   // (HE: armour first, into the armour plan's piece; null: wear it first, or hold)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
@@ -1973,9 +1978,10 @@ public final class Assist {
 				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i)) && !AsItems.remedyHeld(i)) return use(i, Potion.AC_DRINK, -1, "drink to learn");   // (remedyHeld: maybe the floor's Frost / Liquid Flame for its room)
 		}
 		boolean foeInView = false; for (Mob m : mobs()) if (enemy(m) && !(m instanceof NPC)) foeInView = true;   // (MT: no swapping with a foe about, sleeping or not)
+		if (AsGear.ON && !foeInView) { Armor g = AsGear.wear(H); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, AsGear.why(H, g)); }   // (HE: the armour plan; GearValue keeps the weapon)
 		if (OGEAR && !foeInView) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
-		else if (!OGEAR) for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
-			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff) continue;
+		if (!OGEAR) for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
+			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff || (AsGear.ON && i instanceof Armor)) continue;
 			Item cur = i instanceof Armor ? H.belongings.armor() : H.belongings.weapon();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
 			if ((i.cursedKnown && i.cursed) || (i.levelKnown && i.level() < 0)) continue;

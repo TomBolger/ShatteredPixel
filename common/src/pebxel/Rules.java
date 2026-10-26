@@ -188,7 +188,7 @@ final class Rules {
 	static Target restTarget() { Target t = new Target(Dungeon.hero.pos, Assist.WAIT, "rest first (brain)"); t.action = Assist.REST_ACT; t.obj = -1; return t; }
 	static ScrollOfUpgrade upgrade() { ScrollOfUpgrade s = H().belongings.getItem(ScrollOfUpgrade.class); return s != null && s.isKnown() ? s : null; }
 	static Item upgradeOn() {
-		Item on = null; try { on = UpgradePlan.target(H()); } catch (Throwable e) { }
+		Item on = null; try { on = AsGear.ON ? AsGear.commit(H()) : UpgradePlan.target(H()); } catch (Throwable e) { }
 		if (on == null) { Armor a = H().belongings.armor(); on = a != null && !(a.cursed && a.cursedKnown) ? a : H().belongings.weapon(); }
 		return on;
 	}
