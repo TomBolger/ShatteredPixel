@@ -79,6 +79,13 @@ final class Rules {
 		veto("stairs: no chained escapes", c -> (c.role == Role.UP || c.role == Role.DOWN) && Actor.now() - Brain.fledAt < 30 && Actor.now() >= Brain.fledAt),
 		propose("fled: rest before going back", c -> (stairsDown(c) || stairsUp(c)) && Brain.fledFrom >= 0 && Math.abs(Brain.fledFrom - Dungeon.depth) == 1
 				&& H().HP * 10 < H().HT * 9 && calm() && !Assist.starving() && !Assist.declined(null, Assist.REST_ACT), PREP, Rules::restTarget),
+		// -- the climb with the Amulet (agent K7: AsAscent) ------------------------------------------------------------
+		// (K5: up to 8 games of a run died climbing; K7-base: 6 of 6 from depth 26 died on 24, the first floor up, 250
+		// turns spent there picking up, holding doorways for foes the curse calls without end, resting.) Off the way up:
+		// no item hunting, exploring or searching; no rest while the curse (8+) takes more a turn than resting gives.
+		veto("ascent: nothing off the way", AsAscent::offWay),
+		veto("ascent: never down", AsAscent::down),
+		veto("ascent: no rest under the curse's harm", AsAscent::restHarm),
 		// -- the boss ahead: arrive whole, with the scrolls read ---------------------------------------------------
 		// (strategy-reference 4.x: every boss guide starts "full health, upgrades in"; Thomas: "boss preparation")
 		propose("boss next: rest first", c -> stairsDown(c) && bossNext() && calm() && H().HP * 100 < H().HT * 95 && !Assist.starving()
