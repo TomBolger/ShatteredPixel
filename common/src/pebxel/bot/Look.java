@@ -43,7 +43,7 @@ public final class Look {
 	public static final class Out {
 		/** P(dies), P(all foes dead or gone from), the expected health left (on living runs and dead ones: 0), the
 		 *  potions drunk, the time. */
-		public double pDeath, pDone, hpLeft, healsUsed, time;
+		public double pDeath, pDone, hpLeft, healsUsed, healsLive, time;   // (healsLive: drunk on the runs he lives through: a dead hero's potions were never worth keeping)
 		@Override public String toString() { return String.format("death %.3f done %.3f left %.1f heals %.2f t %.1f", pDeath, pDone, hpLeft, healsUsed, time); }
 	}
 

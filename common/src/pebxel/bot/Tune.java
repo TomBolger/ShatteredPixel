@@ -27,6 +27,8 @@ public final class Tune {
 	public static final double GAMBLE = get("OGAMBLE", 35);   // (MT: losing beside a foe, unknown potions and scrolls tried only below this share of health)
 	public static final boolean UPPACK = on("OUPPACK", true);   // (MT: a pack piece is upgraded only if it is then worth wearing)
 	public static final boolean RINGS = on("ORINGS", true);   // (MT: known fight rings counted in the hero's numbers)
+	public static final boolean HEALBUD = on("BHEALBUD", true);   // (M2: a Healing drunk costs Budget.rescue, not the flat OHEALCOST)
+	public static final double HEALK = get("BHEALK", 100) / 100;
 	public static final double HOPE = get("OHOPE", 3) / 100;   // (MT: in a fight likely lost, a drink's edge on near-ties)
 	public static final double FOEFX = get("OFOEFX", 100) / 100;   // (MT: the deep kinds' blows' effects past armour, scaled)
 	public static final boolean KINDS = on("OKINDS", true);   // (M2: the kinds' behaviour in a fight: a brute's rage running down, the eye's beam cycle, scorpios backing off, spinners fleeing, Goo's pumping dodged, shooters' bolts till the hero is beside them)

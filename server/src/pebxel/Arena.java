@@ -36,6 +36,8 @@ public final class Arena {
 			hp0 = 20 + 5 * (lvl - 1);
 		}
 		Setup water() { water = true; return this; }
+		Class<? extends Mob> mob2; int dist2;
+		Setup plus(Class<? extends Mob> m, int d) { mob2 = m; dist2 = d; name = name + " + " + m.getSimpleName() + " @" + d; return this; }
 	}
 
 	static WatchApp app; static int center; static List<Integer> room = new ArrayList<>();
@@ -70,6 +72,8 @@ public final class Arena {
 		l.add(new Setup("d12 dm201 @3", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, DM201.class, 3, 1));
 		l.add(new Setup("d12 bat", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, Bat.class, 1, 1));
 		l.add(new Setup("d12 piranha", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, Piranha.class, 1, 1).water());
+		l.add(new Setup("d12 brute", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, Brute.class, 1, 1).plus(Shaman.BlueShaman.class, 4));
+		l.add(new Setup("d12 bat", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, Bat.class, 1, 1).plus(Shaman.RedShaman.class, 5));
 		l.add(new Setup("d12 2 brutes", 12, 12, 14, Sword.class, 3, MailArmor.class, 3, Brute.class, 1, 2));
 		// city (head start 16: L17, STR 16, tier 4 +5)
 		l.add(new Setup("d17 warlock @4", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Warlock.class, 4, 1));
@@ -79,6 +83,7 @@ public final class Arena {
 		l.add(new Setup("d17 succubus", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Succubus.class, 1, 1));
 		l.add(new Setup("d17 ghoul", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Ghoul.class, 1, 1));
 		l.add(new Setup("d17 fire elemental @3", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Elemental.FireElemental.class, 3, 1));
+		l.add(new Setup("d17 monk", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Monk.class, 1, 1).plus(Warlock.class, 4));
 		l.add(new Setup("d17 2 monks", 17, 17, 16, Longsword.class, 5, ScaleArmor.class, 5, Monk.class, 1, 2));
 		// halls (head start 21: L22, STR 18, tier 5 +6)
 		l.add(new Setup("d22 eye @4", 22, 22, 18, Greatsword.class, 6, PlateArmor.class, 6, Eye.class, 4, 1));
@@ -146,6 +151,7 @@ public final class Arena {
 				m.pos = cellAt(s.dist, k); m.state = m.HUNTING; m.alignment = Char.Alignment.ENEMY; m.EXP = 0;
 				GameScene.add(m); BotModelTest.see(m, h); ms.add(m);
 			}
+			if (s.mob2 != null) { Mob m = Reflection.newInstance(s.mob2); m.pos = cellAt(s.dist2, 1); m.state = m.HUNTING; m.alignment = Char.Alignment.ENEMY; m.EXP = 0; GameScene.add(m); BotModelTest.see(m, h); ms.add(m); }
 			Dungeon.observe();
 			if (n == 0) {
 				Fighter me = HeroView.of(h); me.heals = 0; me.rangedShots = 0; me.shield = 0;

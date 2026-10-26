@@ -273,7 +273,7 @@ final class Brain {
 
 	/** A fight's value: death costs the floors ahead, each Healing drunk what it was worth kept, the health left a little. */
 	static double fightV(Look.Out o, int n, double vh, double vh2) {
-		double u = o.healsUsed, spent = u <= 1 ? u * vh : vh + (u - 1) * vh2;
+		double u = Tune.HEALBUD ? o.healsLive : o.healsUsed, spent = u <= 1 ? u * vh : vh + (u - 1) * vh2;
 		return -o.pDeath * R - spent + HPW * o.hpLeft / Math.max(1, me.ht);
 	}
 	/** Gone from the fight (after o's walk): later, the value of what comes after (the fight met again, a new floor

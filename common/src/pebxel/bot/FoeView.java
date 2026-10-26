@@ -32,6 +32,7 @@ public final class FoeView {
 		f.dist = h == null ? 1 : Math.max(1, com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.distance(m.pos, h.pos));
 		f.asleep = m.state == m.SLEEPING;
 		f.ranged = shooter(m);
+		if (Tune.KINDS && h != null && f.ranged && f.dist > 1) f.dist = Math.max(f.dist, walk(h.pos, m.pos, f.dist + 8));   // (M2: the hero's walk to a shooter, round what he has seen of the walls: every step a bolt)
 		if (m instanceof Goo) {   // (Goo.attackSkill / damageRoll: enraged below half health, pumped up x3)
 			boolean low = m.HP * 2 <= m.HT; if (low) { f.acc = 15; f.eva = (int) (m.defenseSkill * 1.5); } Object pu = HeroView.field(m, "pumpedUp"); boolean pumped = pu instanceof Integer && (Integer) pu > 0;
 			int max = low ? 12 : 8;
@@ -72,8 +73,9 @@ public final class FoeView {
 		if (m instanceof Eye) {   // (Eye.doAttack: a charge of 2 turns, the beam, 4-6 turns' cooldown (blows beside it only): beam to beam 7)
 			f.ranged = false; f.burstEvery = 7; f.burstCharge = 2; f.burstReady = m.HP > 0 && Boolean.TRUE.equals(HeroView.field(m, "beamCharged"));
 		}
+		if (m instanceof Monk) f.reach = 0.75;   // (Monk.defenseSkill: focused, it parries a blow, focus back in 6-7 turns of its time (moving, sooner): the arena's monks lasted 1.4 times the old sums)
 		if (m instanceof Scorpio) { f.delay *= 2; f.reach = 0.7; }   // (Scorpio.getCloser: beside the hero it backs off, shooting from afar: the arena's scorpio shot half as often, was struck a third as often)
-		if (m instanceof Spinner) { f.fleeHit = 0.5; f.fleeT = 7; f.hitDirect = 7.5 * Tune.FOEFX; }   // (Spinner.attackProc: half its bites poison for 7-8 (15 in all, Poison.act) and it flees till the poison is done)
+		if (m instanceof Spinner) { f.fleeHit = 0.5; f.fleeT = 7; f.hitDirect = 5 * Tune.FOEFX; }   // (Spinner.attackProc: half its bites poison for 7-8 (15 in all, Poison.act) and it flees till the poison is done)
 	}
 
 	/** The kinds' quirks that change a fight's sums (from their source). */
@@ -101,6 +103,25 @@ public final class FoeView {
 			case "RipperDemon": f.hitDirect = 2 * k; break;     // (it leaps in for more)
 			case "Succubus": f.hitDirect = 1 * k; f.leech = 1; break;   // (charm: a blow lost, its health back)
 		}
+	}
+
+	/** (M2) Steps from a to b over the passable cells the hero has seen (b itself counted whatever it is), at most
+	 *  limit (more: limit); its own search, PathFinder's shared arrays untouched (the game reads them). */
+	static int walk(int a, int b, int limit) {
+		com.shatteredpixel.shatteredpixeldungeon.levels.Level L = com.shatteredpixel.shatteredpixeldungeon.Dungeon.level;
+		int len = L.length(), w = L.width(); if (a == b) return 0;
+		int[] d = new int[len]; java.util.Arrays.fill(d, -1); int[] q = new int[len]; int qh = 0, qt = 0;
+		d[a] = 0; q[qt++] = a;
+		while (qh < qt) {
+			int c = q[qh++]; if (d[c] >= limit) break;
+			for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) {
+				int n = c + k; if (n < 0 || n >= len || d[n] >= 0 || Math.abs(n % w - c % w) > 1) continue;
+				if (n == b) return d[c] + 1;
+				if (!L.passable[n] || !(L.visited[n] || L.mapped[n] || L.heroFOV[n])) continue;
+				d[n] = d[c] + 1; q[qt++] = n;
+			}
+		}
+		return limit;
 	}
 
 	static boolean rage(Mob m) { for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("BruteRage")) return true; return false; }

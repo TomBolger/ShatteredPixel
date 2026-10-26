@@ -27,7 +27,7 @@ public final class FightModel {
 	public static final class Result {
 		/** P(the hero dies), P(all the foes die), the expected health lost (shield first; death counts the health had),
 		 *  the 90th percentile of it, the expected time, the expected health left. */
-		public double pDeath, pWin, lossMean, loss90, time, hpLeft, healsUsed;
+		public double pDeath, pWin, lossMean, loss90, time, hpLeft, healsUsed, healsLive;
 		public int runs;
 		@Override public String toString() { return String.format("death %.3f win %.3f loss %.1f (p90 %.0f) time %.1f", pDeath, pWin, lossMean, loss90, time); }
 	}
@@ -151,7 +151,7 @@ public final class FightModel {
 		boolean hurtable = false; for (int i = 0; i < n; i++) hurtable |= pH[i] > 0 || pR[i] > 0 || foes0.get(i).asleep;
 		double horizon = Math.min(maxT, hurtable ? 100 : 30);   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
 		double[] losses = new double[runs];
-		int deaths = 0, wins = 0, done = 0, used = 0; double tsum = 0, left = 0, leftO = 0;
+		int deaths = 0, wins = 0, done = 0, used = 0, usedLive = 0; double tsum = 0, left = 0, leftO = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		double[] zapEnd = new double[n], rageT = new double[n], burstAt = new double[n]; boolean[] pumpFirst = new boolean[n];   // (M2: Tune.KINDS)
 		for (int run = 0; run < runs; run++) {
@@ -183,24 +183,24 @@ public final class FightModel {
 				if (tH <= ft) {
 					t = tH;
 					if (hl > 0) { int x = Math.max(1, Math.min(hl, Math.round(hl * 0.25f))); myHp = Math.min(me.ht, myHp + x); hl -= x; }   // (Healing heals a quarter of what's left a turn: Healing.healingThisTick)
-					if (drink) { drink = false; heals--; usedR++; hl += me.healAmount; tH += 1; continue; }
-					if (lost > 0) { lost--; tH += 1; continue; }
+					if (drink) { drink = false; heals--; usedR++; hl += me.healAmount; tH += 1; busy(foes0, hp, t, 1, arr, atk, zapEnd); continue; }
+					if (lost > 0) { lost--; tH += 1; busy(foes0, hp, t, 1, arr, atk, zapEnd); continue; }
 					if (steps >= 0) { if (steps-- == 0) { gone = true; break; } tH += 1 / Math.max(0.1, me.speed); continue; }
-					if (heals > 0 && p.healAt > 0 && hl == 0 && myHp < me.ht * p.healAt) { heals--; usedR++; if (Tune.HEALTICK) hl += me.healAmount; else myHp = Math.min(me.ht, myHp + me.healAmount); tH += 1; continue; }
+					if (heals > 0 && p.healAt > 0 && hl == 0 && myHp < me.ht * p.healAt) { heals--; usedR++; if (Tune.HEALTICK) hl += me.healAmount; else myHp = Math.min(me.ht, myHp + me.healAmount); tH += 1; busy(foes0, hp, t, 1, arr, atk, zapEnd); continue; }
 					// a target beside me (the weakest), else a shot at the nearest one coming, else wait for one / walk to a sleeper
 					int tg = -1, best = Integer.MAX_VALUE;
 					for (int i = 0; i < n; i++) if (hp[i] > 0 && t >= arr[i] - 1e-9 && hp[i] < best) { best = hp[i]; tg = i; }
 					if (tg >= 0) {
 						Fighter f = foes0.get(tg);
 						if (rage[tg] && f.rageDecay > 0 && decay(f, tg, t, hp, rageT)) { alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd); tH += me.delay; continue; }
-						if (!awake[tg] || rnd.nextDouble() < (bLow[tg] != null && hp[tg] <= f.lowAt ? pHLow[tg] : pH[tg])) hp[tg] -= bH[tg].draw(rnd.nextDouble());   // (a sleeper: a surprise blow, sure)
+						if (!awake[tg] || rnd.nextDouble() < (bLow[tg] != null && hp[tg] <= f.lowAt ? pHLow[tg] : pH[tg])) { int d = bH[tg].draw(rnd.nextDouble()); if (burstAt[tg] < Double.MAX_VALUE && t >= burstAt[tg] - f.burstCharge - 1e-9) d /= 4; hp[tg] -= d; }   // (a sleeper: a surprise blow, sure; M2: an eye charging its beam takes a quarter, Eye.damage)
 						if (!awake[tg]) { awake[tg] = true; atk[tg] = t; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
 						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; rageT[tg] = t; if (f.rageDecay > 0) next[tg] = Math.max(next[tg], t) + 1; }   // (Brute.triggerEnrage spends a turn)
 						if (hp[tg] <= 0) {
 							alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd);
 							if (bDeath[tg] != null) { int d = bDeath[tg].draw(rnd.nextDouble()); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
 						}
-						tH += me.delay;
+						tH += me.delay; busy(foes0, hp, t, me.delay, arr, atk, zapEnd);
 						continue;
 					}
 					int ni = -1; double nd = Double.MAX_VALUE, na = Double.MAX_VALUE; int sl = -1;
@@ -213,7 +213,7 @@ public final class FightModel {
 						if (rnd.nextDouble() < pR[ni]) hp[ni] -= bR[ni].draw(rnd.nextDouble());
 						if (hp[ni] <= 0 && foes0.get(ni).rageHp > 0 && !rage[ni]) { rage[ni] = true; hp[ni] = foes0.get(ni).rageHp; rageT[ni] = t; if (foes0.get(ni).rageDecay > 0) next[ni] = Math.max(next[ni], t) + 1; }
 						if (hp[ni] <= 0) { alive--; room = free(foes0, ni, room, queued, held, arrQ, arr, atk, next, t, rnd); }
-						tH += me.rangedDelay;
+						tH += me.rangedDelay; busy(foes0, hp, t, me.rangedDelay, arr, atk, zapEnd);
 					} else if (na < Double.MAX_VALUE) tH = Math.max(na, t + 0.01);
 					else if (sl >= 0 && p.sleepersDone) { gone = true; break; }   // (BR: only sleepers left: the fight is over, they can be left be)
 					else if (sl >= 0) { arr[sl] = t + Math.max(0, foes0.get(sl).dist - 1); tH = arr[sl]; }   // (walk up to it: it sleeps on)
@@ -248,15 +248,24 @@ public final class FightModel {
 			if (dead) deaths++;
 			else if (alive == 0) { wins++; done++; }
 			else if (gone) done++;
-			losses[run] = me.hp - Math.max(0, myHp); tsum += t; left += Math.max(0, myHp); leftO += dead ? 0 : Math.min(me.ht, myHp + hl); used += usedR;
+			losses[run] = me.hp - Math.max(0, myHp); tsum += t; left += Math.max(0, myHp); leftO += dead ? 0 : Math.min(me.ht, myHp + hl); used += usedR; if (!dead) usedLive += usedR;
 		}
 		if (r != null) {
 			Arrays.sort(losses);
 			double s = 0; for (double l : losses) s += l;
 			r.pDeath = deaths / (double) runs; r.pWin = wins / (double) runs; r.lossMean = s / runs; r.loss90 = losses[Math.min(runs - 1, (int) (runs * 0.9))];
-			r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs;
+			r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs; r.healsLive = usedLive / (double) runs;
 		}
-		if (o != null) { o.pDeath = deaths / (double) runs; o.pDone = done / (double) runs; o.hpLeft = leftO / runs; o.healsUsed = used / (double) runs; o.time = tsum / runs; }
+		if (o != null) { o.pDeath = deaths / (double) runs; o.pDone = done / (double) runs; o.hpLeft = leftO / runs; o.healsUsed = used / (double) runs; o.healsLive = usedLive / (double) runs; o.time = tsum / runs; }
+	}
+
+	/** (M2) The hero busy for dt (a blow, a shot, a drink) with a shooter or a foe that can't move not reached yet: his
+	 *  walk to it starts that much later (it bolts on meanwhile; the old sums had him there on time whatever he did). */
+	static void busy(List<Fighter> fs, int[] hp, double t, double dt, double[] arr, double[] atk, double[] zapEnd) {
+		if (!Tune.KINDS) return;
+		for (int i = 0; i < fs.size(); i++) { Fighter f = fs.get(i);
+			if (hp[i] <= 0 || !(f.ranged || f.immobile) || f.asleep || arr[i] <= t + 1e-9 || arr[i] == Double.MAX_VALUE) continue;
+			arr[i] += dt; zapEnd[i] += dt; if (f.immobile) atk[i] += dt; }
 	}
 
 	/** (M2) A raging foe's shield running down (a brute's 4 a turn): true when it's gone (the foe dies). */
@@ -311,9 +320,13 @@ public final class FightModel {
 		int runs = Math.max(60, RUNS / 3);
 		Result r0 = simulate(me, fs, 0, runs, sd);
 		double best = r0.pDeath, bk = 0;
+		// (M2, BR's suggestion) a potion drunk costs what it is worth kept (Budget.rescue: the n-th of n, then the one
+		// before it), as a share of a death (the floors ahead), on the runs the hero lives through; AS_BHEALK scales it
+		double c1 = Tune.HEALCOST, c2 = Tune.HEALCOST;
+		if (Tune.HEALBUD) { double R = Math.max(1, Budget.ahead(h)); c1 = Tune.HEALK * Budget.rescue(h, me.heals, 1) / R; c2 = me.heals > 1 ? Tune.HEALK * Budget.rescue(h, me.heals - 1, 1) / R : c1; }
 		for (double k : HEALAT) {
 			Result r = simulate(me, fs, k, runs, sd);
-			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);
+			double u = r.healsLive, sc = Tune.HEALBUD ? r.pDeath + (u <= 1 ? u * c1 : c1 + (u - 1) * c2) : r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);
 			if (r0.pDeath >= 0.5 && r.healsUsed > 0) sc -= Tune.HOPE;   // (MT: a fight it likely loses: drinking buys turns the simulation doesn't use (a step away, the stairs, an ally): near-ties go to drinking)   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
 			if (sc < best - 1e-9) { best = sc; bk = k; }
 		}
