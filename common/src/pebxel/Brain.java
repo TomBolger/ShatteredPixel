@@ -55,7 +55,7 @@ final class Brain {
 	static final boolean FIGHTV = Assist.opt("BFIGHT", true), STAIRSV = Assist.opt("BSTAIRS", true), GEARV = Assist.opt("BGEAR", true);
 
 	/** What a candidate is, for the brain. */
-	enum Role { CARRY, HEAL, ESCAPE, UP, DOWN, EQUIP, REST, OTHER }
+	enum Role { CARRY, HEAL, ESCAPE, UP, DOWN, EQUIP, REST, RANGED, OTHER }
 
 	static final class Cand {
 		final Target t; final String src; final Role role; double v = Double.NaN; boolean veto; String note = "";
@@ -127,6 +127,7 @@ final class Brain {
 		if (t.kind == Assist.USE && escapeItem(t.item) && (Potion.AC_DRINK.equals(t.action) || Scroll.AC_READ.equals(t.action))) return Role.ESCAPE;
 		if (t.kind == Assist.USE && EquipableItem.AC_EQUIP.equals(t.action)) return Role.EQUIP;
 		if (t.kind == Assist.WAIT && Assist.REST_ACT.equals(t.action)) return Role.REST;
+		if (t.kind == Assist.USE && t.why != null && t.why.startsWith("brain: from afar")) return Role.RANGED;
 		if ((t.kind == Assist.GO || t.kind == Assist.PICKUP) && t.why.startsWith("escape: up")) return Role.UP;
 		if ((t.kind == Assist.GO || t.kind == Assist.PICKUP) && t.why.startsWith("escape: down")) return Role.DOWN;
 		return Role.CARRY;
@@ -215,6 +216,7 @@ final class Brain {
 			Item i = h.belongings.getItem(k);
 			if (i != null && Assist.known(i) && !Assist.declined(k, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ)) { cs.add(new Cand(Assist.use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "brain: escape"), "brain", Role.ESCAPE)); break; }
 		}
+		if (RANGEDV && !Assist.blind()) afar(cs);
 		if (STAIRSV && !Dungeon.bossLevel() && !Assist.L.locked && Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null) {
 			int ent = Assist.L.entrance(), ex = Assist.L.exit();
 			if (Dungeon.depth > 1 && !has(cs, Role.UP) && stairsOk(ent)) cs.add(new Cand(new Target(ent, ent == h.pos ? Assist.PICKUP : Assist.GO, "escape: up the stairs (brain)"), "brain", Role.UP));
@@ -247,6 +249,34 @@ final class Brain {
 		cs.add(c); skips++;
 	}
 	static int skips;
+
+	// (M2) from afar or closing in: a caster's bolt ignores armour and the Assist never shoots at casters (Assist.ranged:
+	// "melee from round a corner"); with plan A a walk at a foe not beside the hero, the bow / a charged attack wand at
+	// the nearest caster in line is offered and weighed: the fight with the hero's shots first (the lookahead's policy)
+	// against the same fight walking up at once (no shots). A wand charge used costs BCHARGE floors.
+	static final boolean RANGEDV = Assist.opt("BRANGED", true);
+	static final double CHARGE = Assist.optInt("BCHARGE", 1) / 100.0;
+	static void afar(List<Cand> cs) {
+		Target a = cs.get(0).t; Hero h = H;
+		if (a.kind != Assist.ENEMY && !(a.why != null && a.why.startsWith("caster: close in"))) return;
+		for (Mob m : foes) if (Assist.adjacent(m.pos, h.pos)) return;
+		Mob c = null; for (Mob m : foes) if ((m instanceof Shaman || m instanceof Warlock || m instanceof DM100) && Assist.line(h.pos, m.pos) && (c == null || Assist.distance(m.pos, h.pos) < Assist.distance(c.pos, h.pos))) c = m;
+		if (c == null || me.rangedShots <= 0) return;
+		Item it = null; String act = null; boolean wand = false;
+		com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow bow = Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.class);
+		if (bow != null) { it = bow; act = com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.AC_SHOOT; }
+		int ed = Assist.distance(c.pos, h.pos);
+		if (it == null) for (Item i : h.belongings.backpack) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) {
+			com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand w = (com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) i;
+			if (Assist.charged(w, w) && Assist.attackWand(w.getClass(), ed)) { it = w; act = com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand.AC_ZAP; wand = true; break; } }
+		if (it == null || Assist.declined(it.getClass(), act)) return;
+		Fighter m0 = me.copy(); m0.rangedShots = 0;
+		Look.Out walk = Look.run(m0, fs, plan(), seed);
+		Cand k = new Cand(Assist.use(it, act, c.pos, "brain: from afar (a caster)"), "brain", Role.RANGED);
+		k.v = fightV(base, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - fightV(walk, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - (wand ? CHARGE : 0);
+		k.note = "afar " + base + " | walk " + walk;
+		cs.add(k);
+	}
 
 	static boolean has(List<Cand> cs, Role r) { for (Cand c : cs) if (c.role == r) return true; return false; }
 	/** Stairs known, a short walk off, no foe nearer to them than the hero. */
