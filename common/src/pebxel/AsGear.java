@@ -30,6 +30,9 @@ final class AsGear {
 	static { pebxel.bot.GearValue.armorElsewhere = ON; }
 	static final int FUT = Assist.optInt("ARMFUT", 1);          // (the scrolls still to come counted in the comparison)
 	static final int HYST = Assist.optInt("ARMHYST", 50);       // (hundredths of a block point a new armour must win by)
+	// (HE-f1: with FUT 1 a cloth+3 still beat an unknown mail at STR 12, and 52 of 77 prison deaths still wore
+	// cloth. From LONGD on, the commit looks further: LFUT scrolls and LSTR Strength ahead, the rest of the run's)
+	static final int LONGD = Assist.optInt("ARMLONGD", 99), LFUT = Assist.optInt("ARMLFUT", 3), LSTR = Assist.optInt("ARMLSTR", 2);
 	static final int ENCMAX = Assist.optInt("ARMENC", 1);      // (STR points short a piece may be worn at now)
 	static final boolean HOLD1 = Assist.opt("ARMHOLD1", false); // (hold the scrolls while only cloth is worn, till the boss)
 
@@ -49,8 +52,9 @@ final class AsGear {
 		boolean worn = a == h.belongings.armor();
 		if (!worn && a.cursedKnown && a.cursed && !liftable(h)) return -1;
 		int lv = HeroView.visLevel(a); if (lv < 0 && !a.levelKnown) lv = 0;
-		int k = sou(h) + FUT, at = Math.max(0, lv + k);
-		int enc = a.STRReq(at) - h.STR();
+		boolean lng = Dungeon.depth >= LONGD;
+		int k = sou(h) + (lng ? LFUT : FUT), at = Math.max(0, lv + k);
+		int enc = a.STRReq(at) - h.STR() - (lng ? LSTR : 0);   // (long: the Strength potions ahead too, 2 a region)
 		if (enc >= 2) return -1;
 		double v = block(a.tier, at);
 		if (enc == 1) v *= 0.75;
