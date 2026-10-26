@@ -508,6 +508,14 @@ final class AsBasics {
 		// gas or fire remembered where it was last seen, behind a door shut since: it never clears, and the only way on
 		// stays shut for good (K6-b1: 800 searches in a shop, the corridor's toxic gas remembered). Gone by now.
 		if (hazAge()) return null;
+		// an ally (the Dried Rose's ghost, a summon) standing in the only way on: the plan walls it off like any
+		// character, but the hero swaps places with an ally he walks into (Char.interact): K6, a ghost in a corridor
+		// kept a hero searching one spot 300 times
+		for (Mob m : mobs()) if (m.isAlive() && m.alignment == Char.Alignment.ALLY && L.heroFOV[m.pos] && dist[m.pos] >= INF && !Char.hasProp(m, Char.Property.IMMOVABLE)) {
+			if (adjacent(m.pos, hp)) return new Target(m.pos, GO, "stuck: swap places with the ally in the way");
+			int b = -1, bd = INF; for (int k : PathFinder.NEIGHBOURS8) { int n = m.pos + k; if (n >= 0 && n < L.length() && dist[n] > 0 && dist[n] < bd && open[n]) { bd = dist[n]; b = n; } }
+			if (b >= 0) return new Target(b, GO, "stuck: to the ally in the way");
+		}
 		if (Dungeon.branch != 0) {
 			for (com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr : L.transitions) if (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_ENTRANCE && known[tr.cell()])
 				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;
@@ -619,6 +627,18 @@ final class AsBasics {
 		foodPack = pk;
 	}
 	static final boolean FLOORFOOD = opt("BFLOORFOOD", true);
+
+	/** A quest's proposals have a food budget too (K6-d1: 1,247 turns on the Wandmaker's grave, starved): the turns over
+	 *  which quest steps kept being offered on this floor; short of food past QUESTTURNS, no more of them here. */
+	static final int QUESTTURNS = optInt("BQUESTTURNS", 500);
+	static float questT = -1; static int questTurns; static Level questL;
+	static boolean questOver(Target t) {
+		if (!FOOD || t == null || t.why == null || !t.why.startsWith("quest")) return false;
+		if (questL != L) { questL = L; questTurns = 0; questT = -1; }
+		float now = Actor.now();
+		if (now > questT) { if (questT >= 0 && now - questT <= 5) questTurns += (int) (now - questT); questT = now; }
+		return questTurns > QUESTTURNS && shortOfFood();
+	}
 
 	/** Short of food: plan A on grass, a look round or a search is put off for the way on, when that's known. */
 	static Target hurry(Target planA) {

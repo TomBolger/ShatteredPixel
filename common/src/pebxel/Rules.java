@@ -58,6 +58,7 @@ final class Rules {
 		// -- K6: food and casters (AsBasics) --------------------------------------------------------------------------
 		// every rest priced in food (K6-base0: starving 66 turns a floor of 349, 400-turn rests before and after a boss)
 		veto("food: a rest it can't pay", c -> c.role == Role.REST && AsBasics.restUnaffordable(c.t)),
+		veto("food: a quest past its budget", c -> AsBasics.questOver(c.t)),
 		// the old shooter tactic against a caster (K6-base0: 38 of 47 deaths from depth 11 were bolts, waiting "round the corner")
 		veto("caster: the old corner", c -> AsBasics.casterVeto(c.t)),
 		veto("caster: no waiting in its line", c -> AsBasics.waitInLine(c.t)),
