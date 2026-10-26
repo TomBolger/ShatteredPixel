@@ -208,17 +208,16 @@ final class AsBasics {
 		if (wetAt < 0) return null;
 		if (np < 0 || fd >= 2 * wetN + 3) return null;   // (out of sight, or too far to reach the hero before he's across: it swims two cells a turn)
 		int w = fishWaited.getOrDefault(-1, 0);
-		if (w >= FISHPATIENCE) {   // (a floor's patience spent: what lies past its water is skipped if the way on is known; if not, on, the plan's own rules in the water)
-			int ex = L.exit();
-			if (ex >= 0 && ex < L.length() && known[ex] && walk(ex) < INF && t != ex) { Assist.bad.put(t, Actor.now() + 300); if (planA.cell >= 0 && planA.cell != hp) Assist.bad.put(planA.cell, Actor.now() + 300); return null; }
-			if (fd >= 4 || w >= 3 * FISHPATIENCE) return null;   // (the only way on: across once it isn't at the crossing itself)
-		}
+		int ex = L.exit();
+		if (ex >= 0 && ex < L.length() && known[ex] && walk(ex) < INF && t != ex) {   // (the way on known: what lies past its water is skipped, no waiting; food is time)
+			Assist.bad.put(t, Actor.now() + 300); if (planA.cell >= 0 && planA.cell != hp) Assist.bad.put(planA.cell, Actor.now() + 300); return null; }
+		if (w >= FISHPATIENCE && (fd >= 4 || w >= 3 * FISHPATIENCE)) return null;   // (a floor's patience spent, the only way on: across once it isn't at the crossing itself)
 		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(-1, w + 1); }
 		if (stop >= 0 && stop != hp) return new Target(stop, GO, "piranha: wait out of its reach for it to go");
 		if (stop < 0) { int dry = dryCell(hp); if (dry >= 0) return new Target(dry, GO, "piranha: off the shore (it can't follow)"); return null; }
 		Target r = new Target(hp, WAIT, "piranha: wait out of its reach for it to go"); r.action = WAIT_ACT; return r;
 	}
-	static final int FISHPATIENCE = optInt("BFISHPAT", 150), FISHRISK = optInt("BFISHRISK", 2), FISHLOSS = optInt("BFISHLOSS", 30);   // (percent: the death odds and the share of health a shore fight may cost)
+	static final int FISHPATIENCE = optInt("BFISHPAT", 60), FISHRISK = optInt("BFISHRISK", 2), FISHLOSS = optInt("BFISHLOSS", 30);   // (percent: the death odds and the share of health a shore fight may cost)
 	static boolean fishCheap(Hero h, List<Mob> fish) {
 		try { pebxel.bot.FightModel.Result r = pebxel.bot.FightModel.evaluate(h, fish); return r.pDeath * 100 <= FISHRISK && r.loss90 * 100 <= h.HP * FISHLOSS; } catch (Throwable e) { return false; }
 	}
@@ -614,6 +613,7 @@ final class AsBasics {
 
 	static final boolean RESTALL = opt("BRESTALL", true);   // (K6) every rest priced, not only the hands' "hurt" ones: 400-turn rests before (and after) the boss starved runs
 	static final int FLOORNEED = optInt("BFLOORNEED", 150);   // turns the rest of a floor not yet explored is reckoned to take
+	static final int LOWREST = optInt("BLOWREST", 50);   // (EG) below this share of health a rest needs only the food it eats
 	/** A rest (any: the hands', the boss's, the brain's) the food can't pay for: none while starving (there is no
 	 *  regeneration then), and none that leaves less than the reserve plus the rest of this floor's walk. Dying
 	 *  (a quarter health), or with the floor locked (hunger stops), only one that would starve the hero. */
@@ -625,7 +625,8 @@ final class AsBasics {
 		if (t.why.startsWith("rest before the boss") && bossDown()) return true;
 		if (L.locked) return false;
 		int f = foodTurns() - (int) Hunger.STARVING, need = restTurns();   // (turns of food before starving)
-		if (h.HP * 4 < h.HT) return f < need;
+		if (Rules.bossNext() && L.exit() >= 0 && walk(L.exit()) <= 2) return f < need + 50;   // (EG: at the boss's stairs, full health is worth its food: Tengu's floor locks, no regeneration in the fight)
+		if (h.HP * 100 < h.HT * LOWREST) return f < need + 30;   // (EG: low, the rest is paid for while it doesn't starve him: 1 in 4 honest prison deaths explored on at a fifth of health, the reserve kept)
 		return f - need < FOODRESERVE / 2 + floorNeed();
 	}
 	/** The floor's boss seen to die (its body gone from the floor while in sight, or seen dead): no boss to rest for. */

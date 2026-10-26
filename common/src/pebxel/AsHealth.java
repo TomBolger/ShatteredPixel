@@ -47,14 +47,16 @@ final class AsHealth {
 				if (!fs.isEmpty()) {
 					FightModel.Result r = FightModel.engaged(H, fs);
 					StringBuilder b = new StringBuilder();
-					for (Mob m : fs) b.append(m.getClass().getSimpleName()).append(':').append(m.HP).append('@').append(distance(m.pos, hp)).append(hunting(m) ? "h" : "").append(',');
+					for (Mob m : fs) b.append(m.getClass().getSimpleName()).append(':').append(m.HP).append('@').append(distance(m.pos, hp)).append(hunting(m) ? "h" : "").append(m instanceof Goo ? "p" + field(m, "pumpedUp") + (gooReach(m.pos, hp) ? "R" : "") : "").append(',');
 					System.out.println(String.format(Locale.ROOT, "EGF t %.0f d %d hp %d/%d up %d slots %d pd %.2f loss %.1f p90 %.0f | %s | A %s", Actor.now(), Dungeon.depth, H.HP, H.HT, walk(L.entrance()), effSlots(hp, fs), r == null ? -1 : r.pDeath, r == null ? -1 : r.lossMean, r == null ? -1 : r.loss90, b, out.get(0).why));
 				}
 			}
+			if (ON && GOO && !out.isEmpty() && !H.rooted) { Target g = gooGuard(H); if (g != null) { out.add(0, g); if (DBG) System.out.println("EGH t " + Actor.now() + " " + g.why); return; } }
 			if (!ON || out.isEmpty() || H.rooted || L.locked || Dungeon.bossLevel() || bag(Amulet.class) != null) return;
 			Target a = out.get(0);
 			if (a.why != null && (a.why.startsWith("escape") || a.why.startsWith("rescue") || a.why.contains("heal") || a.why.startsWith("dying"))) return;   // (the rules' own way out stands)
 			Target t = FLEE ? flee(H, a) : null;
+			if (t == null && GATE > 0) t = gate(H, a);
 			if (t == null && POS) t = position(H, a);
 			if (t != null) { out.add(0, t); if (DBG) System.out.println("EGH t " + Actor.now() + " " + t.why + " -> " + t.cell + " (over " + a.why + ")"); }
 		} catch (Throwable e) { lastError = e; if (DBG) e.printStackTrace(System.out); }
@@ -136,6 +138,36 @@ final class AsHealth {
 		posGoal = best; posUntil = Actor.now() + 15;
 		if (DBG) System.out.println(String.format(Locale.ROOT, "EGPOS here pd %.2f loss %.1f slots %d | at %d pd %.2f loss %.1f slots %d", here.pDeath, here.lossMean, cur, best, br.pDeath, br.lossMean, effSlots(best, fs)));
 		return new Target(best, GO, String.format(Locale.ROOT, "corridor: back where they come one at a time (%d foes)", fs.size()));
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// Goo's pumped blast (3x damage, 2 cells): out of its reach, whatever else the rules say (BASE1 g48: the step
+	// out began, the next decision held a doorway still in its reach, 11 of 55 health in one blow)
+	// ---------------------------------------------------------------------------------------------------------
+	static final boolean GOO = opt("EGGOO", true);
+	static Target gooGuard(Hero H) {
+		int hp = H.pos;
+		for (Mob m : mobs()) {
+			if (!(m instanceof Goo) || !enemy(m) || !pumped(m) || !gooReach(m.pos, hp)) continue;
+			Object pv = field(m, "pumpedUp"); int maxW = pv instanceof Integer && (Integer) pv >= 2 ? 1 : 2;   // (pumped twice: the blast comes after one move)
+			int best = -1, bk = 99;
+			for (int c = 0; c < L.length(); c++) { int w = walk(c); if (w < 1 || w > maxW || !standOk(c) || gooReach(m.pos, c) || danger[c]) continue;
+				int sc = w * 10 + (L.water[c] ? 1 : 0); if (sc < bk) { bk = sc; best = c; } }
+			if (best >= 0) return new Target(best, GO, "Goo pumps up: out of its reach (the blast is triple)");
+		}
+		return null;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// the gate: low, nothing about, the food for it: rest before going on (exploring, picking up, the stairs down)
+	// ---------------------------------------------------------------------------------------------------------
+	static final int GATE = optInt("EGGATE", 45);
+	static Target gate(Hero H, Target a) {
+		if (H.HP * 100 >= H.HT * GATE || seenFoe || threatNear || starving() || declined(null, REST_ACT)) return null;
+		if (!(a.kind == GO || a.kind == PICKUP || (a.kind == WAIT && !REST_ACT.equals(a.action)))) return null;
+		Target r = new Target(H.pos, WAIT, String.format(Locale.ROOT, "health: rest before going on (%d/%d)", H.HP, H.HT)); r.action = REST_ACT; r.obj = -1;
+		if (AsBasics.restUnaffordable(r) || Rules.vetoed(new Brain.Cand(r, "health", Brain.role(r)))) return null;
+		return r;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------

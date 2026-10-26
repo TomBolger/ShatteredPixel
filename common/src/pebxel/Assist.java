@@ -1460,6 +1460,7 @@ public final class Assist {
 			bk = INF;
 			for (int c = 0; c < LEN; c++) {   // a known trap the only way on: over it
 				if (!known[c] || !L.avoid[c] || L.pit[c] || L.solid[c] || L.traps.get(c) == null || walk(c) >= bk || !ahead(c) || bad.containsKey(c)) continue;
+				if (way && (!mild(L.traps.get(c)) || L.traps.get(c).getClass().getSimpleName().equals("AlarmTrap"))) continue;   // (EG: the way on known, only a harmless trap is crossed to explore: a summoning trap's pack killed a full-health Mage on 2)
 				for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && (!known[n] || (open[n] && dist[n] >= INF))) { bk = walk(c); best = c; break; } }
 			}
 			if (best >= 0) { why[0] = "over the trap"; return best; }
