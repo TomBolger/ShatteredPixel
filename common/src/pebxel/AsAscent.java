@@ -85,7 +85,7 @@ final class AsAscent {
 			if (m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Scorpio) continue;
 			double ms = m.speed();
 			if (entKnown && distance(m.pos, ent) < w && d <= w + 2) catches = true;   // (nearer the stairs than the hero: in the way)
-			else if (hunting(m) && (ms > hs ? (d - 1) / Math.max(1e-3, ms - hs) < w / hs : d <= 2)) catches = true;
+			else if (hunting(m) && ms > hs * 1.01 && (d - 1) / Math.max(1e-3, ms - hs) < w / hs) catches = true;   // (one no faster, behind: never catches a hero walking on; left on the floor below, a kill the fewer)
 		}
 		// on the stairs (or a step off) with a fight on: up and away when the lookahead says the fight is the worse
 		if (adj && entKnown && w <= 2) { Target t = leave(w, ent); if (t != null) return t; }
