@@ -25,7 +25,7 @@ final class AsWeapon {
 	private AsWeapon() {}
 
 	static final boolean ON = opt("MDUP", true);
-	static final int ARMBASE = optInt("MDARMBASE", 2), ARMDIV = optInt("MDARMDIV", 3), WPNGAP = optInt("MDWPNGAP", 2), STAFF1 = optInt("MDSTAFF1", 3);
+	static final int ARMBASE = optInt("MDARMBASE", 2), ARMDIV = optInt("MDARMDIV", 3), WPNGAP = optInt("MDWPNGAP", 2), STAFF1 = optInt("MDSTAFF1", 3), WPNTIER = optInt("MDWPNTIER", 3), LATE = optInt("MDLATE", 16);
 	static String why = "upgrade";
 	static final boolean DBG = System.getenv("MDDBG") != null;
 
@@ -40,6 +40,10 @@ final class AsWeapon {
 		if (DBG) System.out.println("    MDUP d" + Dungeon.depth + " a " + (a == null ? "-" : a.getClass().getSimpleName() + a.level() + " ok " + aOk) + " w " + (w == null ? "-" : w.getClass().getSimpleName() + w.level() + " ok " + wOk));
 		if (!aOk || !wOk) return dflt;
 		int al = a.level(), wl = w.level(), mark = ARMBASE + Dungeon.depth / Math.max(1, ARMDIV);
+		// a low-tier weapon takes no scrolls (MD-he1: with the split from depth 1, 57 of 161 heroes at 16 swung a tier-1
+		// weapon at +5, kept for its upgrades over the tier-3 and -4 ones found): a scroll goes into a tier WPNTIER weapon
+		// or better (from LATE on, tier 2), upgrades on a higher tier counting for more (max +tier+1 a level)
+		if (!(w instanceof MagesStaff) && ((MeleeWeapon) w).tier < (Dungeon.depth >= LATE ? 2 : WPNTIER)) return dflt;
 		if (al < mark) { why = "upgrade: the armour, to +" + mark + " by this depth (its block meets every hit)"; return a; }
 		if (wl + WPNGAP < al) { why = "upgrade: the weapon, +" + wl + " behind the armour's +" + al + " (shorter fights: less taken, less rested)"; return w; }
 		why = "upgrade: the armour (the weapon is close behind)"; return a;
