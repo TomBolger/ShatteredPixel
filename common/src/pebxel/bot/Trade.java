@@ -59,6 +59,8 @@ public final class Trade {
 		List<Heap> ws = new ArrayList<>();
 		for (Heap w : wares) if (w.type == Heap.Type.FOR_SALE && w.seen && !w.isEmpty() && worth(h, w.peek()) >= Tune.MINW) ws.add(w);
 		ws.sort(Comparator.comparingDouble((Heap w) -> -worth(h, w.peek()) / Math.max(1, Math.sqrt(Shopkeeper.sellPrice(w.peek())))));
+		// (M2, WB's report: seed 1000 passed the depth-6 shop with 1,256 gold and no Ankh) the first Ankh, when it can be paid for, before anything else: a second life (WB's blessed revives)
+		if (h.belongings.getItem(Ankh.class) == null) for (Heap w : ws) if (w.peek() instanceof Ankh && Shopkeeper.sellPrice(w.peek()) <= Dungeon.gold) { ws.remove(w); ws.add(0, w); break; }
 		List<Heap> out = new ArrayList<>(); int gold = Dungeon.gold;
 		for (Heap w : ws) { int pr = Shopkeeper.sellPrice(w.peek()); if (pr <= gold) { out.add(w); gold -= pr; } }
 		return out;

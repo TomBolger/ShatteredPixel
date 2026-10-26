@@ -123,7 +123,7 @@ final class Brain {
 
 	static Role role(Target t) {
 		if (t == null) return Role.OTHER;
-		if (t.kind == Assist.USE && t.item instanceof PotionOfHealing && Potion.AC_DRINK.equals(t.action)) return Role.HEAL;
+		if (t.kind == Assist.USE && t.item instanceof Potion && Potion.AC_DRINK.equals(t.action) && Clues.p(t.item, PotionOfHealing.class) >= 0.9) return Role.HEAL;   // (ID: by what the hero knows or believes, never an unknown potion's true kind)
 		if (t.kind == Assist.USE && escapeItem(t.item) && (Potion.AC_DRINK.equals(t.action) || Scroll.AC_READ.equals(t.action))) return Role.ESCAPE;
 		if (t.kind == Assist.USE && EquipableItem.AC_EQUIP.equals(t.action)) return Role.EQUIP;
 		if (t.kind == Assist.WAIT && Assist.REST_ACT.equals(t.action)) return Role.REST;
@@ -211,8 +211,8 @@ final class Brain {
 	/** The brain's own options in a fight, when the rules didn't offer them: drink Healing, a known escape, the stairs. */
 	static void own(List<Cand> cs) {
 		Hero h = H;
-		PotionOfHealing heal = h.belongings.getItem(PotionOfHealing.class);
-		if (heal != null && heal.isKnown() && !has(cs, Role.HEAL) && !Assist.declined(PotionOfHealing.class, Potion.AC_DRINK)) cs.add(new Cand(Assist.use(heal, Potion.AC_DRINK, -1, "brain: heal"), "brain", Role.HEAL));
+		Item heal = Clues.healing();   // (ID: a known Healing, else an unknown one believed Healing)
+		if (heal != null && !has(cs, Role.HEAL) && !Assist.declined(PotionOfHealing.class, Potion.AC_DRINK)) cs.add(new Cand(Assist.use(heal, Potion.AC_DRINK, -1, "brain: heal"), "brain", Role.HEAL));
 		if (!has(cs, Role.ESCAPE) && !Assist.blind()) for (Class<? extends Item> k : Arrays.asList(ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class)) {
 			Item i = h.belongings.getItem(k);
 			if (i != null && Assist.known(i) && !Assist.declined(k, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ)) { cs.add(new Cand(Assist.use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "brain: escape"), "brain", Role.ESCAPE)); break; }
@@ -360,9 +360,10 @@ final class Brain {
 		switch (c.role) {
 			case CARRY: return;
 			case HEAL: {
-				if (n <= 0) return;
-				Look.Out o = Look.run(me, fs, plan().drink(), seed);
-				c.v = fightV(o, n, vh, vh2) - fightV(base, n, vh, vh2);
+				Fighter m1 = me;
+				if (n <= 0) { if (c.t.item == null || Assist.known(c.t.item)) return; m1 = me.copy(); m1.heals = 1; m1.healAmount = Math.round(0.8f * me.ht + 14); vh = Budget.rescue(h, 1, 1); }   // (a believed Healing: drunk, it's the one)
+				Look.Out o = Look.run(m1, fs, plan().drink(), seed);
+				c.v = fightV(o, Math.max(1, n), vh, vh2) - fightV(base, n, vh, vh2);
 				c.note = "drink " + o + " | on " + base;
 				return;
 			}
