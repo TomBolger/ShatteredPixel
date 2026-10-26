@@ -93,6 +93,13 @@ final class Rules {
 		veto("ascent: nothing off the way", AsAscent::offWay),
 		veto("ascent: never down", AsAscent::down),
 		veto("ascent: no rest under the curse's harm", AsAscent::restHarm),
+		// (AS2, strategy-v4 3.3 rule 6, 8) a fight the lookahead says is lost, the stairs near: up (a new floor emptied as
+		// it's climbed into) or down (a floor climbed adds no curse; the fight met again on coming back); every trap a
+		// depth-26 trap (K7-e: "over the trap" at 65 health, a disintegration trap on 18); Healing kept for the Caves
+		propose("ascent: out of the fight by the stairs", AsAscent::fightStairs, 0, AsAscent::escTarget),
+		veto("ascent: every trap a depth-26 trap", AsAscent::trap),
+		veto("ascent: Healing kept for the Caves", AsAscent::keep),
+		propose("ascent: drink, the blows multiplied", AsAscent::drinkLow, 0, AsAscent::drinkTarget),
 		// -- shooters' bolts (agent K7: AsBolts) ------------------------------------------------------------------------
 		// an eye's charged beam (shown: the charge, aimed where the hero stood) fires through its line for 30-50: off it
 		propose("bolts: off the eye's beam", AsBolts::inBeam, 0, AsBolts::offBeam),
