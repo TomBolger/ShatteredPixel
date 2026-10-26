@@ -56,7 +56,7 @@ final class AsWeapon {
 	// beat any unknown tier-4 as it stood, and the one point of STR it lacked. As HE's armour plan does for armour: each
 	// weapon counted at the level it will reach (its shown level plus FUT scrolls), its need at that level (upgrades lower
 	// it), and worn once it hits as hard as the worn one does now.
-	static final boolean PLAN = opt("MDWPLAN", true);
+	static final boolean PLAN = opt("MDWPLAN", false);   // (off: MD-fin1, 288 full games each, 15.79 on against 16.22 off; MD-lw1 15.77 / 16.19. Kept for tuning)
 	static { if (PLAN && ON) pebxel.bot.GearValue.weaponElsewhere = true; }
 	static final int FUT = optInt("MDWFUT", 2), HYST = optInt("MDWHYST", 10), DRK = optInt("MDWDR", 50);   // (scrolls ahead counted; percent a new one must win by)
 
