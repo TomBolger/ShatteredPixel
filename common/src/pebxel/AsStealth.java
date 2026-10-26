@@ -58,7 +58,7 @@ final class AsStealth {
 	/** PROPOSE: the next round could kill, no Healing at work or to hand: a known way out. */
 	static boolean awayWhen(Cand c) {
 		if (!ON || !ESC || c != Rules.planA || c.role == Brain.Role.ESCAPE || c.role == Brain.Role.HEAL) return false;
-		if (Brain.healing > 0 || Rules.healPot() != null || !Brain.fight) return false;
+		if (!Brain.fight || Rules.healPot() != null && Brain.healing <= 0) return false;   // (Healing to hand and none at work: the drink first; at work and still dying: away)
 		return way() != null && dying();
 	}
 	static Item way() {
@@ -86,16 +86,21 @@ final class AsStealth {
 				|| t.action.equals(com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff.AC_ZAP) || t.action.equals(Item.AC_THROW))) return false;
 		if (t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb || t.item instanceof Potion) return false;   // (a bomb or a potion: one blow that ends it)
 		com.shatteredpixel.shatteredpixeldungeon.actors.Char ch = seenChar(t.cell);
-		if (!(ch instanceof Mob) || !AsFire.shooter((Mob) ch) || AscensionChallenge.statModifier(ch) < 2) return false;
+		if (!(ch instanceof Mob)) return false;
 		int hp = Dungeon.hero.pos; if (distance(ch.pos, hp) <= 1 || Dungeon.hero.rooted) return false;
-		AsFire.note(); if (AsFire.fireAt(hp, false) <= 0) return false;
+		AsFire.note(); boolean cursed = false;
+		for (AsFire.Seen s : AsFire.seen.values()) if (AscensionChallenge.statModifier(s.m) >= 2 && AsFire.fireLine(s, hp)) cursed = true;   // (at whatever foe: ST-2, a Huntress shot a guard while the DM-100 behind it bolted her)
+		if (!cursed) return false;
 		return AsFire.outTarget() != null;
 	}
 
 	/** PROPOSE: Rules' "drink rather than die" with the climb's curse counted (it isn't in the lookahead's numbers). */
 	static boolean drinkWhen(Cand c) {
-		if (!ON || !DRINK || c != Rules.planA || c.role == Brain.Role.HEAL || Rules.healPot() == null || Brain.healing > 0) return false;
-		return Brain.fight && Rules.worstRound() < Dungeon.hero.HP && dying();   // (where Rules' own row doesn't see it)
+		if (!ON || !DRINK || c != Rules.planA || c.role == Brain.Role.HEAL || Rules.healPot() == null || !Brain.fight) return false;
+		double w = worst();
+		if (Brain.healing >= w) return false;   // (a Healing at work that outlasts the worst round: on)
+		if (Brain.healing == 0 && Rules.worstRound() >= Dungeon.hero.HP) return false;   // (Rules' own row has it)
+		return w * MARGINP / 100.0 >= Dungeon.hero.HP;
 	}
 	static Target drinkTarget() {
 		Target t = use(Rules.healPot(), Potion.AC_DRINK, -1, "stealth: drink rather than die (the curse counted)");
