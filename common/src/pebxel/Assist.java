@@ -215,7 +215,8 @@ public final class Assist {
 	static final boolean MEAT = opt("MEAT", true);     // raw mystery meat (4 in 5 a bad effect, burning among them): eaten standing in water   // the Rogue's cloak before a fight   // nothing in sight: rest below this share of health   // the Mage's first 3 upgrades into the staff
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
-	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
+	static final int HEALPCT = optInt("HEALPCT", 40);
+	static final boolean EATHUNGRY = opt("EATHUNGRY", true), MMSAVE = opt("MMSAVE", true);   // (K8, SR's audit gaps 9 and 21)   // (a known Healing potion is drunk in a fight below this share of health)
 	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
 	// On by default (Thomas: the models are the way to a solved game; tune them, don't switch them off). Untuned after the
 	// merge they scored below main's rules (BF, Monolith 90 games each, mean max depth: rules 5.19, all on 4.08); agent MT tunes them.
@@ -829,6 +830,7 @@ public final class Assist {
 			h0 = 0;
 			Brain.judge();
 		}
+		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
 		mind();
@@ -836,6 +838,29 @@ public final class Assist {
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
 		return out;
 	}
+
+	/** Two walks that take turns (K8: "quest: back to the Wandmaker" from one cell, "pick up" from the other, to and
+	 *  fro): the hero back on the same cell with the same plan A three times in OSCN decisions is a dither; that plan
+	 *  A is then kept first till it is reached (or OSCT turns), as long as no foe is in sight. */
+	static void commit() {
+		if (out.isEmpty()) return;
+		Target a = out.get(0); int ao = a.obj >= 0 ? a.obj : a.cell; float now = Actor.now();
+		boolean walkA = (a.kind == GO || a.kind == PICKUP) && ao >= 0 && !a.why.startsWith("escape") && !a.why.startsWith("boss") && !a.why.contains("bomb") && !a.why.startsWith("your ");   // (never over the player's own choice)
+		if (comL != L) { comL = L; oscHist.clear(); comObj = -1; }
+		if (comObj >= 0 && (now > comUntil || seenFoe || inDanger || hp == comObj || (walk(comObj) <= 1 && seenChar(comObj) != null) || walk(comObj) >= INF)) comObj = -1;
+		if (comObj >= 0 && walkA && ao != comObj) {
+			for (int j = 1; j < out.size(); j++) { Target t = out.get(j); int o = t.obj >= 0 ? t.obj : t.cell;
+				if (o == comObj && (t.kind == GO || t.kind == PICKUP)) { out.add(0, out.remove(j)); t.why = t.why + " (kept: no dithering)"; return; } }
+			Target t = new Target(comObj, seenHeap(comObj) != null ? PICKUP : GO, comWhy + " (kept: no dithering)"); t.obj = comObj; out.add(0, t); return;
+		}
+		if (!walkA || seenFoe) return;
+		long key = (long) hp * 100003 + ao; int n = 0;
+		for (long k : oscHist) if (k == key) n++;
+		oscHist.addLast(key); while (oscHist.size() > OSCN) oscHist.removeFirst();
+		if (n >= 2 && comObj < 0) { comObj = ao; comUntil = now + OSCT; comWhy = a.why; oscHist.clear(); }
+	}
+	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1; static float comUntil; static String comWhy = "";
+	static final int OSCN = optInt("OSCN", 40), OSCT = optInt("OSCT", 40);
 
 	/** Objectives the player passed over lately go behind the rest (still there for a Down), unless an enemy is in
 	 *  sight or the hero is in danger (then what's safest stays first). */
@@ -1809,6 +1834,14 @@ public final class Assist {
 			}
 			if (f != null) return use(f, Food.AC_EAT, -1, "starving: eat");
 		}
+		// hungry, calm: a food that fills no more than the hunger shown (Hungry is 300 of it: a ration, a small one,
+		// cooked meat) is eaten now, not at Starving: none of it goes to waste, and a rest or a fight after it won't run
+		// into starving, where regeneration stops (strategy-reference 2.6; SR's audit, gap 9)
+		if (EATHUNGRY && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
+			Item f = null; float fe = 0;
+			for (Item i : H.belongings.backpack) if (foodItem(i) && !(i instanceof MysteryMeat)) { float e = ((Food) i).energy; if (e <= Hunger.HUNGRY && e > fe) { fe = e; f = i; } }
+			if (f != null) return use(f, Food.AC_EAT, -1, "hungry: eat (none of it wasted)");
+		}
 		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
 		if (oPick("heal", pot && H.HP * 100 < H.HT * Tune.HEALMAX && oHeal(adj, hard), seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0))) return use(heal, Potion.AC_DRINK, -1, "low: heal");
@@ -1869,7 +1902,13 @@ public final class Assist {
 			if (OIDENT) unid = Identify.identifyTarget(H);
 			if (id != null && id.isKnown() && unid != null && !declined(ScrollOfIdentify.class, Scroll.AC_READ)) { Target t = use(id, Scroll.AC_READ, -1, "identify"); t.on = unid; return t; }
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
-			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
+			// Magic Mapping saved for the Demon Halls (strategy-reference 2.10: "save Magic Mapping scrolls for them", the
+			// Halls rushed): read there on a new floor with the way on unknown; above them only with the exit still
+			// hidden after 250 turns, and then only a spare one (more than the Halls' four floors still to come can use)
+			int halls = Dungeon.depth >= 21 && Dungeon.depth <= 24 ? 1 : 0, hallsLeft = Dungeon.depth < 21 ? 4 : 0;
+			boolean mmNow = mm != null && mm.isKnown() && !Dungeon.bossLevel() && (L.exit() <= 0 || !known[L.exit()]) && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)
+					&& (halls > 0 ? Actor.now() - floorT0 >= 1 : Actor.now() - floorT0 > 250 && (!MMSAVE || mm.quantity() > hallsLeft || AsBasics.shortOfFood()));
+			if (mmNow) return use(mm, Scroll.AC_READ, -1, halls > 0 ? "magic mapping: the Halls, rushed" : "magic mapping");
 			// read unknown scrolls to learn them while it's safe, early on a floor (mapping is worth most then)
 			if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
 				for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i) && !declined(i.getClass(), Scroll.AC_READ)) return use(i, Scroll.AC_READ, -1, "read to learn");
