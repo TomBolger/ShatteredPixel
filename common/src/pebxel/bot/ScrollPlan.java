@@ -286,11 +286,12 @@ public final class ScrollPlan {
 	}
 
 	// ---- the scroll: now into a slot, or held ----
-	static final class Val { double now, hold; int holdW, holdT; double holdP; }
+	static final class Val { double now, hold; int holdW, holdT; double holdP; boolean none; }
 	/** The slot's options: the marginal scroll into its committed piece now, or held W floors (1..WMAX) for a better piece. */
 	static Val value(Ctx c, boolean arm) {
-		Item p = arm ? c.cA : c.cW; Val r = new Val(); r.now = r.hold = -1;
+		Item p = arm ? c.cA : c.cW; Val r = new Val(); r.now = r.hold = -1; r.none = true;
 		if (p == null || !upgradable(p)) return r;
+		r.none = false;
 		int tp = p instanceof Armor ? ((Armor) p).tier : p instanceof MeleeWeapon ? ((MeleeWeapon) p).tier : 9;
 		boolean arrivals = !(p instanceof ClassArmor) && !(p instanceof MagesStaff) && tp < 5;
 		double sh = arm ? c.shA : c.shW;
@@ -307,13 +308,16 @@ public final class ScrollPlan {
 		boolean seal = arm && p == c.a0 && ((Armor) p).checkSeal() != null && ((Armor) p).checkSeal().level() == 0;
 		// (a hold is a plan kept: its deadline, set when it began, isn't pushed back floor after floor; none with a boss next)
 		int Wn = HOLD && arrivals && !bossNear(c.d0) ? (holdUntil >= 0 && holdHero == c.h ? Math.min(WMAX, holdUntil - c.d0) : WMAX) : 0;
-		for (int W = 0; W <= Wn && W < c.K; W++) {   // (W 0: now)
-			double e = 0;
+		// (each option's floors less the floors without this scroll at all, under the same arrivals: the scroll's own
+		// worth, comparable between the slots; UP-d1's first form compared the slots' totals, the finds of each in them)
+		double e0 = 0; r.now = r.hold = Double.NEGATIVE_INFINITY;
+		for (int W = -1; W <= Wn && W < c.K; W++) {   // (W -1: never read, 0: now, 1..: held W floors)
+			double e = 0; boolean never = W < 0;
 			double[] base = new double[c.K];
-			for (int k = 0; k < c.K; k++) base[k] = lsP(c, arm, p, k, sh, k >= W ? 1 : 0);
+			for (int k = 0; k < c.K; k++) base[k] = lsP(c, arm, p, k, sh, !never && k >= W ? 1 : 0);
 			e += none * floors(base, 0);
 			for (double[] s : scn) {
-				int D = (int) s[0], T = (int) s[1]; boolean held = D < W;
+				int D = (int) s[0], T = (int) s[1]; boolean held = !never && D < W, spent = !never && !held;
 				Item nw = arm ? TA[T] : TW[T];
 				double pre = 0, cum = 0; for (int k = 0; k < D; k++) { cum += (k == 0 ? 0.5 : 1) * base[k]; pre += Math.exp(cum); }
 				double alive = Math.exp(cum);
@@ -321,15 +325,17 @@ public final class ScrollPlan {
 				double[] old = new double[c.K], neu = new double[c.K];
 				double lD = lv(p) + sh * (Math.max(0, c.kh - 1) + c.m[D]);
 				for (int k = D; k < c.K; k++) {
-					old[k] = lsP(c, arm, p, k, sh, 1);
-					double nl = (held || seal ? 1 : 0) + sh * (c.m[k] - c.m[D]);
-					neu[k] = Math.max(lsS(c, arm, k, p, lD + (held ? 0 : 1)), lsS(c, arm, k, nw, nl));
+					old[k] = lsP(c, arm, p, k, sh, never ? 0 : 1);
+					double nl = (held || (spent && seal) ? 1 : 0) + sh * (c.m[k] - c.m[D]);
+					neu[k] = Math.max(lsS(c, arm, k, p, lD + (spent ? 1 : 0)), lsS(c, arm, k, nw, nl));
 				}
 				e += s[2] * (pre + alive * Math.max(floors(old, D), floors(neu, D)));
 			}
-			if (W == 0) r.now = e;
-			else if (e > r.hold) { r.hold = e; r.holdW = W; }
+			if (never) e0 = e;
+			else if (W == 0) r.now = e - e0;
+			else if (e - e0 > r.hold) { r.hold = e - e0; r.holdW = W; }
 		}
+		if (r.hold == Double.NEGATIVE_INFINITY) r.hold = -1;
 		if (r.holdW > 0) {   // the why: the tier most likely to make the hold pay, and its odds in the window
 			int bt = tp + 1; double bp = 0;
 			for (int T = tp + 1; T <= 5; T++) { double q = pBy(arm, c.d0, c.d0 + r.holdW - 1 + 1, T); if (q * T > bp * bt || bp == 0) { bp = q; bt = T; } }
@@ -353,10 +359,10 @@ public final class ScrollPlan {
 		Ctx c = context(h);
 		if (lastKey == c.key && c.memo.size() > 0 && lastWhy != null) { why = lastWhy; return lastT; }
 		Val va = c.aSlot || (c.cA != null && c.cA != c.a0) ? value(c, true) : new Val(), vw = c.wSlot ? value(c, false) : new Val();
-		if (va.now < 0 && va.hold < 0 && vw.now < 0 && vw.hold < 0) { lastKey = c.key; lastWhy = why = "upgrade"; return lastT = c.a0 != null ? c.a0 : c.w0; }
-		boolean aBest = va.now >= vw.now;
-		double now = Math.max(va.now, vw.now);
-		Val vh = va.hold >= vw.hold ? va : vw; boolean hArm = vh == va;
+		if (va.none && vw.none) { lastKey = c.key; lastWhy = why = "upgrade"; return lastT = c.a0 != null ? c.a0 : c.w0; }
+		boolean aBest = vw.none || (!va.none && va.now >= vw.now);
+		double now = aBest ? va.now : vw.now;
+		Val vh = vw.none || (!va.none && va.hold >= vw.hold) ? va : vw; boolean hArm = vh == va;
 		Item t;
 		String nm = aBest ? "the armour" : "the weapon";
 		Item p = aBest ? c.cA : c.cW;
@@ -367,7 +373,7 @@ public final class ScrollPlan {
 		} else {
 			t = p;
 			if (holdHero == h) holdUntil = -1;   // (the hold over: the scroll spent)
-			why = String.format(Locale.ROOT, "upgrade %s%s (%s next best by %.2f floors)", nm, p != null && !p.isEquipped(h) ? " (" + p.name() + ", to wear)" : "", (aBest ? (vw.now >= 0 ? "the weapon" : "holding") : "the armour"), now - Math.max(aBest ? vw.now : va.now, vh.hold));
+			why = String.format(Locale.ROOT, "upgrade %s%s (%s next best by %.2f floors)", nm, p != null && !p.isEquipped(h) ? " (" + p.name() + ", to wear)" : "", (aBest ? (vw.none ? "holding" : "the weapon") : "the armour"), now - Math.max((aBest ? vw : va).none ? -1e9 : (aBest ? vw.now : va.now), vh.hold));
 		}
 		last = String.format(Locale.ROOT, "d%d kh %d rate %.2f arm %s now %.3f hold %.3f(W%d) | wpn %s now %.3f hold %.3f(W%d) -> %s", c.d0, c.kh, rate(),
 				c.cA == null ? "-" : c.cA.getClass().getSimpleName() + HeroView.visLevel(c.cA), va.now, va.hold, va.holdW,
