@@ -67,21 +67,104 @@ public final class Build {
 		}
 	}
 
-	/** The next talent point to spend, or null (none to spend, or none left to raise). */
+	/** The next talent point to spend, or null (none to spend, or none left to raise). The guide's order, with the
+	 *  build's context on top ({@link #boost}: what the hero carries makes some talents worth more, e.g. a Horn of
+	 *  Plenty the meal talents); with no context it is the guide's order exactly. */
 	public static Talent nextTalent(Hero h) {
 		Talent[][] ord = ORDER.get(h.heroClass);
 		for (int tier = 1; tier <= Math.min(Talent.MAX_TALENT_TIERS, h.talents.size()); tier++) {
 			if (h.talentPointsAvailable(tier) <= 0) continue;
 			LinkedHashMap<Talent, Integer> have = h.talents.get(tier - 1);
-			Map<Talent, Integer> want = new HashMap<>();
-			if (ord != null && tier <= ord.length) for (Talent t : ord[tier - 1]) {
-				want.merge(t, 1, Integer::sum);
-				Integer p = have.get(t);
-				if (p != null && p < t.maxPoints() && p < want.get(t)) return t;
+			Talent best = null; double bs = -1e9; int pos = 0;
+			for (Map.Entry<Talent, Integer> e : have.entrySet()) {
+				Talent t = e.getKey(); int p = e.getValue(); pos++;
+				if (p >= t.maxPoints()) continue;
+				int idx = -1, seen = 0;   // (where its next point stands in the guide's order)
+				if (ord != null && tier <= ord.length) for (int i = 0; i < ord[tier - 1].length; i++) if (ord[tier - 1][i] == t && ++seen > p) { idx = i; break; }
+				double sc = -(idx >= 0 ? idx : 100 + pos) + BOOSTW * boost(t, h);
+				if (sc > bs) { bs = sc; best = t; }
 			}
-			for (Map.Entry<Talent, Integer> e : have.entrySet()) if (e.getValue() < e.getKey().maxPoints()) return e.getKey();
+			if (best != null) return best;
 		}
 		return null;
+	}
+	static final double BOOSTW = envD("BOOSTW", 4);
+	static double envD(String k, double d) { try { String v = System.getenv("AS_" + k); return v == null ? d : Double.parseDouble(v); } catch (Throwable e) { return d; } }
+
+	/** The build's context: how much more (or less) talent t is worth for what the hero carries, about -2..3 (each
+	 *  point moves it BOOSTW places up the guide's order). A Horn of Plenty: the meal talents fire on every snack; a
+	 *  strong staff or wands: the wand talents; a Cloak of Shadows: the stealth ones; rings, thrown weapons, spare
+	 *  potions and scrolls, a second weapon. Only what the player knows he has. */
+	public static double boost(Talent t, Hero h) {
+		try {
+			String n = t.name(); double b = 0;
+			Ctx c = ctx(h);
+			if (c.horn) {
+				if (MEAL_FX.contains(n)) b += 2.5;
+				if (n.equals("HEARTY_MEAL") || n.equals("IRON_STOMACH")) b += 1;
+				if (n.equals("CACHED_RATIONS") || n.equals("NATURES_BOUNTY") || n.equals("SOUL_EATER")) b -= 1.5;   // (food is no worry)
+			}
+			if (c.wandPower >= 2 && WAND_T.contains(n)) b += Math.min(3, c.wandPower / 2.0);
+			if (c.cloak && (n.equals("PROTECTIVE_SHADOWS") || n.equals("MYSTICAL_MEAL") || n.equals("LIGHT_CLOAK") || n.equals("SPEEDY_STEALTH") || n.equals("INSCRIBED_STEALTH") || n.equals("ENHANCED_LETHALITY"))) b += 1.5;
+			if (n.equals("MYSTICAL_MEAL") && c.artifacts > 0) b += 1;
+			if (n.equals("ENHANCED_RINGS")) b += c.rings > 0 || c.artifacts > 1 ? 2 : -2;
+			if (c.missiles >= 3 && (n.equals("DURABLE_PROJECTILES") || n.equals("IMPROVISED_PROJECTILES") || n.equals("PROJECTILE_MOMENTUM") || n.equals("SHARED_ENCHANTMENT") || n.equals("DEADLY_FOLLOWUP") || n.equals("FOLLOWUP_STRIKE"))) b += 1;
+			if (c.potions >= 3 && n.startsWith("LIQUID_")) b += 1;
+			if (c.scrolls >= 3 && n.startsWith("INSCRIBED_")) b += 1;
+			if (n.equals("TWIN_UPGRADES") || n.equals("VARIED_CHARGE") || n.equals("COMBINED_LETHALITY")) b += c.second ? 1 : -2;
+			if (n.equals("HOLD_FAST") && c.armorTier >= 4) b += 1;
+			if (n.equals("RUNIC_TRANSFERENCE") && !c.glyph) b -= 1;
+			return b;
+		} catch (Throwable e) { return 0; }
+	}
+	/** Why the context raises t (for the assistant's talent hint), or null. */
+	public static String boostWhy(Talent t, Hero h) {
+		Ctx c = ctx(h); String n = t.name();
+		if (c.horn && MEAL_FX.contains(n)) return "every Horn of Plenty snack fires it";
+		if (c.wandPower >= 2 && WAND_T.contains(n)) return "a strong wand";
+		if (c.cloak && boost(t, h) > 0 && !n.contains("MEAL") && !n.equals("ENHANCED_RINGS")) return "the Cloak of Shadows";
+		return boost(t, h) > 0 ? "your gear" : null;
+	}
+	static final Set<String> MEAL_FX = new HashSet<>(Arrays.asList("EMPOWERING_MEAL", "ENERGIZING_MEAL", "MYSTICAL_MEAL", "INVIGORATING_MEAL", "STRENGTHENING_MEAL", "FOCUSED_MEAL", "SATIATED_SPELLS", "ENLIGHTENING_MEAL"));
+	static final Set<String> WAND_T = new HashSet<>(Arrays.asList("EMPOWERING_MEAL", "ENERGIZING_MEAL", "WAND_PRESERVATION", "SHIELD_BATTERY", "LINGERING_MAGIC", "DESPERATE_POWER", "EXCESS_CHARGE", "EMPOWERED_STRIKE", "MYSTICAL_CHARGE", "ARCANE_VISION", "INSCRIBED_POWER"));
+	static final class Ctx { boolean horn, cloak, second, glyph; int wandPower, rings, artifacts, missiles, potions, scrolls, armorTier; }
+	static Ctx ctxMemo; static Object ctxKey;
+	static Ctx ctx(Hero h) {
+		Object k = Arrays.asList(h, h.belongings.backpack.items.size(), h.belongings.weapon(), h.belongings.armor(), h.belongings.ring(), h.belongings.misc(), h.belongings.artifact(), com.shatteredpixel.shatteredpixeldungeon.Dungeon.depth, h.lvl);
+		if (k.equals(ctxKey) && ctxMemo != null) return ctxMemo;
+		Ctx c = new Ctx();
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Item i : h.belongings) {
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty && !i.cursed) c.horn = true;
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows) c.cloak = true;
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact) c.artifacts++;
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring) c.rings++;
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.MissileWeapon) c.missiles += i.quantity();
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion && ((com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion) i).isKnown()) c.potions += i.quantity();
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll && ((com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll) i).isKnown()) c.scrolls += i.quantity();
+			int lv = i.levelKnown ? i.level() : 0;
+			if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff) c.wandPower += 1 + lv;
+			else if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) c.wandPower += 1 + Math.max(0, lv - 1);
+		}
+		c.second = h.belongings.secondWep() != null;
+		if (h.belongings.armor() != null) { c.armorTier = h.belongings.armor().tier; c.glyph = h.belongings.armor().glyph != null; }
+		ctxKey = k; ctxMemo = c;
+		return c;
+	}
+
+	/** The armour ability for the King's Crown (the guide's picks: the simplest strong one; the Mage's blast is keyed
+	 *  to the staff's wand). */
+	public static com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility ability(HeroClass c) {
+		String want;
+		switch (c) {
+			case WARRIOR: want = "HeroicLeap"; break;
+			case MAGE: want = "ElementalBlast"; break;
+			case ROGUE: want = "SmokeBomb"; break;
+			case HUNTRESS: want = "NaturesPower"; break;
+			case DUELIST: want = "ElementalStrike"; break;
+			default: want = "AscendedForm";
+		}
+		for (com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.ArmorAbility a : c.armorAbilities()) if (a.getClass().getSimpleName().equals(want)) return a;
+		return c.armorAbilities()[0];
 	}
 
 	/** A talent's "type", the family it shares with talents of other classes (Shattered lines its talents up by slot:

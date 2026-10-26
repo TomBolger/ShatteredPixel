@@ -16,6 +16,14 @@ public final class Tune {
 
 	// FightModel's hooks (Assist): P(death) thresholds in percent, the most health Healing is drunk at, rest
 	public static final double DEATH = get("ODEATH", 10), ESC = get("OESC", 30), UP = get("OUP", 25), AVOID = get("OAVOID", 25), HEALMAX = get("OHEALMAX", 70);
+	// (MT) the death odds a Healing potion is worth when drunk (FightModel.healAt), the health share below which it is
+	// drunk with a foe after the hero or harm to come whatever the visible fight's odds (what the model can't see: more coming)
+	public static final double HEALCOST = get("OHEALCOST", 2) / 100, HEALLOW = get("OHEALLOW", 25);
+	public static final boolean CRAB = on("OCRAB", true);   // (MT: the Great Crab's block counted)
+	public static final boolean FOES = on("OFOES", true);   // (MT: the trickster's poison, the swarm's splitting)
+	public static final boolean HEALTICK = on("OHEALTICK", true);   // (MT: Healing heals over turns, as the game's Healing buff does)
+	public static final boolean SLOTS = on("OSLOTS", true);   // (MT: FightModel counts the room beside the hero)
+	public static final boolean HEAL2 = on("OHEAL2", true);   // (off: O's first rule, P(death) >= ODEATH)
 	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;
 	// GearValue: the gain needed to swap (share), the risk exponent, the curse rate of random gear, the boss's weight, a missing STR point's slowness
 	public static final double GEARNEED = get("OGNEED", 5) / 100, RISK = get("ORISK", 2), CURSE = get("OCURSE", 30) / 100, BOSSW = get("OBOSSW", 10) / 100, SLOW = get("OSLOW", 120) / 100;
@@ -28,5 +36,6 @@ public final class Tune {
 	public static final double SURE = get("OSURE", 6) / 100, SURER = get("OSURER", 25) / 100, BOWSHOTS = get("OBOW", 2);
 	// UpgradePlan: armour's edge (a share off its score: armour stays on longer, cuts every blow, the guide's consensus)
 	public static final double ARMB = get("OARMB", 0) / 100;
+	public static final double KEEPHP = get("OKEEPHP", 85);   // (MT: a likely Healing is drink-tested below this share of health)
 	public static final double KEEP = get("OKEEP", 30) / 100, ANKH = get("OANKH", 120), MINW = get("OMINW", 8), FOOD = get("OFOOD", 70);
 }

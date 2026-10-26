@@ -38,7 +38,8 @@ import java.util.*;
  *   player there might have: level STARTLVL (default n+1), strength STARTSTR (default 10 + 0.4 a floor: 2 potions a
  *   region), a weapon and armour of tier STARTTIER (default the best the strength carries at +STARTUPG) at
  *   +STARTUPG each (default 0.3 a floor: half of 3 scrolls a region; the Mage's staff and the Huntress's bow are kept,
- *   the staff upgraded), STARTHEAL known Potions of Healing (default 2) and STARTFOOD rations (default 1). Gear is
+ *   the staff upgraded), STARTHEAL known Potions of Healing (default 2), STARTFOOD rations (default 1), and what the bosses passed by would
+ *   have dropped (Tengu's mask past depth 10, the King's crown past 20; STARTBOSSKIT=0 not). Gear is
  *   identified.</li>
  * <li><b>Spawn kits</b>, KIT=kind,kind... (artifacts, wands, rings, trinkets, armor, weapons; "random": one item of a
  *   random kind of the first four; "all": one of each): given at the start (after any head start). Each kind takes its
@@ -165,6 +166,9 @@ public final class Cheat {
 		h.updateHT(true); h.HP = h.HT;
 		for (int k = envInt("STARTHEAL", 2); k > 0; k--) give(new PotionOfHealing(), true);
 		for (int k = envInt("STARTFOOD", 1); k > 0; k--) give(new Food(), true);
+		// (the bosses passed by: what they'd have dropped, for the hero to put on as a player would: Tengu's mask past 10, the King's crown past 20; STARTBOSSKIT=0 none)
+		if (envInt("STARTBOSSKIT", 1) != 0 && d > 10 && h.subClass == com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.NONE) give(new com.shatteredpixel.shatteredpixeldungeon.items.TengusMask(), false);
+		if (envInt("STARTBOSSKIT", 1) != 0 && d > 20 && h.armorAbility == null) give(new com.shatteredpixel.shatteredpixeldungeon.items.KingsCrown(), false);
 		System.out.println("SETUP head start: depth " + d + " lvl " + h.lvl + " str " + h.STR + " " + got + " heal " + envInt("STARTHEAL", 2));
 	}
 

@@ -643,6 +643,158 @@ public final class RefinementTest {
         System.out.println("talents: a tier-2 point spent with Down and Select (and by finger), the description scrolled: ok");
     }
 
+    /** A strong foe (a gnoll with 1000 health, hunting) at c, in sight. */
+    static com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll brute(int c) throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll g = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll();
+        g.pos = c; g.HP = g.HT = 1000; g.state = g.HUNTING; GameScene.add(g);
+        Dungeon.level.updateFieldOfView(Dungeon.hero, Dungeon.level.heroFOV);
+        @SuppressWarnings("unchecked") Map<Integer, Boolean> hm = (Map<Integer, Boolean>) get(null, "huntMem", Assist.class); hm.put(g.id(), true);
+        return g;
+    }
+    static Assist.Target ab(boolean urgent) throws Exception {
+        Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
+        setup.setAccessible(true); setup.invoke(null, new Object[]{null});
+        AsAbilities.prepAt = -1; AsAbilities.ban.clear();
+        return urgent ? AsAbilities.urgent(null) : AsAbilities.suggest(null);
+    }
+    /** The talents and abilities (AsAbilities): a meal talent eats before a fight, a Duelist's charged ability on a
+     *  strong foe, Berserk when low beside one, the King's Crown put on. */
+    static void abilities() throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero;
+        Gallery.calm(); h.HP = h.HT = 100; WatchSettings.assist(2); WatchSettings.itemAssist(true); Assist.reset();
+        Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); L.updateFieldOfView(h, L.heroFOV);
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass cls0 = h.heroClass; com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass sub0 = h.subClass;
+        {   // (a room big enough for a foe 5 steps off in sight)
+            Field rf = com.shatteredpixel.shatteredpixeldungeon.levels.RegularLevel.class.getDeclaredField("rooms"); rf.setAccessible(true);
+            @SuppressWarnings("unchecked") java.util.List<com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room> rooms = (java.util.List<com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room>) rf.get(L);
+            int W = L.width();
+            for (com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room rm : rooms) if (rm.width() >= 9 && rm.height() >= 4) {
+                for (int y = rm.top + 1; y < rm.bottom; y++) for (int x = rm.left + 1; x < rm.right; x++) { int c = x + y * W; if (L.map[c] != com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.WALL) com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EMPTY); }
+                h.pos = rm.left + 1 + (rm.top + 2) * W; break;
+            }
+            L.updateFieldOfView(h, L.heroFOV);
+        }
+        int[] wd = walks(L, h.pos); int far = -1, near = -1;
+        for (int c = 0; c < wd.length; c++) {
+            if (com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) != null || !L.heroFOV[c] || !L.passable[c]) continue;
+            if (far < 0 && wd[c] >= 4 && wd[c] <= 6 && L.distance(c, h.pos) >= 4 && Assist.line(h.pos, c)) far = c;
+            if (near < 0 && wd[c] == 1) near = c;
+        }
+        if (far < 0) for (int c = 0; c < wd.length; c++) if (far < 0 && wd[c] >= 4 && wd[c] <= 8 && L.passable[c] && L.heroFOV[c] && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) == null) far = c;
+        int fov = 0; for (boolean b : L.heroFOV) if (b) fov++;
+        check(far >= 0 && near >= 0, "cells for the foes (far " + far + " near " + near + ", in sight " + fov + ", hero " + h.pos + ")");
+        // 1. Strengthening Meal (the Duelist's, given the Warrior here), hungry, a strong foe coming: eat first
+        LinkedHashMap<com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent, Integer> t1 = h.talents.get(0);
+        t1.put(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.STRENGTHENING_MEAL, 2);
+        h.buff(Hunger.class).satisfy(1000); h.buff(Hunger.class).affectHunger(-Hunger.HUNGRY);
+        Food ration = new Food(); h.belongings.backpack.items.add(ration);
+        Assist.Target t = ab(true);
+        check(t == null, "no fight coming: no meal for the talent: " + t);
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll g = brute(far);
+        t = ab(true);
+        check(AsAbilities.mealWhy() != null && t != null && t.item == ration && Food.AC_EAT.equals(t.action), "a meal talent, a strong foe coming: eat before the fight: " + t + " (why " + AsAbilities.mealWhy() + ", foe walk " + Assist.walk(far) + " near " + AsAbilities.near + " strong " + AsAbilities.anyStrong + " hunger " + Assist.hunger() + ")");
+        h.buff(Hunger.class).satisfy(1000);
+        t = ab(true);
+        check(t == null || t.item != ration, "not hungry: the ration isn't wasted on it: " + t);
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty horn = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty();
+        Field hc = com.shatteredpixel.shatteredpixeldungeon.items.artifacts.Artifact.class.getDeclaredField("charge"); hc.setAccessible(true); hc.setInt(horn, 3);
+        h.belongings.artifact = horn; horn.activate(h);
+        t = ab(true);
+        check(t != null && t.item == horn && com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty.AC_SNACK.equals(t.action), "with the Horn of Plenty: a snack before the fight: " + t);
+        check(AsAbilities.mealWorth() > 0, "the Horn makes the meal talent worth more: " + AsAbilities.mealWorth());
+        double withHorn = Build.boost(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.HEARTY_MEAL, h);
+        h.belongings.artifact = null; Build.ctxKey = null;
+        double noHorn = Build.boost(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.HEARTY_MEAL, h);
+        check(withHorn > noHorn, "the planner: a Horn of Plenty raises the meal talents (" + withHorn + " vs " + noHorn + ")");
+        {   // (with a point to spend: the guide's Iron Will first, with the Horn the meal first)
+            int lvl0 = h.lvl; h.lvl = 2; LinkedHashMap<com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent, Integer> keep = new LinkedHashMap<>(t1); for (com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent k : t1.keySet()) t1.put(k, 0);
+            t1.remove(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.STRENGTHENING_MEAL);
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent a1 = Build.nextTalent(h);
+            h.belongings.artifact = horn; Build.ctxKey = null;
+            com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent a2 = Build.nextTalent(h);
+            check(a1 == com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.IRON_WILL && a2 == com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.HEARTY_MEAL, "the planner: Iron Will first, with a Horn Hearty Meal first (" + a1 + ", " + a2 + ")");
+            t1.clear(); t1.putAll(keep); h.lvl = lvl0;
+        }
+        h.belongings.artifact = null; t1.remove(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.STRENGTHENING_MEAL); h.belongings.backpack.items.clear();
+        gone(g);
+        // 2. the Duelist with a charge, a strong foe beside her: the weapon's ability
+        h.heroClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.DUELIST; h.STR = 18;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.Sword sw = new com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.Sword(); sw.identify();
+        h.belongings.weapon = sw;
+        com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.Charger ch = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.Charger.class);
+        ch.charges = 2;
+        g = brute(near);
+        t = ab(true);
+        check(t != null && t.item == sw && com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action) && t.cell == near, "a Duelist with charge, a strong foe beside: the weapon's ability on it: " + t);
+        ch.charges = 0; ch.partialCharge = 0;
+        t = ab(true);
+        check(t == null || !com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MeleeWeapon.AC_ABILITY.equals(t.action), "no charge: no ability: " + t);
+        ch.detach(); h.heroClass = cls0;
+        // 3. the Berserker at full rage, low, a strong foe beside: Berserk; at full health against a weak one: not
+        com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor arm = new ClothArmor(); arm.affixSeal(new com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal()); h.belongings.armor = arm;
+        com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield ws = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield.class); ws.setArmor(arm);
+        h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.BERSERKER;
+        com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Berserk bz = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Berserk.class);
+        Field pw = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Berserk.class.getDeclaredField("power"); pw.setAccessible(true); pw.setFloat(bz, 1f);
+        h.HP = 30;
+        t = ab(true);
+        check(t != null && "ab:berserk".equals(t.action), "full rage, low, a strong foe beside: Berserk: " + t);
+        check(Assist.act(t), "Berserk done");
+        check(!"NORMAL".equals(get(bz, "state").toString()), "berserking now");
+        gone(g); bz.detach(); ws.detach(); h.subClass = sub0; h.HP = 100;
+        com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Berserk b2 = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Berserk.class); pw.setFloat(b2, 1f);
+        h.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.BERSERKER; ws = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(h, com.shatteredpixel.shatteredpixeldungeon.items.BrokenSeal.WarriorShield.class); ws.setArmor(arm);
+        com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat r = rat(near, true);
+        t = ab(true);
+        check(t == null || !"ab:berserk".equals(t.action), "full health, a rat beside: no Berserk yet: " + t);
+        gone(r); b2.detach(); ws.detach(); h.subClass = sub0;
+        // 4. the King's Crown, nothing about: put on
+        com.shatteredpixel.shatteredpixeldungeon.items.KingsCrown crown = new com.shatteredpixel.shatteredpixeldungeon.items.KingsCrown(); h.belongings.backpack.items.add(crown);
+        t = ab(false);
+        check(t != null && t.item == crown && "WEAR".equals(t.action), "the King's Crown is put on: " + t);
+        h.belongings.backpack.items.clear(); h.belongings.weapon = null; h.belongings.armor = new ClothArmor();
+        Gallery.calm(); Assist.reset();
+        System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, Berserk when low (not at full health), the Crown put on: ok");
+    }
+
+    static Assist.Target arts() throws Exception {
+        Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
+        setup.setAccessible(true); setup.invoke(null, new Object[]{null});
+        Assist.Target u = AsArtifacts.urgent(null); return u != null ? u : AsArtifacts.suggest(null);
+    }
+    /** AsArtifacts: an identified useful ring is put on, an unknown one that may be cursed isn't; the Chalice isn't
+     *  pricked hurt (and is at full health); the Horn is eaten from when hungry. */
+    static void artifacts(Hero h) throws Exception {
+        WatchSettings.assist(2); Assist.reset();
+        h.HP = h.HT = 100; h.buff(Hunger.class).satisfy(1000);
+        com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring might = new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfMight();
+        might.identify(); h.belongings.backpack.items.add(might);
+        Assist.Target t = arts();
+        check(t != null && t.item == might && com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem.AC_EQUIP.equals(t.action), "an identified Ring of Might is put on: " + t);
+        if (System.getenv("RINGS") != null) for (Class<?> c : com.shatteredpixel.shatteredpixeldungeon.items.Generator.Category.RING.classes) {   // (calibration: each kind's worth here)
+            com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring r = (com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring) c.getDeclaredConstructor().newInstance(); r.identify();
+            System.out.println("ring worth " + c.getSimpleName() + " " + AsArtifacts.worth(r)); }
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring unk = new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion();
+        h.belongings.backpack.items.add(unk);
+        t = arts(); check(t == null || t.item != unk, "an unknown ring that may be cursed isn't put on without a Remove Curse: " + t);
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.ChaliceOfBlood ch = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.ChaliceOfBlood();
+        ch.identify(); h.belongings.misc = ch; ch.activate(h);
+        h.HP = 30; t = arts();
+        check(t == null || t.item != ch, "the Chalice isn't pricked hurt: " + t);
+        h.HP = 100; t = arts();
+        check(t != null && t.item == ch && "PRICK".equals(t.action), "the Chalice is pricked at full health, safe: " + t);
+        ch.doUnequip(h, false); h.belongings.misc = null;
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty horn = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty();
+        horn.identify(); h.belongings.misc = horn; horn.activate(h); horn.charge(h, 12);
+        t = arts(); check(t == null || t.item != horn || !"EAT".equals(t.action), "not hungry: no eating from the horn: " + t);
+        h.buff(Hunger.class).affectHunger(-Hunger.HUNGRY - 10);
+        t = arts(); check(t != null && t.item == horn && ("EAT".equals(t.action) || "SNACK".equals(t.action)), "hungry: eat from the horn: " + t);
+        horn.doUnequip(h, false); h.belongings.misc = null;
+        h.buff(Hunger.class).satisfy(1000); h.belongings.backpack.items.clear(); h.HP = h.HT;
+    }
     public static void main(String[] args) {
         try { run(); } catch (Throwable e) { e.printStackTrace(); System.exit(1); }
     }
@@ -686,6 +838,7 @@ public final class RefinementTest {
         ScrollOfUpgrade up = new ScrollOfUpgrade(); up.identify(); h.belongings.backpack.items.add(up);
         t = hands(); check(t != null && t.item == up && t.on == h.belongings.weapon, "Mage invests in the staff first");
         h.belongings.backpack.items.clear();
+        artifacts(h);
         obedience(app);
         buttons(app);
         places();
@@ -695,6 +848,7 @@ public final class RefinementTest {
         oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); oc = null;
         talentSpent(app);
         chestFromBeside();
+        abilities();
 
         Link link = new Link(new Assets()); Controls controls = new Controls(); Touches touches = new Touches();
         pebxel.ui.WndWatchMenu menu = new pebxel.ui.WndWatchMenu(); GameScene.show(menu);

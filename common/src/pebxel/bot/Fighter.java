@@ -23,6 +23,8 @@ public final class Fighter {
 	/** Foe only: the damage it takes is capped as a slime's (Slime.damage); extra health it fights on with (a brute's
 	 *  rage shield) and the damage roll it fights with then. */
 	public boolean slimeCap;
+	/** Foe only (MT): it blocks all the hero's blows and shots (the Great Crab awake): only a surprise blow lands. */
+	public boolean blockAll;
 	public int rageHp; public Dist rageDmg;
 	/** Foe only: the damage its death does to the hero beside it (a skeleton's bones: armour counts twice), and the health it heals per blow
 	 *  that lands (a vampire bat). */
@@ -36,8 +38,12 @@ public final class Fighter {
 	public double rangedAcc; public Dist rangedDmg; public double rangedDelay = 1; public int rangedShots; public boolean rangedSure;
 	/** Hero only: healing it can drink mid-fight (a known Potion of Healing: 0.8 HT + 14), how many. */
 	public int heals; public int healAmount;
+	/** Hero only (MT): healing still to come from a Healing already drunk (the Healing buff: a quarter of it a turn). */
+	public int healLeft;
 	/** Hero only: a factor on the damage the hero takes (glyphs, a weapon that slows or dazes: {@link Ench#taken}). */
 	public double taken = 1;
+	/** Hero only (MT): the cells beside it that a foe could stand on (Level.passable): how many can come at it at once. */
+	public int slots = 8;
 	/** Hero only, gear values: the share of blows that are surprise blows (sure hits: an ambush, the cloak) and their damage
 	 *  (a dagger, dirk or assassin's blade: 75% of the way to max and up, Dagger.damageRoll; null: the usual roll). */
 	public double sure; public Dist sureDmg;
@@ -46,8 +52,8 @@ public final class Fighter {
 		Fighter f = new Fighter();
 		f.name = name; f.acc = acc; f.eva = eva; f.dmg = dmg; f.dr = dr; f.delay = delay; f.speed = speed; f.hp = hp; f.ht = ht; f.shield = shield;
 		f.dist = dist; f.ranged = ranged; f.asleep = asleep; f.boss = boss; f.slimeCap = slimeCap; f.rageHp = rageHp; f.rageDmg = rageDmg;
-		f.deathDmg = deathDmg; f.leech = leech; f.zapDmg = zapDmg; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
-		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg;
+		f.deathDmg = deathDmg; f.blockAll = blockAll; f.leech = leech; f.zapDmg = zapDmg; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
+		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg; f.slots = slots; f.healLeft = healLeft;
 		return f;
 	}
 
