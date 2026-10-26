@@ -63,6 +63,7 @@ final class AsFire {
 			Fighter f = FoeView.of(m, Dungeon.hero);
 			double d = f.zapDmg != null ? f.zapDmg.mean() : f.burstDmg != null ? f.burstDmg.mean() / 3 : f.rangedDmg != null ? f.rangedDmg.mean() : f.dmg.mean();
 			if (m instanceof Elemental) d /= 4;
+			if (!Tune.ASCEND) d *= com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.statModifier(m);   // (the climb's curse, shown on the hero: FoeView leaves it out by default)
 			return d;
 		} catch (Throwable e) { return 10; }
 	}
@@ -150,7 +151,9 @@ final class AsFire {
 	/** VETO: a walk out of every line whose first step is into a coming caster's. */
 	static boolean stepVeto(Cand c) {
 		if (!ON || !STEP) return false;
-		Target t = c.t; if (t == null || (t.kind != GO && t.kind != PICKUP) || t.cell < 0) return false;
+		Target t = c.t; if (t == null || t.cell < 0) return false;
+		if (t.kind == ENEMY && t.why != null && t.why.startsWith("caster: close in")) return closeVeto(t);
+		if (t.kind != GO && t.kind != PICKUP) return false;
 		note(); if (!any(true)) return false;
 		int hp = Dungeon.hero.pos;
 		if (t.cell == hp || own(t) || stairsNear(t)) return false;
@@ -158,10 +161,19 @@ final class AsFire {
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, t.cell) && comes(m)) return false;   // (closing in on the caster itself)
 		return stepsInFire(t.cell);
 	}
+	/** K6's charge at a caster from out of every line, it hunting and more than two steps off: it comes round to the
+	 *  hero anyway, and every step of the charge is a bolt (CB: "fight out of its line" and "close in" took turns). */
+	static boolean closeVeto(Target t) {
+		note(); int hp = Dungeon.hero.pos;
+		if (Dungeon.hero.rooted || fireAt(hp, false) > 0 || walk(t.cell) <= 2) return false;
+		Seen s = null; for (Seen e : seen.values()) if (e.pos == t.cell) s = e;
+		if (s == null || !s.comes || !s.hunting) return false;
+		return stepsInFire(t.cell);
+	}
 	/** PROPOSE: plan A held back by that: wait where he is, out of its line. */
 	static boolean holdWhen(Cand c) { return ON && STEP && c == Rules.planA && c.veto && c.note.contains(NOSTEP); }
 	static Target holdTarget() {
-		Target t = new Target(Dungeon.hero.pos, WAIT, "fire: wait out of its line (it must come round)"); t.action = SEARCH_ACT; t.obj = -1;
+		Target t = new Target(Dungeon.hero.pos, WAIT, "fire: wait out of its line (it must come round)"); t.action = WAIT_ACT; t.obj = -1;
 		t.hint = 0.25;
 		return t;
 	}
@@ -201,7 +213,9 @@ final class AsFire {
 		if (!ON || !FIGHT || c != Rules.planA || c.t == null || Dungeon.hero.rooted) return false;
 		if (own(c.t) || c.t.kind == USE && c.t.why != null && c.t.why.startsWith("ascent: drink")) return false;
 		note(); if (seen.isEmpty() || !adjFoe()) return false;
-		return fireAt(Dungeon.hero.pos, false) > 0 && fightCell() >= 0;
+		int hp = Dungeon.hero.pos;
+		for (Seen s : seen.values()) if (fireLine(s, hp) && distance(s.pos, hp) <= 2 && s.at == Actor.now()) return false;   // (a shooter a step off: at it, not a dance round it)
+		return fireAt(hp, false) > 0 && fightCell() >= 0;
 	}
 	static int fightCell() {
 		int hp = Dungeon.hero.pos; double here = fireAt(hp, false);
@@ -212,9 +226,18 @@ final class AsFire {
 			double f = fireAt(n, false); if (f >= here / 3) continue;
 			int keep = 0, adj = 0; for (Mob m : adjNow) if (adjacent(m.pos, n)) keep++;
 			for (Mob m : mobs()) if (hostile(m) && !shooter(m) && adjacent(m.pos, n)) adj++;
-			double s = f * 3 + adj * 6 - keep * 4;
+			double s = f * 3 + reach(n) + adj * 6 - keep * 4;
 			if (s < bk) { bk = s; best = n; } }
 		return best;
+	}
+	/** The bolts at c from a step off each shooter's place (the line it gets back by one step). */
+	static double reach(int c) {
+		double r = 0;
+		for (Seen s : seen.values()) { int p0 = s.pos; boolean l = false;
+			for (int k : PathFinder.NEIGHBOURS8) { int p = p0 + k; if (p < 0 || p >= L.length() || !L.passable[p] || seenChar(p) != null && p != p0) continue;
+				s.pos = p; l = fireLine(s, c); s.pos = p0; if (l) break; }
+			if (l) r += s.dmg; }
+		return r;
 	}
 	static Target fightTarget() {
 		int n = fightCell(); if (n < 0) return null;
