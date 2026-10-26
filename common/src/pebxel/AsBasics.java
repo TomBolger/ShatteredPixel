@@ -95,14 +95,14 @@ final class AsBasics {
 	// never ends). Away from it, and to wait for it, only where there's room to slip off again.
 	// =============================================================================================================
 	static final boolean CRABEND = opt("BCRABEND", true);
-	static int crabPos = -1; static float crabSeenAt = -99; static Level crabL;
+	static int crabPos = -1, crabOffers; static float crabSeenAt = -99; static Level crabL; static final int CRABMAX = optInt("BCRABMAX", 150);
 
 	/** Plan A taking the hero into (or keeping it in) a dead end with the crab hunting it: a cell with room instead. */
 	static Target crab(Target planA) {
 		if (!CRABEND || planA == null) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		Mob cr = null; for (Mob m : mobs()) if (m instanceof GreatCrab && enemy(m) && hunting(m)) cr = m;
-		if (crabL != L) { crabL = L; crabSeenAt = -99; }
+		if (crabL != L) { crabL = L; crabSeenAt = -99; crabOffers = 0; }
 		if (cr != null) { crabPos = cr.pos; crabSeenAt = Actor.now(); }
 		else if (Actor.now() - crabSeenAt > 20 || L.heroFOV[crabPos]) return null;   // (out of sight lately, hunting: where it was seen, coming)
 		if (h.rooted) return null;
@@ -119,6 +119,7 @@ final class AsBasics {
 			int sc = 3 * Math.min(distance(c, crp), 5) - 2 * dist[c] + (sight(crp, c) ? 0 : 12);
 			if (sc > bs && !pocket(c, crp, cd)) { bs = sc; best = c; } }
 		if (best < 0) return null;
+		if (++crabOffers > CRABMAX) return null;   // (K8: 1,654 of these on one floor, a floor timeout: past this, plan A as it is)
 		return new Target(best, GO, "the crab: not into a dead end");
 	}
 
