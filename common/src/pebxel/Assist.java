@@ -603,13 +603,20 @@ public final class Assist {
 		if (m instanceof CrystalMimic) return Notes.keyCount(new CrystalKey(Dungeon.depth)) > 0;
 		return true;
 	}
+	/** Whose eyes the decision code uses (Thomas, 2026-10-25): the bot's (AssistBot: everything a frame shows, faint
+	 *  things included, as a perfect player studying every frame) or the assistant's (the watch: only what's comfortably
+	 *  visible there). First user: the Cracked Spyglass's extra heaps, drawn at 10% (Heap.hidden): the bot's to find,
+	 *  the player's own to spot. */
+	public static boolean botEyes = false;
+	/** Has the hero seen heap h, as these eyes perceive it? */
+	static boolean sees(Heap h) { return h != null && h.seen && (!h.hidden || botEyes); }
 	/** The heap on c, if the hero has seen it. */
-	static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return h != null && h.seen ? h : null; }
+	static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return sees(h) ? h : null; }
 	/** A key of this floor lying on c, as seen (iron: a locked door; golden: a chest; crystal: the crystal door or
 	 *  chest; worn: the boss's exit). */
 	static boolean keyAt(int c) {
 		Level l = Dungeon.level; Heap h = l == null || c < 0 ? null : l.heaps.get(c);
-		if (h == null || !h.seen || h.type != Heap.Type.HEAP) return false;
+		if (!sees(h) || h.type != Heap.Type.HEAP) return false;
 		for (Item i : h.items) if (i instanceof Key && ((Key) i).depth == Dungeon.depth) return true;
 		return false;
 	}
@@ -823,7 +830,7 @@ public final class Assist {
 			if (itemsOn()) { Target ur = Brain.offer("urgent", AsAbilities.urgent(first)); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
 			if (itemsOn()) { Target ui = Brain.offer("items!", AsItems.urgent(first)); if (ui != null) front(ui); }   // (the fight's consumables, before the hands' plain throw or zap: AsItems)
 			if (itemsOn()) { Target hk = Brain.hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
-			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first)), Brain.offer("items", AsItems.suggest(first)), Brain.offer("ascent", AsAscent.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
+			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first)), Brain.offer("items", AsItems.suggest(first)), Brain.offer("econ", AsEconomy.suggest(first)), Brain.offer("ascent", AsAscent.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = Brain.offer("escape", escape());
@@ -995,7 +1002,7 @@ public final class Assist {
 		ms.sort(Comparator.comparingInt((Mob m) -> (line(hp, m.pos) ? 0 : 100) + (m.state == m.HUNTING ? 0 : 50) + distance(hp, m.pos)));
 		for (Mob m : ms) if (out.size() < CAP) { Target t = new Target(m.pos, ENEMY, line(hp, m.pos) ? "in line" : "enemy"); out.add(t); }
 		for (Mob m : mobs()) if (out.size() < CAP && L.heroFOV[m.pos] && m.alignment != Char.Alignment.ENEMY && !hiddenMimic(m) && !has(m.pos)) out.add(new Target(m.pos, GO, "char"));
-		for (Heap hh : L.heaps.valueList()) if (out.size() < CAP && L.heroFOV[hh.pos] && !has(hh.pos)) out.add(new Target(hh.pos, GO, "heap"));
+		for (Heap hh : L.heaps.valueList()) if (out.size() < CAP && L.heroFOV[hh.pos] && sees(hh) && !has(hh.pos)) out.add(new Target(hh.pos, GO, "heap"));
 		if (out.size() < CAP && !has(hp)) out.add(new Target(hp, GO, "self"));
 		return out;
 	}
@@ -1224,7 +1231,7 @@ public final class Assist {
 	static boolean heapOk(Heap h) { return heapOk(h, false); }
 	/** skippedToo: one the player passed over counts (the list's tail), else it doesn't (plan A, the floor left). */
 	static boolean heapOk(Heap h, boolean skippedToo) {
-		if (h == null || h.isEmpty() || !h.seen) return false;
+		if (h == null || h.isEmpty() || !sees(h)) return false;
 		int c = h.pos;
 		if (c < 0 || c >= LEN || risky(h) || h.type == Heap.Type.FOR_SALE || !known[c] || L.avoid[c] || passed.contains(c) || (!skippedToo && (skippedHeaps.contains(c) || combatHeld.contains(c))) || bad.containsKey(c) || (danger[c] && c != hp) || (fishRelaxed && wet(c) && c != hp)) return false;
 		if (h.type == Heap.Type.LOCKED_CHEST && Notes.keyCount(new GoldenKey(Dungeon.depth)) <= 0) return false;
@@ -1462,7 +1469,7 @@ public final class Assist {
 			}
 			if (way) { if (st == hp) kind[0] = PICKUP; why[0] = amulet ? "up" : "stairs"; return st; }
 			if (st > 0 && L.map[st] == Terrain.LOCKED_EXIT) {   // the boss's key
-				for (Heap h : L.heaps.valueList()) if (h.seen && h.type == Heap.Type.HEAP && h.peek() instanceof WornKey && known[h.pos] && walk(h.pos) < INF) { kind[0] = PICKUP; why[0] = "the key"; return h.pos; }
+				for (Heap h : L.heaps.valueList()) if (sees(h) && h.type == Heap.Type.HEAP && h.peek() instanceof WornKey && known[h.pos] && walk(h.pos) < INF) { kind[0] = PICKUP; why[0] = "the key"; return h.pos; }
 			}
 			if (fish) { fish = false; fishRelaxed = true; waterChosen = Actor.now(); walls(false); continue; }   // only water left, piranhas about: into it all the same (to explore or leave, not for loot)
 			break;

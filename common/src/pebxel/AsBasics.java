@@ -489,7 +489,7 @@ final class AsBasics {
 		if (Actor.now() - fishSeenAt < 20) return null;
 		Hero h = Dungeon.hero; int best = -1, bd = INF;
 		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hp : L.heaps.valueList()) {
-			if (!hp.seen || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
+			if (!Assist.sees(hp) || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
 			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null || wfTries.getOrDefault(c, 0) > WFTRIES) continue;
 			int d = waterWalk(c); if (d < bd) { bd = d; best = c; }
 		}
@@ -723,7 +723,7 @@ final class AsBasics {
 	static void hidNote() {
 		if (hidHero != Dungeon.hero) { hidHero = Dungeon.hero; hidDone.clear(); hidSeen.clear(); hidDepth = -1; }
 		if (hidL != L) { if (hidDepth >= 0) hidDone.add(hidDepth); if (!hidSeen.add(Dungeon.depth * 100 + Dungeon.branch)) hidDone.add(Dungeon.depth); hidL = L; hidDepth = Dungeon.depth; hidN = 0; hidT0 = -1; hidLast = -1; hidFood = false; hidKey = false; }
-		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hh : L.heaps.valueList()) if (hh.seen && hh.type == com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP && !hh.isEmpty()) {
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hh : L.heaps.valueList()) if (Assist.sees(hh) && hh.type == com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP && !hh.isEmpty()) {
 			Item top = hh.peek();
 			if (top instanceof Food && !(top instanceof Blandfruit)) hidFood = true;
 			if (top instanceof com.shatteredpixel.shatteredpixeldungeon.items.keys.IronKey) hidKey = true;

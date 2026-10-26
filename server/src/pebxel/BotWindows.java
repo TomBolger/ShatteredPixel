@@ -76,6 +76,10 @@ public final class BotWindows {
 				Item it = sales < 3 ? spare() : null;
 				return it != null ? new Answer(null, it, "sell a spare") : new Answer(null, null, "done selling: back");
 			}
+			if (sel == com.shatteredpixel.shatteredpixeldungeon.windows.WndEnergizeItem.selector) {   // (the pot's "+": AsAlchemy's junk, else back; never the first selectable, the worn weapon)
+				Item e = Cheat.ON ? null : AsAlchemy.energizePick();
+				return e != null ? new Answer(null, e, "energize " + BotItems.kind(e)) : new Answer(null, null, "nothing to energize: back");
+			}
 			Item ch = AsChoices.select(sel);   // (a quest's selector: AsChoices, as the Assistant would suggest)
 			if (ch != null) return new Answer(null, ch, "choice: " + AsChoices.why);
 			Item it = BotItems.answerSelector(sel);

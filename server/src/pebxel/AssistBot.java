@@ -90,6 +90,7 @@ public class AssistBot {
 	/** The headless app, set up once a JVM (DeterminismTest too), all classes loaded and our statics recorded. */
 	static void init() throws Exception {
 		v = System.getenv("V") != null;
+		Assist.botEyes = !"0".equals(System.getenv("BOTEYES"));   // (the bot perceives everything a frame shows, the spyglass's faint heaps too; BOTEYES=0: the assistant's eyes)
 		dir0 = ".pebxel-assistbot-" + ProcessHandle.current().pid() + System.getenv().getOrDefault("SAVETAG", "");
 		Game.version = "4.0.2"; Game.versionCode = 922;
 		Screen.set(System.getenv().getOrDefault("SCREEN", "emery"));
@@ -386,6 +387,7 @@ public class AssistBot {
 		System.out.println(BotItems.artLine());
 		if (Sense.ON) System.out.println(Sense.line());
 		System.out.println("BRAIN " + Brain.stats());
+		System.out.println("ECON " + AsEconomy.stats());
 		if (Dungeon.hero != null && Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) System.out.println("ASCENT stacks " + AsAscent.stacks() + " " + AsAscent.stats()); else AsAscent.reset();
 		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",

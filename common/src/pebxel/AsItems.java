@@ -526,7 +526,8 @@ final class AsItems {
 	 *  goes off at once: any group. */
 	static Target bombs() {
 		Item best = null; int bc = -1, bn = 0;
-		for (Item i : H.belongings.backpack) {
+		boolean spend = Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null && AsEconomy.bombSpendOk();   // (the climb's are AsAscent's; going down, emergencies only: AsEconomy)
+		if (spend) for (Item i : H.belongings.backpack) {
 			if (!(i instanceof Bomb) || i instanceof Noisemaker || i instanceof RegrowthBomb || i instanceof WoollyBomb || i instanceof SmokeBomb) continue;
 			if (!ok(i, "LIGHTTHROW")) continue;
 			int r = bombRange(i); if (i instanceof ShrapnelBomb) continue;   // (its 8 cells in sight: it hits the hero too, almost always)
@@ -901,19 +902,18 @@ final class AsItems {
 			Item fb = wand(WandOfFireblast.class); if (fb != null && fireOk()) return use(fb, zapAct(fb), aim, "barricade: burn it");
 			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, aim, "barricade: burn it");
 		}
-		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd >= 3) return use(i, "LIGHTTHROW", aim, "barricade: blow it up");
+		// (no plain Bomb on a barricade: bombs are kept for the climb, AsEconomy.bombSpendOk)
 		// none known: the storage room put a Potion of Liquid Flame among the floor's items (StorageRoom.paint): an
 		// unknown kind first found here, thrown from 3 or more off and off grass (K6: the room's food never reached)
 		Potion g = floorGuess();
 		if (g != null && bd >= 3 && !L.flamable[hp] && hpf >= 0.5f) return use(g, Item.AC_THROW, aim, "barricade: an unknown potion found here (the room's Liquid Flame is among the floor's)");
 		return null;
 	}
-	/** A barricade seen with the unknown behind it, a remedy in hand (known fire, a bomb, a floor's guess) but no throw
+	/** A barricade seen with the unknown behind it, a remedy in hand (known fire, a floor's guess) but no throw
 	 *  from here: to the nearest spot one lands from, 3 or 4 off its aim (K6: the storage room's food never seen). */
 	static Target toBarricade() {
 		if (AsQuests.graveOpen() || hpf < 0.5f || barWait()) return null;
 		boolean rem = has(PotionOfLiquidFlame.class) != null || wand(WandOfFireblast.class) != null || has(InfernalBrew.class) != null || floorGuess() != null;
-		if (!rem) for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class) rem = true;
 		if (!rem) return null;
 		Set<Integer> aims = new HashSet<>();
 		for (int c = 0; c < LEN; c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c]) {
