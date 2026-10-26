@@ -41,7 +41,9 @@ import java.util.*;
  *   the staff upgraded), STARTHEAL known Potions of Healing (default 2), STARTFOOD rations (default 1), and what the bosses passed by would
  *   have dropped (Tengu's mask past depth 10, the King's crown past 20; STARTBOSSKIT=0 not). Gear is
  *   identified.</li>
- * <li><b>Spawn kits</b>, KIT=kind,kind... (artifacts, wands, rings, trinkets, armor, weapons; "random": one item of a
+ * <li><b>Spawn kits</b>, KIT=kind,kind... (artifacts, wands, rings, trinkets, armor, weapons; the consumables potions,
+ *   scrolls, stones, seeds, missiles, bombs, spells, exotics (exotic potions and scrolls), brews (and elixirs), darts
+ *   (plain and tipped), KITQTY of each stackable one (default 2); "random": one item of a
  *   random kind of the first four; "all": one of each): given at the start (after any head start). Each kind takes its
  *   pick from ARTIFACTS / WANDS / RINGS / TRINKETS / ARMOR / WEAPONS: class names (HornOfPlenty,CloakOfShadows; a
  *   name's end will do: Lightning for WandOfLightning) or random:N (N of those the dungeon could drop, none twice);
@@ -67,7 +69,27 @@ public final class Cheat {
 	public static final boolean HEAD = !ON && "1".equals(System.getenv("HEAD"));
 	public static final boolean MILD = !ON && "1".equals(System.getenv("MILD"));
 	static final String KIT = env("KIT", "");
-	static final String[] KINDS = { "ARTIFACTS", "WANDS", "RINGS", "TRINKETS", "ARMOR", "WEAPONS" };
+	static final String[] KINDS = { "ARTIFACTS", "WANDS", "RINGS", "TRINKETS", "ARMOR", "WEAPONS", "POTIONS", "SCROLLS", "STONES", "SEEDS", "MISSILES", "BOMBS", "SPELLS", "EXOTICS", "BREWS", "DARTS" };
+	/** The consumable kinds (agent K5) that are no Generator category of their own: the classes to pick from. */
+	static final String SP = "com.shatteredpixel.shatteredpixeldungeon.items.";
+	static final Map<String, String[]> LISTS = new HashMap<>();
+	static {
+		LISTS.put("BOMBS", new String[]{ "bombs.Bomb", "bombs.ArcaneBomb", "bombs.Firebomb", "bombs.FlashBangBomb", "bombs.FrostBomb", "bombs.HolyBomb", "bombs.Noisemaker", "bombs.RegrowthBomb", "bombs.ShrapnelBomb", "bombs.SmokeBomb", "bombs.WoollyBomb" });
+		LISTS.put("SPELLS", new String[]{ "spells.PhaseShift", "spells.TelekineticGrab", "spells.MagicalInfusion", "spells.Alchemize", "spells.BeaconOfReturning", "spells.CurseInfusion", "spells.ReclaimTrap", "spells.SummonElemental", "spells.WildEnergy", "spells.Recycle", "spells.UnstableSpell" });
+		LISTS.put("EXOTICS", new String[]{ "potions.exotic.PotionOfShielding", "potions.exotic.PotionOfMagicalSight", "potions.exotic.PotionOfSnapFreeze", "potions.exotic.PotionOfShroudingFog", "potions.exotic.PotionOfDragonsBreath",
+				"potions.exotic.PotionOfCorrosiveGas", "potions.exotic.PotionOfEarthenArmor", "potions.exotic.PotionOfCleansing", "potions.exotic.PotionOfDivineInspiration", "potions.exotic.PotionOfMastery", "potions.exotic.PotionOfStamina", "potions.exotic.PotionOfStormClouds",
+				"scrolls.exotic.ScrollOfPassage", "scrolls.exotic.ScrollOfForesight", "scrolls.exotic.ScrollOfDivination", "scrolls.exotic.ScrollOfSirensSong", "scrolls.exotic.ScrollOfChallenge", "scrolls.exotic.ScrollOfPsionicBlast", "scrolls.exotic.ScrollOfDread",
+				"scrolls.exotic.ScrollOfPrismaticImage", "scrolls.exotic.ScrollOfMetamorphosis", "scrolls.exotic.ScrollOfMysticalEnergy", "scrolls.exotic.ScrollOfAntiMagic", "scrolls.exotic.ScrollOfEnchantment" });
+		LISTS.put("BREWS", new String[]{ "potions.brews.AquaBrew", "potions.brews.BlizzardBrew", "potions.brews.CausticBrew", "potions.brews.InfernalBrew", "potions.brews.ShockingBrew", "potions.brews.UnstableBrew",
+				"potions.elixirs.ElixirOfAquaticRejuvenation", "potions.elixirs.ElixirOfArcaneArmor", "potions.elixirs.ElixirOfDragonsBlood", "potions.elixirs.ElixirOfFeatherFall", "potions.elixirs.ElixirOfHoneyedHealing", "potions.elixirs.ElixirOfIcyTouch", "potions.elixirs.ElixirOfMight", "potions.elixirs.ElixirOfToxicEssence" });
+		LISTS.put("DARTS", new String[]{ "weapon.missiles.darts.Dart", "weapon.missiles.darts.AdrenalineDart", "weapon.missiles.darts.BlindingDart", "weapon.missiles.darts.ChillingDart", "weapon.missiles.darts.CleansingDart", "weapon.missiles.darts.DisplacingDart",
+				"weapon.missiles.darts.HealingDart", "weapon.missiles.darts.HolyDart", "weapon.missiles.darts.IncendiaryDart", "weapon.missiles.darts.ParalyticDart", "weapon.missiles.darts.PoisonDart", "weapon.missiles.darts.RotDart", "weapon.missiles.darts.ShockingDart" });
+	}
+	static Class<?>[] listed(String kind) {
+		String[] n = LISTS.get(kind); if (n == null) return null;
+		List<Class<?>> out = new ArrayList<>(); for (String s : n) try { out.add(Class.forName(SP + s)); } catch (ClassNotFoundException e) { System.out.println("SETUP kit: no class " + s); }
+		return out.toArray(new Class<?>[0]);
+	}
 	/** Any set-up at all besides god mode (AssistBot calls {@link #setup} each turn then). */
 	public static final boolean SETUP = HEAD || MILD || !KIT.isEmpty() || Arrays.stream(KINDS).anyMatch(k -> System.getenv(k) != null);
 
@@ -194,6 +216,11 @@ public final class Cheat {
 			case "RINGS": return new Generator.Category[]{ Generator.Category.RING };
 			case "TRINKETS": return new Generator.Category[]{ Generator.Category.TRINKET };
 			case "ARMOR": return new Generator.Category[]{ Generator.Category.ARMOR };
+			case "POTIONS": return new Generator.Category[]{ Generator.Category.POTION };
+			case "SCROLLS": return new Generator.Category[]{ Generator.Category.SCROLL };
+			case "STONES": return new Generator.Category[]{ Generator.Category.STONE };
+			case "SEEDS": return new Generator.Category[]{ Generator.Category.SEED };
+			case "MISSILES": return Generator.misTiers;
 			default: return Generator.wepTiers;
 		}
 	}
@@ -202,7 +229,7 @@ public final class Cheat {
 		Map<String, String> want = new LinkedHashMap<>();
 		for (String k : KIT.toUpperCase(Locale.ROOT).split("[, ]+")) {
 			if (k.isEmpty()) continue;
-			if (k.equals("ALL")) { for (String x : KINDS) want.put(x, "random:1"); continue; }
+			if (k.equals("ALL")) { for (int x = 0; x < 6; x++) want.put(KINDS[x], "random:1"); continue; }   // (the gear kinds only, as before the consumables)
 			if (k.equals("RANDOM")) { want.put(KINDS[r.nextInt(4)], "random:1"); continue; }
 			if (!k.endsWith("S") && !k.equals("ARMOR")) k = k + "S";   // (artifact, wand... as well)
 			if (k.equals("WEAPONSS")) k = "WEAPONS";
@@ -210,7 +237,7 @@ public final class Cheat {
 		}
 		for (String k : KINDS) if (System.getenv(k) != null && !System.getenv(k).isEmpty()) want.put(k, System.getenv(k));
 		if (want.isEmpty()) return;
-		String idm = env("KITID", "1"); int lvl = envInt("KITLVL", 0); boolean equip = "1".equals(System.getenv("KITEQUIP"));
+		String idm = env("KITID", "1"); int lvl = envInt("KITLVL", 0), qty = envInt("KITQTY", 2); boolean equip = "1".equals(System.getenv("KITEQUIP"));
 		StringBuilder got = new StringBuilder();
 		for (Map.Entry<String, String> e : want.entrySet()) {
 			List<Class<?>> cls = new ArrayList<>();
@@ -218,14 +245,15 @@ public final class Cheat {
 			if (spec.toLowerCase(Locale.ROOT).startsWith("random")) {
 				int n = 1; try { n = Integer.parseInt(spec.substring(spec.indexOf(':') + 1)); } catch (Exception x) { }
 				for (int k = 0, guard = 0; k < n && guard < 50; guard++) {
-					Generator.Category[] cs = cats(e.getKey());
-					Class<?> c = pick(cs[cs.length == 1 ? 0 : r.nextInt(cs.length)], null);
+					Generator.Category[] cs = cats(e.getKey()); Class<?>[] lc = listed(e.getKey());
+					Class<?> c = lc != null ? lc[r.nextInt(lc.length)] : pick(cs[cs.length == 1 ? 0 : r.nextInt(cs.length)], null);
 					if (cls.contains(c) || h.belongings.getItem(c.asSubclass(Item.class)) != null || c == MagesStaff.class) continue;
 					cls.add(c); k++;
 				}
 			} else for (String name : spec.split("[, ]+")) {
-				Class<?> c = null;
-				for (Generator.Category cat : cats(e.getKey())) if (c == null) c = pick(cat, name);
+				Class<?> c = null; Class<?>[] lc = listed(e.getKey());
+				if (lc != null) { for (Class<?> x : lc) if (c == null && x.getSimpleName().equalsIgnoreCase(name)) c = x; for (Class<?> x : lc) if (c == null && x.getSimpleName().toLowerCase(Locale.ROOT).endsWith(name.toLowerCase(Locale.ROOT))) c = x; }
+				else for (Generator.Category cat : cats(e.getKey())) if (c == null) c = pick(cat, name);
 				if (c == null) System.out.println("SETUP kit: no " + e.getKey().toLowerCase(Locale.ROOT) + " called " + name);
 				else cls.add(c);
 			}
@@ -236,6 +264,7 @@ public final class Cheat {
 				i.cursed = false; i.level(0);
 				for (int k = 0; k < lvl; k++) i.upgrade();
 				if (i instanceof Wand) ((Wand) i).curCharges = ((Wand) i).maxCharges;
+				if (i.stackable) i.quantity(Math.max(1, qty));   // (KITQTY: consumables and thrown sets come several at a time)
 				if (i instanceof Artifact) Generator.removeArtifact(c.asSubclass(Artifact.class));
 				boolean known = idm.equals("mix") ? r.nextBoolean() : !idm.equals("0");
 				if (known) i.identify(false);

@@ -743,8 +743,9 @@ public final class Assist {
 		if (mode() != 0) {
 			Target first = out.isEmpty() ? null : out.get(0);
 			if (itemsOn()) { Target ur = AsAbilities.urgent(first); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
+			if (itemsOn()) { Target ui = AsItems.urgent(first); if (ui != null) front(ui); }   // (the fight's consumables, before the hands' plain throw or zap: AsItems)
 			if (itemsOn()) { Target hk = hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
-			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
+			if (itemsOn()) for (Target sk : new Target[]{AsArtifacts.suggest(first), AsAbilities.suggest(first), AsQuests.suggest(first), AsItems.suggest(first)}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = escape();
@@ -1805,7 +1806,7 @@ public final class Assist {
 	static boolean attackWand(Class<?> c, int ed) {
 		if (c == null) return false;
 		if (c == WandOfLightning.class || c == WandOfCorrosion.class) return ed >= 3;
-		if (c == WandOfFireblast.class) return ed >= 2 && !L.flamable[hp];
+		if (c == WandOfFireblast.class) return ed >= 2 && AsItems.fireOk();   // (nothing that burns on or beside the hero: AsItems)
 		return c == WandOfMagicMissile.class || c == WandOfDisintegration.class || c == WandOfFrost.class || c == WandOfBlastWave.class || c == WandOfPrismaticLight.class;
 	}
 
