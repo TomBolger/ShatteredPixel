@@ -216,8 +216,8 @@ public final class Assist {
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
 	static final int HEALPCT = optInt("HEALPCT", 40);
-	static final int EATHMAX = optInt("EATHMAX", 99);   // (HE: the deepest floor EATHUNGRY eats on)
-	static final boolean EATHUNGRY = opt("EATHUNGRY", false), MMSAVE = opt("MMSAVE", true);   // (K8, SR's audit gaps 9 and 21)   // (a known Healing potion is drunk in a fight below this share of health)
+	static final int EATHMAX = optInt("EATHMAX", 8);   // (HE: the deepest floor EATHUNGRY eats on)
+	static final boolean EATHUNGRY = opt("EATHUNGRY", true), MMSAVE = opt("MMSAVE", true);   // (K8, SR's audit gaps 9 and 21)   // (a known Healing potion is drunk in a fight below this share of health)
 	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
 	// On by default (Thomas: the models are the way to a solved game; tune them, don't switch them off). Untuned after the
 	// merge they scored below main's rules (BF, Monolith 90 games each, mean max depth: rules 5.19, all on 4.08); agent MT tunes them.

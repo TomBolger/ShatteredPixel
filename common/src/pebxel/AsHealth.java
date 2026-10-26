@@ -32,7 +32,7 @@ final class AsHealth {
 
 	static final boolean DBG = "1".equals(System.getenv("EGDBG"));
 	static final boolean ON = opt("EGHEALTH", true), POS = opt("EGPOS", true), FLEE = opt("EGFLEE", true);
-	static final int POSGAIN = optInt("EGPOSGAIN", 25);     // percent less cost (death odds weighed in) for the corridor to be worth the steps
+	static final int POSGAIN = optInt("EGPOSGAIN", 10);     // percent less cost (death odds weighed in) for the corridor to be worth the steps
 	static final int FLEEPD = optInt("EGFLEEPD", 30);       // death odds (percent) at which the stairs up are taken
 	static final int FLEEWALK = optInt("EGFLEEWALK", 30);   // the farthest walk to them
 	static final int RUNS = optInt("EGRUNS", 120);
