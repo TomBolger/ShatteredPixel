@@ -652,7 +652,7 @@ public final class Assist {
 				if (L.map[c] == Terrain.EMPTY_SP && distance(c, s) <= 12 && sight(s, c)) sentryZone[c] = true;
 		}
 		anyDanger = false;
-		for (int c = 0; c < LEN; c++) { danger[c] = AsBosses.danger(c) || hazMem[c] || sentryZone[c] || (water && wet(c)) || (TRAPMEM && trapMem[c] && c != hp); anyDanger |= danger[c] && known[c]; }
+		for (int c = 0; c < LEN; c++) { danger[c] = AsBosses.danger(c) || AsHealth.danger(c) || hazMem[c] || sentryZone[c] || (water && wet(c)) || (TRAPMEM && trapMem[c] && c != hp); anyDanger |= danger[c] && known[c]; }
 		inDanger = danger[hp];
 		for (int c = 0; c < LEN; c++) {
 			boolean ok = L.passable[c] && !L.avoid[c];

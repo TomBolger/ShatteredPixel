@@ -594,7 +594,7 @@ final class AsBasics {
 		if (!BUDGET) return foodTurns() < (int) Hunger.STARVING + FOODRESERVE / 2;
 		// (K6) the run's budget: the turns of food before starving, plus the floor's own food while it's still to find,
 		// against the rest of this floor's walk and a reserve: short, nothing optional (the next floor has food too)
-		int f = foodTurns() - (int) Hunger.STARVING + (foodHere ? 0 : FLOORMEAL);
+		int f = foodTurns() - FOODX + (foodHere ? 0 : FLOORMEAL);
 		return f < FOODRESERVE / 2 + floorNeed();
 	}
 	static final boolean BUDGET = opt("BBUDGET", true);
@@ -613,7 +613,8 @@ final class AsBasics {
 
 	static final boolean RESTALL = opt("BRESTALL", true);   // (K6) every rest priced, not only the hands' "hurt" ones: 400-turn rests before (and after) the boss starved runs
 	static final int FLOORNEED = optInt("BFLOORNEED", 150);   // turns the rest of a floor not yet explored is reckoned to take
-	static final int LOWREST = optInt("BLOWREST", 50);   // (EG) below this share of health a rest needs only the food it eats
+	static final int LOWREST = optInt("BLOWREST", 50);
+	static final int FOODX = optInt("BFOODX", 450);   // (EG) turns of food held back beyond the reserve (Hunger.STARVING: counted twice, but 0 starved more: EG v4, 9 starved against 5)
 	/** A rest (any: the hands', the boss's, the brain's) the food can't pay for: none while starving (there is no
 	 *  regeneration then), and none that leaves less than the reserve plus the rest of this floor's walk. Dying
 	 *  (a quarter health), or with the floor locked (hunger stops), only one that would starve the hero. */
@@ -624,7 +625,7 @@ final class AsBasics {
 		if (Assist.starving()) return true;
 		if (t.why.startsWith("rest before the boss") && bossDown()) return true;
 		if (L.locked) return false;
-		int f = foodTurns() - (int) Hunger.STARVING, need = restTurns();   // (turns of food before starving)
+		int f = foodTurns() - FOODX, need = restTurns();   // (turns of food before starving: foodTurns already is; EG: the 450 taken off again kept a second reserve, and the prison hero never rested: 23 turns a floor)
 		if (Rules.bossNext() && L.exit() >= 0 && walk(L.exit()) <= 2) return f < need + 50;   // (EG: at the boss's stairs, full health is worth its food: Tengu's floor locks, no regeneration in the fight)
 		if (h.HP * 100 < h.HT * LOWREST) return f < need + 30;   // (EG: low, the rest is paid for while it doesn't starve him: 1 in 4 honest prison deaths explored on at a fifth of health, the reserve kept)
 		return f - need < FOODRESERVE / 2 + floorNeed();

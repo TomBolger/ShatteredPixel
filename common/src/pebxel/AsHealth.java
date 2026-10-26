@@ -52,10 +52,12 @@ final class AsHealth {
 				}
 			}
 			if (ON && GOO && !out.isEmpty() && !H.rooted) { Target g = gooGuard(H); if (g != null) { out.add(0, g); if (DBG) System.out.println("EGH t " + Actor.now() + " " + g.why); return; } }
+			if (ON && BOSSREST && !out.isEmpty()) { Target b = bossRest(H, out.get(0)); if (b != null) { out.add(0, b); return; } }
 			if (!ON || out.isEmpty() || H.rooted || L.locked || Dungeon.bossLevel() || bag(Amulet.class) != null) return;
 			Target a = out.get(0);
 			if (a.why != null && (a.why.startsWith("escape") || a.why.startsWith("rescue") || a.why.contains("heal") || a.why.startsWith("dying"))) return;   // (the rules' own way out stands)
-			Target t = FLEE ? flee(H, a) : null;
+			Target t = lasher(H);
+			if (t == null && FLEE) t = flee(H, a);
 			if (t == null && GATE > 0) t = gate(H, a);
 			if (t == null && POS) t = position(H, a);
 			if (t != null) { out.add(0, t); if (DBG) System.out.println("EGH t " + Actor.now() + " " + t.why + " -> " + t.cell + " (over " + a.why + ")"); }
@@ -153,9 +155,56 @@ final class AsHealth {
 			int best = -1, bk = 99;
 			for (int c = 0; c < L.length(); c++) { int w = walk(c); if (w < 1 || w > maxW || !standOk(c) || gooReach(m.pos, c) || danger[c]) continue;
 				int sc = w * 10 + (L.water[c] ? 1 : 0); if (sc < bk) { bk = sc; best = c; } }
+			if (DBG) { StringBuilder b = new StringBuilder(); for (int c = 0; c < L.length(); c++) if (distance(c, hp) <= 2 && c != hp) b.append(c).append(':').append(walk(c)).append(standOk(c) ? "s" : "").append(gooReach(m.pos, c) ? "R" : "").append(danger[c] ? "D" : "").append(L.passable[c] ? "" : "#").append(' '); System.out.println("EGGOO hp " + hp + " goo " + m.pos + " maxW " + maxW + " best " + best + " | " + b); }
 			if (best >= 0) return new Target(best, GO, "Goo pumps up: out of its reach (the blast is triple)");
 		}
 		return null;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// rot lashers (the Wandmaker's garden; 3-4 honest deaths a run): they can't move, bite for 10-20 at accuracy 25 and
+	// heal 5 a turn when no one is beside them. Their reach is a hazard on the plan's map (walked round, not into), and
+	// one beside the hero is stepped away from unless the model says it's a cheap kill.
+	// ---------------------------------------------------------------------------------------------------------
+	static final boolean LASH = opt("EGLASH", true);
+	static final Set<Integer> lashers = new HashSet<>(); static Level lashL; static float lashAt = -1; static boolean[] lashZone = new boolean[0];
+	static boolean danger(int c) {
+		if (!LASH) return false;
+		Level l = Dungeon.level; if (l == null) return false;
+		if (lashL != l) { lashL = l; lashers.clear(); lashAt = -1; }
+		if (lashAt != Actor.now() || lashZone.length != l.length()) {
+			lashAt = Actor.now();
+			for (Mob m : l.mobs) if (m instanceof RotLasher && m.isAlive() && l.heroFOV[m.pos]) lashers.add(m.pos);
+			lashers.removeIf(p -> l.heroFOV[p] && !(Actor.findChar(p) instanceof RotLasher));
+			if (lashZone.length != l.length()) lashZone = new boolean[l.length()]; else Arrays.fill(lashZone, false);
+			for (int p : lashers) for (int k = 0; k < 8; k++) { int n = p + N8[k]; if (nb(p, n)) lashZone[n] = true; }
+		}
+		return c >= 0 && c < lashZone.length && lashZone[c];
+	}
+	static Target lasher(Hero H) {
+		if (!LASH) return null;
+		List<Mob> adj = new ArrayList<>();
+		for (Mob m : mobs()) if (m instanceof RotLasher && enemy(m) && adjacent(m.pos, H.pos)) adj.add(m);
+		if (adj.isEmpty()) return null;
+		try { FightModel.Result r = FightModel.evaluate(H, adj); if (r.pDeath <= 0.01 && r.loss90 <= H.HP * 0.3) return null; } catch (Throwable e) { }
+		int best = -1, bd = 9;
+		for (int c = 0; c < L.length(); c++) { int w = walk(c); if (w < 1 || w >= bd || !L.passable[c] || L.avoid[c] || seenChar(c) != null || lashZone.length == L.length() && lashZone[c]) continue; bd = w; best = c; }
+		return best >= 0 ? new Target(best, GO, "rot lasher: out of its reach (it can't move, and heals)") : null;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// a boss floor before the boss: rested to full (of 14 Goo deaths replayed, 6 met it at 35-80% health; it seals the
+	// floor once awake, and a sealed floor stops regeneration)
+	// ---------------------------------------------------------------------------------------------------------
+	static final boolean BOSSREST = opt("EGBOSSREST", true);
+	static final int BOSSPCT = optInt("EGBOSSPCT", 90);
+	static Target bossRest(Hero H, Target a) {
+		if (!Dungeon.bossLevel() || L.locked || bag(Amulet.class) != null || H.HP * 100 >= H.HT * BOSSPCT || seenFoe || threatNear || starving() || declined(null, REST_ACT)) return null;
+		if (!(a.kind == GO || a.kind == PICKUP || a.kind == ENEMY && a.action == null || (a.kind == WAIT && !REST_ACT.equals(a.action)))) return null;
+		for (Mob m : mobs()) if (enemy(m) && m.state != m.SLEEPING) return null;
+		if (AsBasics.foodTurns() < AsBasics.restTurns() + 30) return null;   // (the rest mustn't starve him)
+		Target r = new Target(H.pos, WAIT, String.format(Locale.ROOT, "boss floor: rest to full first (%d/%d); it seals the floor when it wakes", H.HP, H.HT)); r.action = REST_ACT; r.obj = -1;
+		return r;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------

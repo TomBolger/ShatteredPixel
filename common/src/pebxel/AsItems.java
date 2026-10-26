@@ -689,6 +689,7 @@ final class AsItems {
 	// magical fire, a barricade)
 	// =============================================================================================================
 
+	static final boolean PIRPUZ = Assist.opt("EGPIRPUZ", false);
 	static final int LEV = 1, INVIS = 2, PURE = 3, HASTE = 4;   // (HASTE: the sentry room's own potion, SentryRoom.paint; invisibility doesn't hide from a sentry: Sentry.act)
 	static final class Cross { int heap, home, kind, tries; Level l; float until; }
 	static final Set<Integer> done = new HashSet<>();   // prizes given up on this floor
@@ -773,6 +774,7 @@ final class AsItems {
 			for (Heap h : L.heaps.valueList()) {
 				if (!prize(h) || (Assist.walk(h.pos) < Assist.INF && !Assist.danger[h.pos] && !(kind == HASTE && (sentryWay(h.pos) || Clues.inPuzzle(h.pos, PotionOfHaste.class))))) continue;   // (the sentries' prize: its cell is off their floor, the way to it isn't)
 				if (kind == INVIS && !(Assist.fishSeen || wetWay(h.pos))) continue;
+				if ((kind == INVIS || kind == LEV) && Assist.fishSeen && !PIRPUZ) continue;   // (EG: piranhas bite the invisible or levitating hero beside them: 5 honest deaths in 3 runs crossing their pool for its prize)
 				if (kind == HASTE && !sentryWay(h.pos) && !Clues.inPuzzle(h.pos, PotionOfHaste.class)) continue;
 				if (kind == PURE && !gasWay(h.pos)) continue;
 				int w = crossWalk(hp, h.pos, kind, null);
