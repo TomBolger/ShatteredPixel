@@ -41,7 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
-		foodSeen(); hazNote(); shotNote();
+		foodSeen(); hazNote(); shotNote(); fishNote();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -403,9 +403,10 @@ final class AsBasics {
 		if (pd <= CASTRISK && walk(sh.pos) <= 12) return new Target(sh.pos, ENEMY, "caster: close in (its bolt ignores armour)");
 		// a fight it would lose: out of its bolts' way for a while (no cell it can reach in two steps sees there), the
 		// rules' escapes have their say before this (the stairs, Healing): not picking things up under its bolts
+		List<int[]> cds = new ArrayList<>(); for (Mob m : mobs()) if (caster(m) && hostile(m)) cds.add(m == sh ? ds : crabDist(m.pos));
 		int hide = -1, hd = INF;
 		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 6 && dist[c] < hd && open[c] && seenChar(c) == null && !danger[c] && !bad.containsKey(c)) {
-			boolean seen = false; for (int x = 0; x < L.length() && !seen; x++) if (ds[x] <= 2 && bolts(x, c)) seen = true;
+			boolean seen = false; for (int[] dd : cds) for (int x = 0; x < L.length() && !seen; x++) if (dd[x] <= 2 && bolts(x, c)) seen = true;
 			if (!seen) { hd = dist[c]; hide = c; } }
 		return hide >= 0 && bolts(sh.pos, hp) ? new Target(hide, GO, "caster: out of its bolts' way (a fight to lose)") : null;
 	}
@@ -436,10 +437,45 @@ final class AsBasics {
 		if (!CASTER || t == null || t.kind != WAIT || REST_ACT.equals(t.action)) return false;
 		int hp = Dungeon.hero.pos;
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return false;
-		if (shotLately()) return true;
 		if (t.why != null && t.why.startsWith("caster")) return false;
+		if (shotLately()) return true;
 		for (Mob m : mobs()) if (caster(m) && hostile(m) && bolts(m.pos, hp)) return true;
 		return false;
+	}
+
+	// =============================================================================================================
+	// food in the water (K6: a floor's food left behind in sight, 65 turns of it a floor; the aquariums and pools hold
+	// it, and the meat of the piranhas killed sinks there). Short of food, every piranha seen here dead and none seen
+	// for a while: in for it (the plan keeps out of water for good once one is seen).
+	// =============================================================================================================
+	static final boolean WATERFOOD = opt("BWATERFOOD", true);
+	static final List<Mob> fishSeen = new ArrayList<>(); static Level fishSeenL; static float fishSeenAt = -99;
+	static void fishNote() {
+		if (fishSeenL != L) { fishSeenL = L; fishSeen.clear(); fishSeenAt = -99; }
+		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { if (!fishSeen.contains(m)) fishSeen.add(m); fishSeenAt = Actor.now(); }
+	}
+	static Target waterFood(Target planA) {
+		if (!WATERFOOD || planA == null || seenFoe || inDanger || Dungeon.hero.rooted || !(shortOfFood() || Assist.hungry())) return null;
+		if (planA.kind == PICKUP && planA.why.startsWith("hungry")) return null;
+		for (Mob m : fishSeen) if (m.isAlive()) return null;
+		if (Actor.now() - fishSeenAt < 20) return null;
+		Hero h = Dungeon.hero; int best = -1, bd = INF;
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hp : L.heaps.valueList()) {
+			if (!hp.seen || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
+			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null) continue;
+			int d = waterWalk(c); if (d < bd) { bd = d; best = c; }
+		}
+		if (best < 0 || bd > 30) return null;
+		return new Target(best, best == h.pos ? PICKUP : GO, "short of food: the food in the water");
+	}
+	/** Steps to c over known passable cells, water too (the plan's own walk keeps out of it). */
+	static int waterWalk(int c) {
+		int N = L.length(), W = L.width(), s = Dungeon.hero.pos; int[] d = new int[N]; Arrays.fill(d, INF); ArrayDeque<Integer> q = new ArrayDeque<>(); d[s] = 0; q.add(s);
+		while (!q.isEmpty()) { int u = q.poll(); if (u == c) return d[u]; if (d[u] > 40) continue;
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || d[v] < INF || !L.passable[v] || !known[v] || L.avoid[v] || danger[v]) continue;
+				d[v] = d[u] + 1; q.add(v); } }
+		return INF;
 	}
 
 	// =============================================================================================================

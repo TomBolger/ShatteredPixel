@@ -62,6 +62,7 @@ final class AsQuests {
 			b = AsBasics.crab(planA);
 			if (b == null) b = AsBasics.casterTactic(planA);
 			if (b == null) b = AsBasics.stuck(planA);
+			if (b == null) b = AsBasics.waterFood(planA);
 			if (b == null) b = AsBasics.piranha(planA);
 			if (b == null) b = AsBasics.spawner(planA);
 			if (b == null) b = AsBasics.sacrifice(planA);
