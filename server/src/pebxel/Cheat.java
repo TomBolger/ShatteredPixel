@@ -183,6 +183,11 @@ public final class Cheat {
 				com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(l.exit(), com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EXIT, l);
 				what += " exit open";
 			}
+			// (AS2: any exit still locked, the Goo floor's: open, as the boss's key would; K8, a hero back up on 5 starved there)
+			if (l.exit() >= 0 && l.map[l.exit()] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.LOCKED_EXIT) {
+				com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(l.exit(), com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EXIT, l);
+				what += " exit unlocked";
+			}
 			com.shatteredpixel.shatteredpixeldungeon.scenes.GameScene.updateMap();
 		} catch (Throwable e) { what += " FAILED " + e; }
 		System.out.println("SETUP head start: boss floor " + Dungeon.depth + " passed as beaten:" + what);

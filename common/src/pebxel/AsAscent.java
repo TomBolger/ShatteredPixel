@@ -52,7 +52,7 @@ final class AsAscent {
 	static final int PICK = optInt("ASCPICK", 3);         // steps off the way an item is worth (Healing, food when short: twice that)
 	static final int RESTAT = optInt("ASCREST", 60);      // the stairs up reached below this % of health, the curse harmless: rest first
 	static final double SAFE = optInt("ASCSAFE", 3) / 100.0;   // a fight's death odds low enough to take on for the kill (the curse near its harm)
-	static final int LEAVE = optInt("ASCLEAVE", 1);       // leave a floor with the curse at most this (the next a boss floor: one more)
+	static final int LEAVE = optInt("ASCLEAVE", 99);      // leave a floor with the curse at most this (the next a boss floor: one more); 99: no hold (AS2-b/c: holding at 1, 2, 3 won 20, 22, 23 of 48 from 26, not holding 26)
 	static final int HOLD = optInt("ASCHOLD", 40);        // turns held at the stairs up with no foe seen before going on all the same
 	static final int FLOORT = optInt("ASCFLOORT", 90);    // turns a floor's climb takes (the food the hold leaves for the floors to come)
 	static final int UPW = optInt("ASCUPW", 3), DOWNW = optInt("ASCDOWNW", 2);   // steps to the stairs a fight may be left by, up / down
@@ -106,6 +106,14 @@ final class AsAscent {
 		Hero h = Dungeon.hero; int hp = h.pos, ent = L.entrance();
 		float st = stacks();
 		if (h.rooted) return null;   // (held fast: the usual rules, a fight or a wait)
+		// in fire or gas (or burning): out of it first, by the escape rule; the stairs a step off and clear of it are
+		// the way out (K8: "ascent: up" and "escape the fire" took turns on 21, no time passing)
+		if (inDanger || burning()) {
+			int e0 = L.entrance();
+			if (e0 >= 0 && e0 < L.length() && known[e0] && !danger[e0] && seenChar(e0) == null && (e0 == hp || walk(e0) <= 1) && Dungeon.depth > 1)
+				return new Target(e0, e0 == hp ? PICKUP : GO, "ascent: up, out of the fire");
+			return null;
+		}
 		if (!begun()) { Target t = prep(); if (t != null) return t; }
 		boolean entKnown = ent >= 0 && ent < L.length() && known[ent] && walk(ent) < INF;
 		if (entKnown && ent != hp && seenChar(ent) != null) return null;   // (someone on the stairs: the usual rules; K7-d, a succubus there, "up" for ever)
