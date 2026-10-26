@@ -75,6 +75,7 @@ final class AsFoes {
 	static Target pick(Target first) {
 		Hero h = Dungeon.hero;
 		if (h.rooted || inDanger || burning() || foul(h.pos) || blind()) return null;   // (out of the fire / gas first: escape's)
+		if (Dungeon.bossLevel()) return null;   // (a boss's floor: AsBosses' own rules; the Dwarf King's ghouls are his)
 		Target t = null;
 		if (THIEF) t = thief(first);
 		if (t == null && GHOUL) t = ghoul(first);
@@ -110,7 +111,7 @@ final class AsFoes {
 		float now = Actor.now();
 		if (l != floor || trod == null || trod.length != l.length()) {
 			for (Steal s : steals.values()) if (s.open) { s.open = false; lost++; }   // (left on the floor it ran off on)
-			for (Map.Entry<Mob, Boolean> e : statues.entrySet()) if (e.getValue() && !e.getKey().isAlive()) statWon++;
+			for (Map.Entry<Mob, Boolean> e : statues.entrySet()) if (e.getValue() && !e.getKey().isAlive() && wonCounted.add(e.getKey())) statWon++;
 			steals.clear(); downs.clear(); ghoulsSeen.clear(); statues.clear(); verdict.clear(); waits.clear();
 			floor = l; trod = new boolean[l.length()]; lastPos = -1; secretDone = burntDone = 0;
 		}
@@ -176,6 +177,12 @@ final class AsFoes {
 	static boolean awake(Mob m) { return enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC) && !Dungeon.hero.isCharmedBy(m); }
 	/** An awake foe beside the hero other than x. */
 	static boolean adjOther(Mob x) { int hp = Dungeon.hero.pos; for (Mob m : mobs()) if (m != x && awake(m) && adjacent(m.pos, hp)) return true; return false; }
+	/** No awake foe in sight (a statue, passive, doesn't count), none lately coming, the floor not locked. */
+	static boolean quiet() {
+		if (Brain.fight || threatNear || L.locked) return false;
+		for (Mob m : mobs()) if (enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && !hiddenMimic(m)) return false;
+		return true;
+	}
 	static boolean healthy(int pct) { Hero h = Dungeon.hero; return h.HP * 100 >= h.HT * pct; }
 	/** Open cells round c (the ways a foe can stand beside it). */
 	static int openRound(int c) { int o = 0; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && L.passable[n] && !L.avoid[n]) o++; } return o; }
@@ -322,7 +329,7 @@ final class AsFoes {
 	// =============================================================================================================
 	static Target statue(Target first) {
 		Hero h = Dungeon.hero;
-		if (!Rules.calm() || (first != null && first.kind == ENEMY) || starving() || !healthy(STATHP)) return null;
+		if (!quiet() || (first != null && first.kind == ENEMY) || starving() || !healthy(STATHP)) return null;
 		Mob best = null; int bw = INF;
 		for (Mob m : mobs()) {
 			if (!(m instanceof Statue) || !m.isAlive() || m.state != m.PASSIVE || !L.heroFOV[m.pos] || walk(m.pos) >= INF || walk(m.pos) > 30 || bad.containsKey(m.pos)) continue;
@@ -370,14 +377,14 @@ final class AsFoes {
 	}
 	static Target darkRest() {
 		Hero h = Dungeon.hero;
-		if (restVetoPos != h.pos || restVetoAt != Actor.now() || !Rules.calm()) return null;
+		if (restVetoPos != h.pos || restVetoAt != Actor.now() || !quiet()) return null;
 		int c = restSpot();
 		return c >= 0 ? new Target(c, GO, "dark floor: rest in a corridor (foes are seen late here)") : null;
 	}
 
 	// ---- secrets: the dead ends searched before the stairs ----
 	static Target secrets(Target first) {
-		if (feeling() != Level.Feeling.SECRETS || secretDone >= SECRETN || first == null || !"stairs".equals(first.why) || !Rules.calm() || hungry()) return null;
+		if (feeling() != Level.Feeling.SECRETS || secretDone >= SECRETN || first == null || !"stairs".equals(first.why) || !quiet() || hungry()) return null;
 		int hp = Dungeon.hero.pos;
 		if (deadEnd(hp)) { secretDone++; Target t = new Target(hp, WAIT, "secrets floor: search the dead end"); t.action = SEARCH_ACT; return t; }
 		int best = -1, bk = INF;
@@ -408,7 +415,7 @@ final class AsFoes {
 		return BURNT && burnt(c);
 	}
 	static Target trodden(Target first) {
-		if (first == null || (first.kind != GO && first.kind != PICKUP) || first.cell < 0 || !Rules.calm()) return null;
+		if (first == null || (first.kind != GO && first.kind != PICKUP) || first.cell < 0 || !quiet()) return null;
 		Hero h = Dungeon.hero; int hp = h.pos, to = first.cell;
 		boolean[] p = new boolean[L.length()];
 		for (int i = 0; i < p.length; i++) p[i] = L.passable[i] && (L.visited[i] || L.mapped[i]);
