@@ -66,7 +66,11 @@ final class AsGear {
 
 	/** The armour the coming upgrades should go into: the worn one, or a better one carried. */
 	static Armor commit(Hero h) {
-		if (pebxel.bot.ScrollPlan.ON) { Armor c = pebxel.bot.ScrollPlan.commitArmor(h); pebxel.bot.GearValue.keepArmor = c; return c; }   // (UP: the expected-value planner)
+		if (pebxel.bot.ScrollPlan.ON && pebxel.bot.ScrollPlan.PCOMMIT) { Armor c = pebxel.bot.ScrollPlan.commitArmor(h); pebxel.bot.GearValue.keepArmor = c; return c; }   // (UP: the planner's own commit; off: UP-a1, cloth kept by 68% at depth 17)
+		return heCommit(h);
+	}
+	static { pebxel.bot.ScrollPlan.armourCommit = AsGear::heCommit; }
+	static Armor heCommit(Hero h) {
 		Armor cur = h.belongings.armor(), best = cur; double bv = worth(h, cur) + HYST / 100.0;
 		for (Item i : h.belongings.backpack) if (i instanceof Armor) { double v = worth(h, (Armor) i); if (v > bv) { bv = v; best = (Armor) i; } }
 		pebxel.bot.GearValue.keepArmor = best;

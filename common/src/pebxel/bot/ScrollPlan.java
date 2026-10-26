@@ -50,7 +50,10 @@ public final class ScrollPlan {
 	static final double FIND = Tune.get("UPFIND", 100) / 100, HOLDM = Tune.get("UPHOLDM", 0) / 1000, CHYST = Tune.get("UPCHYST", 10) / 1000;
 	static final int HOLDMIN = (int) Tune.get("UPHOLDMIN", 1);   // (the first floor a scroll may be held on)
 	static final double UNK = Tune.get("UPUNK", 40) / 100;   // (an unknown piece's level counted this much below its shown +0: a third are cursed, -1..-3)
-	public static final boolean HOLD = Tune.on("UPHOLDON", true), WPLAN = Tune.on("UPWPLAN", true);
+	public static final boolean HOLD = Tune.on("UPHOLDON", true), WPLAN = Tune.on("UPWPLAN", false), PCOMMIT = Tune.on("UPCOMMIT", false);
+	/** The armour plan's own commit (AsGear's, HE's) when the planner's isn't used (PCOMMIT off: UP-a1, 288 full games:
+	 *  the planner's 12-floor commit kept cloth+n over mail on 68% of heroes at depth 17, against 33%; 15.44 against 16.26). */
+	public static java.util.function.Function<Hero, Armor> armourCommit;
 	static final boolean DBG = Tune.on("UPDBG", false);
 
 	// ---- the odds (GearOddsGen 4000, v4.0.2) ----
@@ -158,7 +161,7 @@ public final class ScrollPlan {
 		c.memo.clear();
 		if (db != null) System.out.println(db);
 		// the committed pieces (which one the scrolls go into), then the base trajectory again with them
-		if (c.aSlot || a == null) c.cA = commit(c, true, oldA);
+		if (c.aSlot || a == null) c.cA = PCOMMIT || armourCommit == null ? commit(c, true, oldA) : armourCommit.apply(h);
 		if (c.wSlot) c.cW = WPLAN ? commit(c, false, oldW) : w;
 		for (int k = 0; k < c.K; k++) {
 			if (c.cA != null && c.cA != a) { int l = (int) Math.round(lv(c.cA) + c.shA * (Math.max(0, kh - 1) + c.m[k])); if (a == null || ls(c, k, (Armor) c.cA, l, c.wpnB[k], c.wpnL[k]) > ls(c, k, a, c.armL[k], c.wpnB[k], c.wpnL[k])) { c.armB[k] = (Armor) c.cA; c.armL[k] = l; } }
