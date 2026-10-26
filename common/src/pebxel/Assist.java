@@ -1887,7 +1887,7 @@ public final class Assist {
 		// cooked meat) is eaten now, not at Starving: none of it goes to waste, and a rest or a fight after it won't run
 		// into starving, where regeneration stops (strategy-reference 2.6; SR's audit, gap 9). Off by default: K8-e1, 90
 		// head-start-6 games, mean depth 10.38 on against 10.71 off (the food budget's rest vetoes see less food held)
-		if (EATHUNGRY && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
+		if (EATHUNGRY && !Dungeon.bossLevel() && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
 			Item f = null; float fe = 0;
 			for (Item i : H.belongings.backpack) if (foodItem(i) && !(i instanceof MysteryMeat)) { float e = ((Food) i).energy; if (e <= Hunger.HUNGRY && e > fe) { fe = e; f = i; } }
 			if (f != null) return use(f, Food.AC_EAT, -1, "hungry: eat (none of it wasted)");
