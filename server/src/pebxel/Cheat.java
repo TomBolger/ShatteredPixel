@@ -153,6 +153,16 @@ public final class Cheat {
 	 */
 	static void passed(com.shatteredpixel.shatteredpixeldungeon.levels.Level l) {
 		if (envInt("HEADMAP", 1) != 0) for (int i = 0; i < l.length(); i++) if ((com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.flags[l.map[i]] & com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.SECRET) == 0) l.mapped[i] = true;
+		if (envInt("HEADMAP", 1) != 0 && !Dungeon.bossLevel() && l.entrance() >= 0 && l.exit() >= 0) try {   // (the way walked: its secret doors found, its locked doors opened; K7: a climb stalled on 22, the stairs up behind a secret door)
+			boolean[] p = new boolean[l.length()];
+			for (int i = 0; i < l.length(); i++) { int t = l.map[i]; p[i] = l.passable[i] || t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.SECRET_DOOR || t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.LOCKED_DOOR || (l.avoid[i] && !l.pit[i]); }
+			com.watabou.utils.PathFinder.setMapSize(l.width(), l.height());
+			com.watabou.utils.PathFinder.Path path = com.watabou.utils.PathFinder.find(l.entrance(), l.exit(), p);
+			if (path != null) for (int c : path) {
+				if (l.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.SECRET_DOOR) l.discover(c);
+				if (l.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.LOCKED_DOOR) com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR, l);
+			}
+		} catch (Throwable e) { System.out.println("SETUP head start: the way on floor " + Dungeon.depth + " not opened: " + e); }
 		if (envInt("HEADBOSS", 1) == 0 || !Dungeon.bossLevel()) return;
 		String what = "";
 		try {

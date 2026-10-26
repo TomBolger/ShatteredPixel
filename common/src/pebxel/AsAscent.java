@@ -81,7 +81,8 @@ final class AsAscent {
 			if (near == null || d < distance(near.pos, hp)) near = m;
 			if (m.state == m.SLEEPING) continue;
 			boolean shoots = FoeView.shooter(m) && (line(m.pos, hp) || m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Eye && sight(m.pos, hp));
-			if (shoots && d <= 8) shooter = true;
+			if (shoots && d <= 8 && !(m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Scorpio)) shooter = true;   // (a scorpio never comes: below, out of its line on the way on)
+			if (m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Scorpio) continue;
 			double ms = m.speed();
 			if (entKnown && distance(m.pos, ent) < w && d <= w + 2) catches = true;   // (nearer the stairs than the hero: in the way)
 			else if (hunting(m) && (ms > hs ? (d - 1) / Math.max(1e-3, ms - hs) < w / hs : d <= 2)) catches = true;
@@ -92,6 +93,8 @@ final class AsAscent {
 			// the curse near its harm: kills are worth taking; else the usual rules all the same (it's fought)
 			return null;
 		}
+		// a scorpio (it backs off, spitting while it has a line): out of every line, on the way to the stairs
+		if (entKnown) { Target t = past(hp, ent); if (t != null) return t; }
 		// the curse near its harm and a safe fight in sight, off the way only a little: taken for the kill
 		if (near != null && st + 2 >= 8 && Brain.fight && Brain.base != null && Brain.base.pDeath < SAFE && distance(near.pos, hp) <= 4 && near.state != near.SLEEPING) return null;
 		// a boss floor: no harm, no foes, healing in full: rest to full first (the next four floors are the curse's)
@@ -104,6 +107,32 @@ final class AsAscent {
 		if (w == 0 && st < 8 && Dungeon.depth > 1 && !Dungeon.bossLevel(Dungeon.depth - 1) && h.HP * 100 < h.HT * RESTAT && calm() && !hungry() && !declined(null, REST_ACT))
 			return rest("ascent: rest at the stairs");
 		return new Target(ent, w == 0 ? PICKUP : GO, "ascent: up");
+	}
+
+	/** Shooters in sight that won't come (scorpios): a cell out of every shooter's line, a few steps off, the nearest
+	 *  the stairs (by the known way), when the hero is in a line or the walk on would take him into one. */
+	static Target past(int hp, int ent) {
+		List<Mob> sh = AsBolts.shooters(); boolean scorp = false;
+		for (Mob m : sh) scorp |= m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Scorpio;
+		if (!scorp) return null;
+		int[] sd = fromStairs(ent);
+		boolean now = AsBolts.inLine(sh, hp) > 0;
+		int best = -1; double bk = now ? Double.MAX_VALUE : sd[hp] + 0.5;
+		for (int c = 0; c < L.length(); c++) {
+			if (c == hp || !AsBolts.free(c) || walk(c) > (now ? 5 : 3) || sd[c] >= INF || AsBolts.inLine(sh, c) > 0) continue;
+			double k = sd[c] + walk(c) * 0.5;
+			if (k < bk) { bk = k; best = c; }
+		}
+		if (best < 0) return null;
+		if (best == ent) return new Target(ent, GO, "ascent: up");
+		return new Target(best, GO, now ? "ascent: out of the scorpio's line, on" : "ascent: on, out of the scorpio's line");
+	}
+	/** Steps from the stairs up to each cell, over the known way. */
+	static int[] fromStairs(int ent) {
+		int n = L.length(); int[] d = new int[n]; Arrays.fill(d, INF); d[ent] = 0;
+		ArrayDeque<Integer> q = new ArrayDeque<>(); q.add(ent);
+		while (!q.isEmpty()) { int c = q.poll(); for (int k = 0; k < 8; k++) { int x = c + N8[k]; if (nb(c, x) && d[x] >= INF && (pass[x] || x == Dungeon.hero.pos)) { d[x] = d[c] + 1; q.add(x); } } }
+		return d;
 	}
 
 	static boolean calm() { return !seenFoe && !threatNear; }
@@ -156,7 +185,7 @@ final class AsAscent {
 	static boolean restHarm(Brain.Cand c) { return on() && c.role == Brain.Role.REST && harm(); }
 	/** Plan A off the way up (an item far off, a search, a spot to explore) while climbing. */
 	static boolean offWay(Brain.Cand c) {
-		if (!on() || c != Rules.planA || c.t.why.startsWith("ascent")) return false;
+		if (!on() || c.t.why.startsWith("ascent")) return false;
 		int ent = L.entrance();
 		if (ent < 0 || ent >= L.length() || !known[ent] || walk(ent) >= INF) return false;   // (the way up not found: a door to unlock, a search, may be it)
 		String y = c.t.why;
