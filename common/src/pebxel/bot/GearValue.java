@@ -89,20 +89,44 @@ public final class GearValue {
 		return (rc != null && rc.isKnown()) || (up != null && up.isKnown());
 	}
 
-	/**
-	 * The worth of wearing i (a weapon or armour) in place of what is worn, as the cost then (lower: better); for an
-	 * unknown piece the risk-weighted average over what it may be. base: the cost as now.
-	 */
+	/** The worth of wearing i (a weapon or armour) in its slot, the other slot as worn (lower: better); for a piece whose
+	 *  level isn't known the risk-weighted average over what it may be, worn or not (MT: the worn piece had been costed
+	 *  at its shown +0 and the pack's at the odds of +1/+2 as well, so two unknown weapons each looked better than the
+	 *  other once worn: a swap every 2 turns for hundreds of decisions). base: the worn piece's own cost (a lifted
+	 *  curse's ceiling). */
 	public static double costWith(Hero h, Item i, double base) {
 		boolean wpn = i instanceof KindOfWeapon;
 		KindOfWeapon w0 = h.belongings.weapon(); Armor a0 = h.belongings.armor();
+		// (MT: worked out once per piece and situation: the plan asks every turn, and the sums over curses and floors were most of a plan's time)
+		String key = Dungeon.depth + ":" + h.STR() + ":" + h.lvl + ":" + h.HT + ":" + h.heroClass + ":" + liftable(h) + ":" + (base == Double.MAX_VALUE ? "w" : (int) Math.round(base * 1000)) + "|" + desc(i) + "|" + desc(wpn ? a0 : w0) + "|" + (i == w0 || i == a0);
+		Double c = memo.get(key);
+		if (c != null) return c;
+		if (memo.size() > 4000) memo.clear();
+		double v = costWith0(h, i, base, wpn, w0, a0);
+		memo.put(key, v);
+		return v;
+	}
+	static final Map<String, Double> memo = new HashMap<>();
+	static String desc(Item i) {
+		if (i == null) return "-";
+		String a = i instanceof Weapon ? String.valueOf(((Weapon) i).augment) : i instanceof Armor ? String.valueOf(((Armor) i).augment) : "";
+		return i.getClass().getSimpleName() + HeroView.visLevel(i) + (i.levelKnown ? "k" : "u") + (i.cursedKnown ? (i.cursed ? "C" : "c") : "?") + Ench.of(i).name + a;
+	}
+
+	static double costWith0(Hero h, Item i, double base, boolean wpn, KindOfWeapon w0, Armor a0) {
 		Ench shown = Ench.of(i);
-		if (i.levelKnown) {
-			int l = HeroView.visLevel(i);
-			return wpn ? cost(h, (KindOfWeapon) i, l, shown, a0, HeroView.visLevel(a0), Ench.of(a0), 0, 0, Dungeon.depth)
-					: cost(h, w0, HeroView.visLevel(w0), Ench.of(w0), (Armor) i, l, shown, 0, 0, Dungeon.depth);
-		}
-		return expect(h, i, wpn, w0, a0, shown, base, !(i.cursedKnown && !i.cursed) && shown == Ench.NONE);
+		if (i.levelKnown) return one(h, i, wpn, w0, a0, HeroView.visLevel(i), shown);
+		boolean worn = i == w0 || i == a0;
+		return expect(h, i, wpn, w0, a0, shown, base, !worn && !(i.cursedKnown && !i.cursed) && shown == Ench.NONE);
+	}
+
+	/** The cost of the slot's worn piece (null: an empty slot), by the same sums as a pack piece's. */
+	public static double slotCost(Hero h, boolean wpn) {
+		KindOfWeapon w0 = h.belongings.weapon(); Armor a0 = h.belongings.armor();
+		Item cur = wpn ? w0 : a0;
+		if (cur == null) return wpn ? cost(h, null, 0, Ench.NONE, a0, HeroView.visLevel(a0), Ench.of(a0), 0, 0, Dungeon.depth)
+				: cost(h, w0, HeroView.visLevel(w0), Ench.of(w0), null, 0, Ench.NONE, 0, 0, Dungeon.depth);
+		return costWith(h, cur, Double.MAX_VALUE);
 	}
 
 	/** The odds: levels 0/1/2, and (when it can be) a curse from its kind's list. */
@@ -113,10 +137,8 @@ public final class GearValue {
 		boolean lift = liftable(h);
 		double s = 0, ws = 0;
 		for (int k = 0; k < LV.length; k++) {
-			// clean
-			if (pc < 1) {
+			if (pc < 1) {   // clean
 				double c = one(h, i, wpn, w0, a0, LV[k], shown.curse ? Ench.NONE : shown);
-				c = Math.min(c, base);   // (not stuck: back to the old piece if it disappoints)
 				s += LP[k] * (1 - pc) * Math.pow(c, Tune.RISK); ws += LP[k] * (1 - pc);
 			}
 			if (pc > 0) for (String cn : curses) {
@@ -141,18 +163,33 @@ public final class GearValue {
 		return (i instanceof MeleeWeapon && !(i instanceof MagesStaff)) || (i instanceof Armor && !(i instanceof ClassArmor));
 	}
 
+	/** Pieces taken off for another, and when: not put back on for a while unless something about them came to light
+	 *  (a known level or curse), so that two pieces near alike can't take turns. */
+	static final List<Item> offI = new ArrayList<>(); static final List<float[]> offT = new ArrayList<>();   // (a list, not a map: hashing an object numbers it, and the game's own hash numbers would shift)
+	public static float REWEAR = 300;
+	static int offAt(Item i) { for (int k = 0; k < offI.size(); k++) if (offI.get(k) == i) return k; return -1; }
+
 	/** What to put on now (null: nothing): the pack's piece whose cost beats the worn by at least need (a share, e.g.
-	 *  0.05: not for a rounding's worth). Worn pieces known cursed stay (they can't come off). */
+	 *  0.05: not for a rounding's worth), the most. Worn pieces known cursed stay (they can't come off). */
 	public static Item bestEquip(Hero h, double need) {
-		double base = now(h); Item best = null; double bc = base * (1 - need);
+		Item best = null; double bestGain = 0; Item bestCur = null;
+		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		double[] base = { slotCost(h, true), slotCost(h, false) };
 		for (Item i : h.belongings.backpack) {
 			if (!judged(i)) continue;
-			EquipableItem cur = i instanceof Armor ? h.belongings.armor() : h.belongings.weapon();
+			boolean wpn = !(i instanceof Armor);
+			EquipableItem cur = wpn ? h.belongings.weapon() : h.belongings.armor();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
 			if (cur instanceof MagesStaff || cur instanceof ClassArmor) continue;
 			if (i.cursedKnown && i.cursed) continue;
-			double c = costWith(h, i, base);
-			if (c < bc) { bc = c; best = i; }
+			int o = offAt(i);
+			if (o >= 0) { float[] t = offT.get(o); if (now - t[0] < REWEAR && now >= t[0] && t[1] == (i.levelKnown && i.cursedKnown ? 1 : 0)) continue; }
+			double b = base[wpn ? 0 : 1], c = costWith(h, i, b);
+			if (c < b * (1 - need) && (b - c) / b > bestGain) { bestGain = (b - c) / b; best = i; bestCur = cur; }
+		}
+		if (bestCur != null) {
+			int o = offAt(bestCur); float[] t = { now, bestCur.levelKnown && bestCur.cursedKnown ? 1 : 0 };
+			if (o >= 0) offT.set(o, t); else { offI.add(bestCur); offT.add(t); if (offI.size() > 16) { offI.remove(0); offT.remove(0); } }
 		}
 		return best;
 	}
@@ -160,11 +197,11 @@ public final class GearValue {
 	/** The pack's weapons and armour no use to the hero (worth no more than what is worn, now or with the next region's
 	 *  STR, and not the twin kept for anything): sell or drop these first. Best-worth first is the reverse order. */
 	public static List<Item> spare(Hero h) {
-		double base = now(h);
+		double[] bs = { slotCost(h, true), slotCost(h, false) };
 		List<Item> out = new ArrayList<>();
 		for (Item i : h.belongings.backpack) {
 			if (!judged(i) || i.isEquipped(h)) continue;
-			double c = costWith(h, i, base);
+			double base = bs[i instanceof Armor ? 1 : 0], c = costWith(h, i, base);
 			if (c >= base * 0.98 && !futureUse(h, i, base)) out.add(i);
 		}
 		return out;
@@ -184,7 +221,7 @@ public final class GearValue {
 	/** A piece's worth in health a fight (positive: better than the worn one), for ranking. */
 	public static double worth(Hero h, Item i) {
 		if (!judged(i)) return 0;
-		double base = now(h);
+		double base = slotCost(h, !(i instanceof Armor));
 		return base - costWith(h, i, base);
 	}
 

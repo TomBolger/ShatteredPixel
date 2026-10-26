@@ -43,7 +43,7 @@ public final class Trade {
 		if (i instanceof Food && !(i instanceof Blandfruit)) { int f = foodCount(h); return f <= 1 ? Tune.FOOD : f <= 3 ? Tune.FOOD / 2 : f <= 5 ? Tune.FOOD / 7 : 0; }
 		if (i instanceof Bag && !(i instanceof MagicalHolster)) { for (Bag b : h.belongings.getBags()) if (b.getClass() == i.getClass()) return 0; return 45; }
 		if (i instanceof Armor || i instanceof MeleeWeapon) {
-			double base = GearValue.now(h), g = base - GearValue.costWith(h, i, base);
+			double base = GearValue.slotCost(h, !(i instanceof Armor)), g = base - GearValue.costWith(h, i, base);
 			return g > base * 0.05 ? g * 6 : 0;   // (health a fight, ~6 fights a floor till the next upgrade)
 		}
 		if (i instanceof ScrollOfMagicMapping && ((Scroll) i).isKnown()) return d >= 16 ? 25 : 12;

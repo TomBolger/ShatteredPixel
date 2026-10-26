@@ -33,6 +33,7 @@ import java.util.*;
 public class AssistBot {
 	static WatchApp app;
 	static boolean v;
+	static final int SLOWLOG = Integer.parseInt(System.getenv().getOrDefault("SLOWLOG", "0"));   // (MT: plans slower than this many ms printed)
 	static final boolean WATCH = "1".equals(System.getenv("WATCH"));
 	static WatchDriver watch;
 	/** FAST (default unless WATCH; FAST=0 for the old way): frames of FRAMEDT (default 0.2 s, the most Shattered itself
@@ -300,6 +301,7 @@ public class AssistBot {
 			// is asked without leaving a trace in the Assistant's state: AssistSandbox)
 			List<Assist.Target> plan = watch != null && Controls.legacy == null ? AssistSandbox.run(() -> Assist.plan(false, box)) : Assist.plan(false, box);
 			long dn = System.nanoTime() - n0; planNs += dn; plans++; maxPlanNs = Math.max(maxPlanNs, dn);
+			if (SLOWLOG > 0 && dn > SLOWLOG * 1000000L) System.out.printf("SLOWPLAN %.1f ms depth %d hp %d/%d: %s%n", dn / 1e6, Dungeon.depth, Dungeon.hero.HP, Dungeon.hero.HT, plan.isEmpty() ? "-" : plan.get(0).why);
 			if (Assist.lastError != null) { System.out.println("  ASSIST ERROR " + Assist.lastError); Assist.lastError.printStackTrace(System.out); Assist.lastError = null; }
 			decisions++;
 			for (int k = 0; k < PERTURB; k++) System.identityHashCode(new Object());   // (tests: the game must not care)

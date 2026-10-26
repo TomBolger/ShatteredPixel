@@ -27,7 +27,7 @@ public final class FightModel {
 	public static final class Result {
 		/** P(the hero dies), P(all the foes die), the expected health lost (shield first; death counts the health had),
 		 *  the 90th percentile of it, the expected time, the expected health left. */
-		public double pDeath, pWin, lossMean, loss90, time, hpLeft;
+		public double pDeath, pWin, lossMean, loss90, time, hpLeft, healsUsed;
 		public int runs;
 		@Override public String toString() { return String.format("death %.3f win %.3f loss %.1f (p90 %.0f) time %.1f", pDeath, pWin, lossMean, loss90, time); }
 	}
@@ -79,19 +79,28 @@ public final class FightModel {
 		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
-			pH[i] = Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
+			pH[i] = f.blockAll ? 0 : Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
 			pF[i] = Dist.hit(f.acc, me0.eva); bF[i] = Fighter.blow(f.dmg, me0);
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me0);
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
 			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me0.eva); }
-			if (me0.rangedDmg != null) { pR[i] = me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
+			if (me0.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
 		}
+		// (MT) room beside the hero: at most me0.slots foes that walk up can be at it at once (a corridor: 2), the others
+		// queue and step in as one falls, in the order they'd come; shooters and sleepers take no room
+		Integer[] ord = new Integer[n]; for (int i = 0; i < n; i++) ord[i] = i;
+		final double[] arrOf = new double[n];
+		for (int i = 0; i < n; i++) { Fighter f = foes0.get(i); arrOf[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.ranged ? me0.speed : f.speed); }
+		Arrays.sort(ord, (a, b) -> Double.compare(arrOf[a], arrOf[b]));
+		boolean[] queued = new boolean[n], held = new boolean[n]; double[] arrQ = new double[n];
+		boolean hurtable = false; for (int i = 0; i < n; i++) hurtable |= pH[i] > 0 || pR[i] > 0 || foes0.get(i).asleep;
+		double horizon = hurtable ? 100 : 30;   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
 		double[] losses = new double[runs];
-		int deaths = 0, wins = 0; double tsum = 0, left = 0;
+		int deaths = 0, wins = 0, used = 0; double tsum = 0, left = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		for (int run = 0; run < runs; run++) {
-			int myHp = me0.hp, sh = me0.shield, heals = me0.heals, shots = me0.rangedShots;
+			int myHp = me0.hp, sh = me0.shield, heals = me0.heals, shots = me0.rangedShots, hl = me0.healLeft;
 			for (int i = 0; i < n; i++) {
 				Fighter f = foes0.get(i);
 				hp[i] = f.hp + f.shield; rage[i] = false; awake[i] = !f.asleep;
@@ -100,13 +109,18 @@ public final class FightModel {
 				atk[i] = f.ranged && !f.asleep ? 0 : arr[i];
 				next[i] = awake[i] ? atk[i] + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
 			}
+			int room = me0.slots;
+			for (int oi = 0; oi < n; oi++) { int i = ord[oi]; Fighter f = foes0.get(i); queued[i] = false; held[i] = false;
+				if (f.ranged || f.asleep) continue;
+				if (room > 0) { room--; held[i] = true; } else { queued[i] = true; arrQ[i] = arr[i]; arr[i] = atk[i] = next[i] = Double.MAX_VALUE; } }
 			double t = 0, tH = 0; boolean dead = false; int alive = n;
-			for (int guard = 0; guard < 600 && alive > 0 && !dead; guard++) {
+			for (int guard = 0; guard < 600 && alive > 0 && !dead && t < horizon; guard++) {   // (MT: a fight with one it can't hurt went 600 steps a run)
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {
 					t = tH;
-					if (heals > 0 && healAt > 0 && myHp < me0.ht * healAt) { heals--; myHp = Math.min(me0.ht, myHp + me0.healAmount); tH += 1; continue; }
+					if (hl > 0) { int x = Math.max(1, Math.min(hl, Math.round(hl * 0.25f))); myHp = Math.min(me0.ht, myHp + x); hl -= x; }   // (MT: Healing heals a quarter of what's left a turn: Healing.healingThisTick)
+					if (heals > 0 && healAt > 0 && myHp < me0.ht * healAt) { heals--; used++; if (Tune.HEALTICK) hl += me0.healAmount; else myHp = Math.min(me0.ht, myHp + me0.healAmount); tH += 1; continue; }
 					// a target beside me (the weakest), else a shot at the nearest one coming, else wait for one / walk to a sleeper
 					int tg = -1, best = Integer.MAX_VALUE;
 					for (int i = 0; i < n; i++) if (hp[i] > 0 && t >= arr[i] - 1e-9 && hp[i] < best) { best = hp[i]; tg = i; }
@@ -116,7 +130,7 @@ public final class FightModel {
 						if (!awake[tg]) { awake[tg] = true; atk[tg] = t; next[tg] = t + f.delay * (0.5 + rnd.nextDouble()); }
 						if (hp[tg] <= 0 && f.rageHp > 0 && !rage[tg]) { rage[tg] = true; hp[tg] = f.rageHp; }
 						if (hp[tg] <= 0) {
-							alive--;
+							alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd);
 							if (bDeath[tg] != null) { int d = bDeath[tg].draw(rnd.nextDouble()); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
 						}
 						tH += me0.delay;
@@ -131,7 +145,7 @@ public final class FightModel {
 						shots--;
 						if (rnd.nextDouble() < pR[ni]) hp[ni] -= bR[ni].draw(rnd.nextDouble());
 						if (hp[ni] <= 0 && foes0.get(ni).rageHp > 0 && !rage[ni]) { rage[ni] = true; hp[ni] = foes0.get(ni).rageHp; }
-						if (hp[ni] <= 0) alive--;
+						if (hp[ni] <= 0) { alive--; room = free(foes0, ni, room, queued, held, arrQ, arr, atk, next, t, rnd); }
 						tH += me0.rangedDelay;
 					} else if (na < Double.MAX_VALUE) tH = Math.max(na, t + 0.01);
 					else if (sl >= 0) { arr[sl] = t + Math.max(0, foes0.get(sl).dist - 1); tH = arr[sl]; }   // (walk up to it: it sleeps on)
@@ -156,10 +170,21 @@ public final class FightModel {
 		Arrays.sort(losses);
 		double s = 0; for (double l : losses) s += l;
 		r.pDeath = deaths / (double) runs; r.pWin = wins / (double) runs; r.lossMean = s / runs; r.loss90 = losses[Math.min(runs - 1, (int) (runs * 0.9))];
-		r.time = tsum / runs; r.hpLeft = left / runs;
+		r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs;
 		return r;
 	}
 
+
+	/** A foe fell: its room beside the hero goes to the first one queued (it steps in now, or when it would have come). */
+	static int free(List<Fighter> fs, int dead, int room, boolean[] queued, boolean[] held, double[] arrQ, double[] arr, double[] atk, double[] next, double t, SplittableRandom rnd) {
+		if (queued[dead]) { queued[dead] = false; return room; }
+		if (!held[dead]) return room;
+		held[dead] = false;
+		int q = -1; for (int i = 0; i < fs.size(); i++) if (queued[i] && (q < 0 || arrQ[i] < arrQ[q])) q = i;
+		if (q < 0) return room + 1;
+		queued[q] = false; held[q] = true; arr[q] = atk[q] = Math.max(t + 1, arrQ[q]); next[q] = arr[q] + fs.get(q).delay * rnd.nextDouble();
+		return room;
+	}
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// for the assistant's hooks (Assist, behind AS_OFIGHT)
@@ -174,6 +199,33 @@ public final class FightModel {
 		if (cacheH == h && cacheT == now && cachePos == h.pos && cacheKey == key) return cache;
 		cacheH = h; cacheT = now; cachePos = h.pos; cacheKey = key;
 		return cache = evaluate(h, mobs);
+	}
+
+	static final double[] HEALAT = { 0.15, 0.25, 0.35, 0.5, 0.7 };
+	private static double planC = -1; private static float planT = -1; private static int planPos = -1, planKey = -1; private static Hero planH;
+
+	/** When to drink a known Healing in this fight (MT): the policy "drink below k of the most health" that the
+	 *  simulation finds best, each potion drunk costing Tune.HEALCOST of death odds (it isn't there for the next fight);
+	 *  0: not at all. The hero drinks now if its health is below that share. */
+	public static double healAt(Hero h, List<Mob> mobs) {
+		if (mobs.isEmpty()) return 0;
+		int key = 0; for (Mob m : mobs) key = key * 31 + m.pos * 7 + m.HP;
+		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		if (planH == h && planT == now && planPos == h.pos && planKey == key) return planC;
+		planH = h; planT = now; planPos = h.pos; planKey = key;
+		Fighter me = HeroView.of(h);
+		if (me.heals <= 0) return planC = 0;
+		List<Fighter> fs = new ArrayList<>(); for (Mob m : mobs) fs.add(FoeView.of(m, h));
+		long sd = seedFor(h);
+		int runs = Math.max(60, RUNS / 3);
+		Result r0 = simulate(me, fs, 0, runs, sd);
+		double best = r0.pDeath, bk = 0;
+		for (double k : HEALAT) {
+			Result r = simulate(me, fs, k, runs, sd);
+			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
+			if (sc < best - 1e-9) { best = sc; bk = k; }
+		}
+		return planC = bk;
 	}
 
 	/** The health to rest up to before going on (OG thrift_need): a fight with the floor's worst common kind (duelCost),
