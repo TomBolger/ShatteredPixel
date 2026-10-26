@@ -476,7 +476,9 @@ final class AsBasics {
 		if (fishSeenL != L) { fishSeenL = L; fishSeen.clear(); fishSeenAt = -99; }
 		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { if (!fishSeen.contains(m)) fishSeen.add(m); fishSeenAt = Actor.now(); }
 	}
+	static final Map<Integer, Integer> wfTries = new HashMap<>(); static Level wfL; static final int WFTRIES = optInt("BWFTRIES", 60);
 	static Target waterFood(Target planA) {
+		if (wfL != L) { wfL = L; wfTries.clear(); }
 		if (!WATERFOOD || planA == null || seenFoe || inDanger || Dungeon.hero.rooted || !(shortOfFood() || Assist.hungry())) return null;
 		if (planA.kind == PICKUP && planA.why.startsWith("hungry")) return null;
 		for (Mob m : fishSeen) if (m.isAlive()) return null;
@@ -484,10 +486,11 @@ final class AsBasics {
 		Hero h = Dungeon.hero; int best = -1, bd = INF;
 		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hp : L.heaps.valueList()) {
 			if (!hp.seen || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
-			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null) continue;
+			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null || wfTries.getOrDefault(c, 0) > WFTRIES) continue;
 			int d = waterWalk(c); if (d < bd) { bd = d; best = c; }
 		}
 		if (best < 0 || bd > 30) return null;
+		wfTries.merge(best, 1, Integer::sum);   // (offered over and over and never had: given up. K8, 1,854 offers in the Blacksmith's mine, starving)
 		return new Target(best, best == h.pos ? PICKUP : GO, "short of food: the food in the water");
 	}
 	/** Steps to c over known passable cells, water too (the plan's own walk keeps out of it). */
