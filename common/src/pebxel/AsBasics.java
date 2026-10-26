@@ -361,8 +361,10 @@ final class AsBasics {
 	static boolean bolts(int s, int c) { try { return new com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica(s, c, com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica.MAGIC_BOLT).collisionPos == c; } catch (Throwable e) { return false; } }
 	/** The nearest awake caster after the hero, in sight. */
 	static Mob casterNear() {
-		Mob b = null; int hp = Dungeon.hero.pos;
-		for (Mob m : mobs()) if (caster(m) && hostile(m) && (hunting(m) || bolts(m.pos, hp)) && (b == null || distance(m.pos, hp) < distance(b.pos, hp))) b = m;
+		Mob b = null; int hp = Dungeon.hero.pos; boolean bl = false;
+		for (Mob m : mobs()) if (caster(m) && hostile(m) && (hunting(m) || bolts(m.pos, hp))) {   // (one in line first, then the nearest: two in sight, the choice flipped each turn)
+			boolean l = bolts(m.pos, hp);
+			if (b == null || (l && !bl) || (l == bl && distance(m.pos, hp) < distance(b.pos, hp))) { b = m; bl = l; } }
 		return b;
 	}
 	/** Is c no true corner against the caster at s: a cell it could reach before c (fewer of its steps) that, two or
@@ -382,6 +384,8 @@ final class AsBasics {
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return null;   // (one beside him: that fight first)
 		if (cornerL != L) { cornerL = L; cornerFailed.clear(); }
 		int[] ds = crabDist(sh.pos);
+		List<Mob> others = new ArrayList<>(); List<int[]> ods = new ArrayList<>();
+		for (Mob m : mobs()) if (m != sh && caster(m) && hostile(m)) { others.add(m); ods.add(crabDist(m.pos)); }
 		boolean failed = cornerFailed.contains(sh.id());
 		if (!failed && cornerAt == hp && cornerId == sh.id()) {   // at the corner chosen: wait for it, unless it bolts from afar after all
 			if (bolts(sh.pos, hp) || Actor.now() >= cornerUntil) { cornerFailed.add(sh.id()); failed = true; cornerAt = -1; }
@@ -389,7 +393,7 @@ final class AsBasics {
 		}
 		if (!failed && (cornerId != sh.id() || cornerAt < 0)) {
 			int best = -1, bd = INF;
-			for (int c = 0; c < L.length(); c++) if (dist[c] >= 0 && dist[c] <= CASTWALK && dist[c] < bd && (c == hp || (open[c] && seenChar(c) == null)) && !danger[c] && !L.water[c] && !bad.containsKey(c) && !seenOnWay(sh.pos, c, ds)) { bd = dist[c]; best = c; }
+			for (int c = 0; c < L.length(); c++) if (dist[c] >= 0 && dist[c] <= CASTWALK && dist[c] < bd && (c == hp || (open[c] && seenChar(c) == null)) && !danger[c] && !L.water[c] && !bad.containsKey(c) && !seenOnWay(sh.pos, c, ds) && !seenByOthers(others, ods, c)) { bd = dist[c]; best = c; }
 			if (best >= 0 && bd < distance(sh.pos, hp) - 1) { cornerAt = best; cornerId = sh.id(); cornerUntil = Actor.now() + bd + distance(sh.pos, best) + 4; }
 			else cornerFailed.add(sh.id());
 		}
@@ -401,16 +405,18 @@ final class AsBasics {
 		java.util.List<Mob> fs = new ArrayList<>(); for (Mob m : mobs()) if (hostile(m) && hunting(m)) fs.add(m);
 		double pd = 0; try { pd = pebxel.bot.FightModel.evaluate(h, fs).pDeath * 100; } catch (Throwable e) { }
 		if (pd <= CASTRISK && walk(sh.pos) <= 12) return new Target(sh.pos, ENEMY, "caster: close in (its bolt ignores armour)");
+		if (bolts(sh.pos, hp)) { Target r = rangedAt(sh); if (r != null) { r.why = "caster: out of reach, from afar"; return r; } }
 		// a fight it would lose: out of its bolts' way for a while (no cell it can reach in two steps sees there), the
 		// rules' escapes have their say before this (the stairs, Healing): not picking things up under its bolts
 		List<int[]> cds = new ArrayList<>(); for (Mob m : mobs()) if (caster(m) && hostile(m)) cds.add(m == sh ? ds : crabDist(m.pos));
 		int hide = -1, hd = INF;
-		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 6 && dist[c] < hd && open[c] && seenChar(c) == null && !danger[c] && !bad.containsKey(c)) {
-			boolean seen = false; for (int[] dd : cds) for (int x = 0; x < L.length() && !seen; x++) if (dd[x] <= 2 && bolts(x, c)) seen = true;
+		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 8 && dist[c] < hd && open[c] && seenChar(c) == null && !danger[c] && !bad.containsKey(c)) {
+			boolean seen = false; for (int[] dd : cds) for (int x = 0; x < L.length() && !seen; x++) if (dd[x] <= 4 && bolts(x, c)) seen = true;
 			if (!seen) { hd = dist[c]; hide = c; } }
 		return hide >= 0 && bolts(sh.pos, hp) ? new Target(hide, GO, "caster: out of its bolts' way (a fight to lose)") : null;
 	}
 	static final Set<Integer> cornerFailed = new HashSet<>(); static Level cornerL;
+	static boolean seenByOthers(List<Mob> ms, List<int[]> ds, int c) { for (int i = 0; i < ms.size(); i++) if (seenOnWay(ms.get(i).pos, c, ds.get(i))) return true; return false; }
 	static int cornerAt = -1, cornerId = -1; static float cornerUntil = -1;
 	/** The old shooter tactic (Assist.tactics) against a caster: out of its line, only for it to step back into line. */
 	static boolean casterVeto(Target t) {
