@@ -773,8 +773,9 @@ public final class Assist {
 			Brain.begin(first);
 			if (itemsOn()) { Target ua = Brain.offer("artifacts!", AsArtifacts.urgent(first)); if (ua != null) front(ua); }   // (AsArtifacts.urgent: an emergency artifact, the Horn before rations)
 			if (itemsOn()) { Target ur = Brain.offer("urgent", AsAbilities.urgent(first)); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
+			if (itemsOn()) { Target ui = Brain.offer("items!", AsItems.urgent(first)); if (ui != null) front(ui); }   // (the fight's consumables, before the hands' plain throw or zap: AsItems)
 			if (itemsOn()) { Target hk = Brain.hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
-			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
+			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first)), Brain.offer("items", AsItems.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = Brain.offer("escape", escape());
@@ -1844,7 +1845,7 @@ public final class Assist {
 	static boolean attackWand(Class<?> c, int ed) {
 		if (c == null) return false;
 		if (c == WandOfLightning.class || c == WandOfCorrosion.class) return ed >= 3;
-		if (c == WandOfFireblast.class) return ed >= 2 && !L.flamable[hp];
+		if (c == WandOfFireblast.class) return ed >= 2 && AsItems.fireOk();   // (nothing that burns on or beside the hero: AsItems)
 		return c == WandOfMagicMissile.class || c == WandOfDisintegration.class || c == WandOfFrost.class || c == WandOfBlastWave.class || c == WandOfPrismaticLight.class;
 	}
 
