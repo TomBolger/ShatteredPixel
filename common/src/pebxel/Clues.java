@@ -73,7 +73,7 @@ public final class Clues {
 	/** A potion believed the puzzle's kind this likely is drunk for its prize. */
 	static final double PUZ = Assist.optInt("CLUEPUZ", 45) / 100.0;
 	/** A scroll's worth known, per share of it being an escape (Teleportation, Terror, Lullaby, Mirror Image). */
-	static final double ESCW = Assist.optInt("CLUEESC", 100) / 100.0;
+	static final double ESCW = Assist.optInt("CLUEESC", 0) / 100.0;   // (ID-read1, 90 games each: 0 mean depth 12.64, 100 12.10, 200 11.84; reading more did worse)
 
 	static Hero H; static Level L;
 
