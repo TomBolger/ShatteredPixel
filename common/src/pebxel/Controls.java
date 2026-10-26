@@ -868,7 +868,8 @@ public class Controls {
 		if (WatchSettings.assist() == 0 || !WatchSettings.itemAssist()) return;
 		int n = talentPoints();
 		if (n <= 0 || n == talentsPassed) { if (n <= 0) talentsPassed = -1; return; }
-		for (Assist.Target t : ts) if (t.kind == Assist.ENEMY || (t.kind == Assist.USE && t.item != null)) return;   // (a fight, or the hands have something: later)
+		for (Assist.Target t : ts) if (t.kind == Assist.ENEMY) return;   // (a fight: later)
+		if (!ts.isEmpty() && ts.get(0).kind == Assist.USE && ts.get(0).item != null) return;   // (the hands' plan A first: then the talents. Any use further down kept them back for good: a select-only Mage on the emulator died on floor 2 with his point unspent)
 		for (Mob m : Dungeon.level.mobs) if (Dungeon.level.heroFOV[m.pos] && m.alignment == Char.Alignment.ENEMY && m.invisible <= 0) return;
 		Assist.Target t = new Assist.Target(Dungeon.hero.pos, Assist.USE, "talents"); t.action = TALENTS; t.obj = -1;
 		ts.add(0, t);

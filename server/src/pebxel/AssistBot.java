@@ -398,7 +398,7 @@ public class AssistBot {
 		if (!end.equals("WIN") && !end.equals("died") && !v) { System.out.println("last decisions:"); for (String l : recent) System.out.println(l); }
 		if (watch != null) System.out.println("WATCH " + watch.summary());
 		if (obey != null) System.out.println("OBEY every " + OBEY + ": " + obey.line());
-		if (watch != null && PLAYER) System.out.println("PLAYER " + (WILFUL ? "wilful" : HUMANP ? "human" : "select") + " " + watch.playerSummary());
+		if (watch != null && PLAYER) { int tp = 0; if (Dungeon.hero != null) for (int ti = 1; ti <= 4; ti++) tp += Math.max(0, Dungeon.hero.talentPointsAvailable(ti)); System.out.println("PLAYER " + (WILFUL ? "wilful" : HUMANP ? "human" : "select") + " talentsleft " + tp + " " + watch.playerSummary()); }
 		if (watch != null) System.out.println("LIST " + (Controls.legacy != null ? "old" : "new") + (HUMANP ? " human" : SELECTONLY ? " select-only" : " bot") + " mode " + WatchSettings.assist() + " " + watch.listSummary() + " plans " + Controls.plans);
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);

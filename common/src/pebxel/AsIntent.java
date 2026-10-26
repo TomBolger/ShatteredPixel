@@ -38,7 +38,8 @@ final class AsIntent {
 	/** His liking per kind of entry (picked over plan A +1, passed over -1; each choice decays the rest a little). */
 	static final Map<String, Double> like = new HashMap<>();
 	/** What he passed over, by objective: how many times, when, and whether the once-more on the way was used. */
-	static final class Skip { int n; float at; boolean again, combat; String why, cat; int kind; }
+	static final class Skip { int n; float at; boolean again, combat; String why, cat; int kind;
+		Skip copy() { Skip c = new Skip(); c.n = n; c.at = at; c.again = again; c.combat = combat; c.why = why; c.cat = cat; c.kind = kind; return c; } }
 	static final Map<Integer, Skip> skips = new HashMap<>();
 	static final int AGAIN_AFTER = 10, DETOUR = 2, AGAIN_NEAR = 8, NEAR = 3;
 	/** Passed over in a fight that is now over: plan A again once, when it lies close by (NEAR steps) or on the way. */
