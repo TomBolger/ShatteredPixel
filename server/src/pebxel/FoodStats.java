@@ -32,8 +32,9 @@ final class FoodStats {
 	// the fight going on: since a foe came into sight after 10 turns or more with none
 	static float foeLastSeen = -99, fightT0; static int fightHp0 = -1, fightHt; static final Map<String, Integer> fightFoes = new TreeMap<>();
 	static final ArrayDeque<String> lastWhys = new ArrayDeque<>();
+	static final ArrayDeque<float[]> hpHist = new ArrayDeque<>();
 
-	static void newGame() { floors.clear(); cur = null; lastT = 0; lastHunger = -1; lastWhy = ""; foeLastSeen = -99; fightHp0 = -1; fightFoes.clear(); lastWhys.clear(); }
+	static void newGame() { floors.clear(); cur = null; lastT = 0; lastHunger = -1; lastWhy = ""; foeLastSeen = -99; fightHp0 = -1; fightFoes.clear(); lastWhys.clear(); hpHist.clear(); }
 
 	static int pack(Hero h) { int t = 0; for (Item i : h.belongings) if (i instanceof Food && !(i instanceof Blandfruit)) t += (int) (((Food) i).energy * i.quantity()); return t; }
 
@@ -42,7 +43,7 @@ final class FoodStats {
 		float now = Actor.now(); Hunger hu = h.buff(Hunger.class); int hg = hu == null ? 0 : hu.hunger(); int pk = pack(h);
 		if (cur == null || cur.depth != Dungeon.depth || cur.branch != Dungeon.branch) {
 			cur = new Floor(); cur.depth = Dungeon.depth; cur.branch = Dungeon.branch; cur.t0 = now; cur.hungerAt0 = hg; cur.packAt0 = pk; floors.add(cur);
-			lastT = now; lastHunger = hg; lastPack = pk; lastPos = h.pos; foeLastSeen = -99;
+			lastT = now; lastHunger = hg; lastPack = pk; lastPos = h.pos;
 		} else {
 			float dt = Math.max(0, now - lastT);
 			cur.turns += Math.round(dt);
@@ -58,10 +59,12 @@ final class FoodStats {
 		lastWhy = t == null || t.why == null ? "?" : t.why.replaceAll("[;=,:|]", " ");
 		lastWhys.addLast(lastWhy + "@hp" + h.HP); while (lastWhys.size() > 8) lastWhys.removeFirst();
 		// the fight
+		float dur = com.shatteredpixel.shatteredpixeldungeon.Statistics.duration; now = dur;
+		hpHist.addLast(new float[] { dur, h.HP * 100f / h.HT }); while (!hpHist.isEmpty() && hpHist.peekFirst()[0] < dur - 20) hpHist.removeFirst();
 		boolean foe = false;
 		for (Mob m : L.mobs) if (m.isAlive() && m.alignment == Char.Alignment.ENEMY && L.heroFOV[m.pos] && m.state != m.PASSIVE) {
 			foe = true;
-			if (now - foeLastSeen > 10) { fightFoes.clear(); fightHp0 = h.HP; fightHt = h.HT; fightT0 = now; foeLastSeen = now; }
+			if (now - foeLastSeen > 5) { fightFoes.clear(); fightHp0 = h.HP; fightHt = h.HT; fightT0 = now; foeLastSeen = now; }
 			fightFoes.merge(m.getClass().getSimpleName() + (m.state == m.SLEEPING ? "(z)" : ""), 0, (a, b) -> a);
 		}
 		if (foe) foeLastSeen = now;
@@ -86,6 +89,8 @@ final class FoodStats {
 		com.shatteredpixel.shatteredpixeldungeon.levels.rooms.Room r = ((com.shatteredpixel.shatteredpixeldungeon.levels.RegularLevel) L).room(c);
 		return r == null ? "none" : r.getClass().getSimpleName();
 	}
+
+	static float hpMax() { float m = 0; for (float[] x : hpHist) m = Math.max(m, x[1]); return m; }
 
 	static void print(String end, String cause) {
 		if (cur != null && cur.left.isEmpty()) cur.left = foodLeft(Dungeon.level);
@@ -113,7 +118,7 @@ final class FoodStats {
 		String killer = cause.contains("-- ") ? cause.substring(cause.lastIndexOf("-- ") + 3).trim() : cause.trim();
 		if (killer.length() > 60) killer = killer.substring(0, 60);
 		System.out.println("DEATH depth " + Dungeon.depth + " killer " + killer.replace(' ', '_') + " starving " + (hu != null && hu.isStarving())
-				+ " hp0 " + (fightHt > 0 ? fightHp0 * 100 / fightHt : -1) + " fightTurns " + Math.round(Actor.now() - fightT0) + " foes " + String.join(",", fightFoes.keySet())
+				+ " hp0 " + (fightHt > 0 ? fightHp0 * 100 / fightHt : -1) + " hp20 " + Math.round(hpMax()) + " fightTurns " + Math.round(com.shatteredpixel.shatteredpixeldungeon.Statistics.duration - fightT0) + " foes " + String.join(",", fightFoes.keySet())
 				+ " heal " + heal + " esc " + esc + (known.length() > 0 ? "[" + known.toString().trim().replace(' ', ',') + "]" : "") + " unkP " + unkP + " unkS " + unkS + " wands " + wands
 				+ " | " + String.join(" > ", lastWhys));
 	}
