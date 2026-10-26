@@ -57,6 +57,7 @@ final class AsBosses {
 		dzAny = false; elecAny = false;
 		boolean mine = l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.MiningLevel;
 		if (LEAPS) leaps(l);
+		if (NEWBORN) newborn(l);
 		if (!Dungeon.bossLevel() && !mine) return;
 		rocks(l);   // (falling rocks: DM-300's, the Gnoll Geomancer's)
 		if (mine) return;
@@ -81,6 +82,17 @@ final class AsBosses {
 		for (Mob m : new ArrayList<>(l.mobs)) if (m instanceof RipperDemon && m.isAlive()) {
 			Object lp = field(m, "leapPos");
 			if (lp instanceof Integer && (Integer) lp >= 0 && (Integer) lp < l.length() && (l.heroFOV[m.pos] || l.heroFOV[(Integer) lp])) mark((Integer) lp);
+		}
+	}
+
+	/** The Wandmaker's newborn fire elemental (Elemental.NewbornFireElemental): its blast is shown on the 3x3 round the
+	 *  cell it aims at a turn ahead (GameScene.targetedCell), while it or the cell is in sight: kept off. */
+	static final boolean NEWBORN = opt("BNEWBORN", true);
+	static void newborn(Level l) {
+		for (Mob m : new ArrayList<>(l.mobs)) if (m instanceof Elemental.NewbornFireElemental && m.isAlive()) {
+			Object tp = field(m, "targetingPos");
+			if (!(tp instanceof Integer) || (Integer) tp < 0 || (Integer) tp >= l.length() || !(l.heroFOV[m.pos] || l.heroFOV[(Integer) tp])) continue;
+			for (int k : PathFinder.NEIGHBOURS9) { int c = (Integer) tp + k; if (c >= 0 && c < l.length() && !l.solid[c]) mark(c); }
 		}
 	}
 
