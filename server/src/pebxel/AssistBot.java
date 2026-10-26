@@ -380,6 +380,7 @@ public class AssistBot {
 		Coverage.report(end);
 		System.out.println(BotStats.line());
 		if (Sense.ON) System.out.println(Sense.line());
+		System.out.println("BRAIN " + Brain.stats());
 		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
 				cls, seed, end, Dungeon.depth, maxD, Statistics.duration, Dungeon.hero == null ? 0 : Dungeon.hero.lvl, Dungeon.hero == null ? 0 : Dungeon.hero.HP, Dungeon.hero == null ? 0 : Dungeon.hero.HT,
