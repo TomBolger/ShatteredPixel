@@ -56,6 +56,7 @@ final class AsQuests {
 	static Target suggest0(Target planA) {
 		try {
 			Target b = AsBasics.fightLoop(planA);
+			if (b == null) b = AsBasics.chasm();
 			if (b == null) b = AsBasics.restStairs();
 			if (b != null) return b;
 			b = AsBasics.crab(planA);
@@ -71,6 +72,7 @@ final class AsQuests {
 				boolean adj = false; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, Dungeon.hero.pos)) adj = true;
 				Integer wp = seenAt.get(Wandmaker.class);
 				Target w = adj && (Dungeon.hero.HP * 2 < Dungeon.hero.HT || wp == null || walk(wp) > 60) ? null : wandmaker();   // (beside a wraith too, when he's near: they're weak, and they never stop coming)
+				if (w == null && wp != null && Dungeon.hero.HP * 4 >= Dungeon.hero.HT) w = cutThrough(wp);   // (the way to him blocked by them: through them, a step at a time)
 				if (w != null) return w;
 			}
 			if (fightOn || inDanger) return null;
@@ -89,6 +91,22 @@ final class AsQuests {
 	/** A tactic's move vetoed (Assist planList's hook): into the Great Crab's dead end. */
 	static boolean vetoMove(Target t) {
 		try { return AsBasics.crabVeto(t); } catch (Throwable e) { lastError = e; return false; }
+	}
+
+	/** The first step of the shortest known way to c with foes taken as no wall: walked, or (a foe there) struck. */
+	static Target cutThrough(int c) {
+		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
+		int[] prev = new int[N]; Arrays.fill(prev, -2); ArrayDeque<Integer> q = new ArrayDeque<>(); prev[hp] = -1; q.add(hp);
+		while (!q.isEmpty()) { int u = q.poll(); if (u == c || adjacent(u, c)) {
+				int x = u; while (prev[x] != hp && prev[x] >= 0) x = prev[x];
+				if (x == hp) return null;
+				Char ch = Actor.findChar(x);
+				if (ch instanceof Mob && hostile((Mob) ch)) return new Target(x, ENEMY, "quest: cut through to the Wandmaker");
+				return ch == null ? new Target(x, GO, "quest: through them to the Wandmaker") : null; }
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || prev[v] != -2 || !L.passable[v] || !(known[v] || L.heroFOV[v]) || L.avoid[v]) continue;
+				prev[v] = u; q.add(v); } }
+		return null;
 	}
 
 	/** A hands suggestion vetoed (Assist planList's hook). */

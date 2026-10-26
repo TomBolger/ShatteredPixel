@@ -230,6 +230,26 @@ final class AsBasics {
 	}
 
 	// =============================================================================================================
+	// a chasm as the way out (Chasm.heroLand: the fall costs at least half the health left, with bleeding and a limp,
+	// and foes don't follow): only when losing a fight beside one, with no Healing known (the hands' escapes go first)
+	// =============================================================================================================
+	static final boolean CHASM = opt("BCHASM", true);
+	static final int CHASMHP = optInt("BCHASMHP", 35);   // health share at least: the landing can kill below it
+
+	static Target chasm() {
+		if (!CHASM || Dungeon.bossLevel() || Dungeon.depth >= 25) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.rooted || h.HP * 100 < h.HT * CHASMHP || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Levitation.class) != null) return null;
+		boolean adj = false; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) adj = true;
+		if (!adj) return null;
+		com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing heal = bag(com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class);
+		if (heal != null && heal.isKnown()) return null;
+		int pit = -1; for (int k : PathFinder.NEIGHBOURS8) { int c = hp + k; if (c >= 0 && c < L.length() && L.pit[c] && !L.solid[c] && known[c] && Actor.findChar(c) == null) pit = c; }
+		if (pit < 0 || !(OFIGHT ? oLosing(OESC) : h.HP * 2 < h.HT)) return null;
+		return new Target(pit, GO, "losing: down the chasm (half the health left, but out)");
+	}
+
+	// =============================================================================================================
 	// the sacrificial fire (SacrificeRoom): a foe killed while beside the altar's fire feeds it (2-3x its experience);
 	// fed 6 + 4 a depth, it gives a prize. Foes fought from the altar itself are all beside it.
 	// =============================================================================================================
