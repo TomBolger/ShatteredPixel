@@ -74,7 +74,8 @@ final class AsIntent {
 		if (w.startsWith("your") || w.startsWith("resume")) return "way";
 		return "other";
 	}
-	/** Kinds a player may simply not care for (never the fight, the way on, a skill's step, his own choice). */
+	/** Kinds a player may simply not care for (never the fight, the way on, a skill's step, his own choice); of these
+	 *  only grass, doors and talking can lose plan A by it (the loot wins games, a search finds the way on). */
 	static boolean optional(String c) { return c.equals("item") || c.equals("grass") || c.equals("door") || c.equals("search") || c.equals("talk"); }
 	static double like(String c) { Double v = like.get(c); return v == null ? 0 : v; }
 	static void liked(String c, double d) { if (c.isEmpty()) return; like.replaceAll((k, v) -> v * 0.95); like.merge(c, d, Double::sum); }
@@ -103,11 +104,16 @@ final class AsIntent {
 		int o = e.obj >= 0 ? e.obj : e.cell; if (o < 0) return;
 		if (e.why != null && (e.why.startsWith("your") || e.why.startsWith("resume"))) return;   // (his own way echoed back: no suggestion of ours to offer again)
 		Skip s = skips.computeIfAbsent(o, k -> new Skip());
-		s.n++; s.at = Actor.now(); s.combat = fight || seenFoe; s.why = e.why; s.kind = e.kind; s.cat = cat(e);
+		float now = Actor.now();
+		// (passed over again while still held back from the last time (step after step of one errand of his): the same
+		// pass, not one more. Only a pass after it came back counts again: DS-fin1, counting each step held the unexplored
+		// back 180 turns, and a player off on errands of his own explored nothing: 2.4 floors fewer)
+		if (s.n > 0 && now < s.at + DEMOTE * demoteMult(o)) { if (optional(cat(e)) && !(fight || seenFoe)) liked(cat(e), -0.1); return; }
+		s.n++; s.at = now; s.combat = fight || seenFoe; s.why = e.why; s.kind = e.kind; s.cat = cat(e);
 		if (optional(cat(e)) && !s.combat) liked(cat(e), -0.5);
 	}
 	/** How much longer an objective passed over again stays held back (Assist.pass's demotion): 1, 3, 9 times. */
-	static int demoteMult(int o) { if (!ON) return 1; Skip s = skips.get(o); int n = s == null ? 1 : s.n; return n <= 1 ? 1 : n == 2 ? 3 : 9; }
+	static int demoteMult(int o) { if (!ON) return 1; Skip s = skips.get(o); if (s == null || !optional(s.cat)) return 1; int n = s.n; return n <= 1 ? 1 : n == 2 ? 3 : 9; }   // (the unexplored, the stairs: never longer; the way on must come back)
 
 	/** planList's last pass over the list (the player's side of it). */
 	static void rank(List<Target> out) {
@@ -153,7 +159,7 @@ final class AsIntent {
 			}
 		}
 		// 2. a kind he doesn't care for: no plan A while something else is (not in a fight, never a skill's or his own)
-		if (calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && !cat(a).equals("item") && like(cat(a)) <= -2) {   // (never the loot: it wins the game; only lower in B and C)
+		if (calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && !cat(a).equals("item") && !cat(a).equals("search") && like(cat(a)) <= -2) {   // (never the loot: it wins the game; only lower in B and C)
 			for (int j = 1; j < out.size(); j++) { Target e = out.get(j); if (e.kind != ENEMY && !(optional(cat(e)) && like(cat(e)) <= -2)) { out.add(0, out.remove(j)); disliked++; break; } }
 		}
 		// 3. his way: the next thing that way (what lies about, the unexplored, the stairs, a door he has been through or
