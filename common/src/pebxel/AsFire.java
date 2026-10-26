@@ -44,7 +44,7 @@ final class AsFire {
 	static final boolean ON = opt("FIRE", true);
 	static final int MEM = optInt("FIREMEM", 10), RANGE = optInt("FIRERANGE", 9);
 	static final boolean STEP = opt("FIRESTEP", true), FIGHT = opt("FIREFIGHT", true), OUT = opt("FIREOUT", true);
-	static final boolean CLOSE = opt("FIRECLOSE", true), CURSE = opt("FIRECURSE", true), WAITA = opt("FIREWAIT", true), NEAR = opt("FIRENEAR", false), REACH = opt("FIREREACH", true);
+	static final boolean CLOSE = opt("FIRECLOSE", true), CURSE = opt("FIRECURSE", true), WAITA = opt("FIREWAIT", true), NEAR = opt("FIRENEAR", false), NEARONLY = opt("FIRENEARONLY", true), REACH = opt("FIREREACH", true);
 
 	/** A shooter as last seen. comes: it walks round to the hero when out of its line (not a scorpio, which backs off,
 	 *  nor anything rooted). */
@@ -104,6 +104,12 @@ final class AsFire {
 	static double fireAt(int c, boolean comers) {
 		double f = 0;
 		for (Seen s : seen.values()) { if (comers && !s.comes) continue; if (fireLine(s, c)) f += s.dmg; }
+		return f;
+	}
+	/** The same from those in sight now and the remembered that come (a scorpio out of sight has backed off). */
+	static double fireNear(int c) {
+		double f = 0; float now = Actor.now();
+		for (Seen s : seen.values()) { if (!s.comes && s.at != now) continue; if (fireLine(s, c)) f += s.dmg; }
 		return f;
 	}
 	static boolean any(boolean comers) { for (Seen s : seen.values()) if (!comers || s.comes) return true; return false; }
@@ -186,7 +192,7 @@ final class AsFire {
 		if (t.kind == ENEMY || t.kind == USE || own(t) || (REST_ACT.equals(t.action) && false)) return false;
 		note(); if (seen.isEmpty() || adjFoe()) return false;
 		int hp = Dungeon.hero.pos;
-		if (fireAt(hp, false) <= 0) return false;
+		if ((NEARONLY ? fireNear(hp) : fireAt(hp, false)) <= 0) return false;
 		if ((t.kind == GO || t.kind == PICKUP) && stairsNear(t)) return false;
 		if ((t.kind == GO || t.kind == PICKUP) && t.cell >= 0 && t.cell != hp && !stepsInFire(t.cell) && fireAt(t.cell, false) <= 0 && walk(t.cell) <= 2) return false;   // (on its way out already)
 		return true;
