@@ -125,6 +125,7 @@ public final class Assist {
 	static int ovrC = -1;                  // the player's choice: -1 none, WAY: only the way, else an objective cell
 	static final int WAY = -2;
 	static int ovrDir = -1;                // its way (pang 0..63)
+	static int ovrKeyC = -1, ovrBest, ovrStale; static float ovrAt = -1; static final int OVRSTALE = optInt("OVRSTALE", 12);   // (the choice's progress: the nearest it came, offers since)
 	static boolean ovrObj, ovrUnseen;      // chosen from the list (an objective) / it was unseen when chosen
 	static int wayOn = -1;                 // the player's way ran out: tgt2 offers the next click that way, once
 	static boolean grassSkip, planAGrass; private static int grassKey;
@@ -142,12 +143,12 @@ public final class Assist {
 	static final Map<Integer, Integer> talked = new HashMap<>();
 	static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
 	static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
-	static int actPos = -1, actCell = -1, actKind; private static float actTime = -1; private static Item actItem;
+	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; private static Item actItem;
 	static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
 	static float floorT0;
 	static int eatBand;
 	// mind reading: the list as it was last taken
-	static int mindPos = -1; private static Level mindFloor;
+	static int mindPos = -1, listActFrom = -1; private static Level mindFloor;
 	static int[] mindObj = new int[0], mindWalk = new int[0];
 	// the last plan
 	static List<Target> last = new ArrayList<>();
@@ -214,7 +215,8 @@ public final class Assist {
 	static final boolean MEAT = opt("MEAT", true);     // raw mystery meat (4 in 5 a bad effect, burning among them): eaten standing in water   // the Rogue's cloak before a fight   // nothing in sight: rest below this share of health   // the Mage's first 3 upgrades into the staff
 	static final int HEALBOSS = optInt("HEALBOSS", 55);    // a boss in sight: Healing below this share (Goo's pumped blow is triple)   // the Mage's staff zapped point blank too (magic: double accuracy, more damage than the staff's own blow)   // low and losing: up the stairs (only allies follow), rest there, come back   // tall grass walked for dew and seeds (off: only within 2 steps)     // Goo's ooze: into water to wash it off   // the Great Crab: ambushes are the only blows it doesn't block
 	static int optInt(String name, int def) { try { String v = System.getenv("AS_" + name); return v == null ? def : Integer.parseInt(v); } catch (Throwable e) { return def; } }
-	static final int HEALPCT = optInt("HEALPCT", 40);   // (a known Healing potion is drunk in a fight below this share of health)
+	static final int HEALPCT = optInt("HEALPCT", 40);
+	static final boolean EATHUNGRY = opt("EATHUNGRY", false), MMSAVE = opt("MMSAVE", true);   // (K8, SR's audit gaps 9 and 21)   // (a known Healing potion is drunk in a fight below this share of health)
 	// agent O's models (pebxel.bot) (AS_Oxxx=1 turns one on, 0 off): AS_OFIGHT the fight model (heal, escape, stairs, rest, avoid).
 	// On by default (Thomas: the models are the way to a solved game; tune them, don't switch them off). Untuned after the
 	// merge they scored below main's rules (BF, Monolith 90 games each, mean max depth: rules 5.19, all on 4.08); agent MT tunes them.
@@ -395,12 +397,13 @@ public final class Assist {
 		try {
 			Hero h = Dungeon.hero;
 			if (t == null || h == null || !h.isAlive()) return false;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos; acts++; Brain.acted++;   // (M2: the brain's steadiness counts plans acted on, not re-plans)
 			boolean aimingNow = Controls.aiming();
 			if (aimingNow) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 			if (!h.ready) return false;
 			switch (t.kind) {
 				case USE: {
+					if (t.item != null) { useActKey = System.identityHashCode(t.item) + ":" + t.action; useActAt = Actor.now(); }
 					if (AsAbilities.mine(t)) return AsAbilities.act(t, player);   // (subclass buttons, spells, waits: AsAbilities)
 					if (t.item == null || t.action == null) return false;
 					if (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action)) zapped.put(t.item, Actor.now());
@@ -427,6 +430,10 @@ public final class Assist {
 					break;
 			}
 			if (t.cell < 0) return false;
+			if ((t.kind == GO || t.kind == PICKUP || t.kind == ENEMY) && setupOk(Dungeon.level) && hp == h.pos) {   // (an ally on the only good way: swap places first)
+				int sw = swapStep(t.cell);
+				if (sw >= 0 && sw != swapFrom && Actor.now() != swapAt) { swapFrom = h.pos; swapAt = Actor.now(); GameScene.handleCell(sw); return true; }   // (once a moment, never back to the cell just left: the Rogue's clone swaps in no time)
+			}
 			noteTalk(t.cell);
 			if (anyDanger) clearPath(h);   // (the hero keeps its last walk to the same cell: one planned before a hazard was seen)
 			GameScene.handleCell(t.cell);
@@ -438,7 +445,7 @@ public final class Assist {
 	public static void noted(Target t) {
 		try {
 			Hero h = Dungeon.hero; if (t == null || h == null) return;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos; acts++;
 			if (t.kind == WAIT && (SEARCH_ACT.equals(t.action) || (t.action == null && t.cell == h.pos))) noteSearch();
 			if (t.kind != USE && t.kind != WAIT && t.cell >= 0) noteTalk(t.cell);
 			if (t.item != null && (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action))) zapped.put(t.item, Actor.now());
@@ -521,13 +528,13 @@ public final class Assist {
 
 	static void ensureFloor(Level l) {
 		if (floor == l && srchFrom != null && srchFrom.length == l.length()) return;
-		floor = l; goal = -1; passed.clear(); skippedHeaps.clear(); declined.clear(); demoted.clear(); planned.clear(); upgradeHeld = false; ovrC = -1; wayOn = -1; grassSkip = false;
+		floor = l; goal = -1; passed.clear(); skippedHeaps.clear(); declined.clear(); demoted.clear(); planned.clear(); upgradeHeld = false; ovrC = -1; ovrKeyC = -1; wayOn = -1; grassSkip = false;
 		vetoId = -1; vetoStand = -1; resumeCell = -1; stepBackWaited = false; ambGoal = -1; ambId = -1; waitId = -1; lastPos = -1; from = -1;
 		srchFrom = new boolean[l.length()]; checked = new boolean[l.length()]; fishSeen = false; fishAt = -99; talked.clear(); bad.clear();
 		huntMem.clear(); mobLast.clear();
 		combatHeld.clear(); grassHeld = false; fight = false; foeAt = -99; strikeAt = -1; threats.clear(); holdOff = false; holdId = -1;
 		trapMem = new boolean[l.length()]; fadingSeen = null;
-		hazMem = new boolean[l.length()]; sentries.clear(); sentryZone = new boolean[l.length()]; sentryKey = -1; crabSeen = -1; bossSeen = -1;
+		hazMem = new boolean[l.length()]; fireMem = new float[l.length()]; sentries.clear(); sentryZone = new boolean[l.length()]; sentryKey = -1; crabSeen = -1; bossSeen = -1;
 		doorSpot = -1; floorT0 = Actor.now(); actCell = -1; actTime = -1; eatBand = 0;
 	}
 
@@ -547,9 +554,11 @@ public final class Assist {
 			if (m instanceof Piranha) { fish = true; fishSeen = true; fishAt = Actor.now(); }
 			if (m instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.SentryRoom.Sentry) sentries.add(m.pos);
 		}
+		float now0 = Actor.now();
 		for (int c = 0; c < LEN; c++) {
 			known[c] = L.visited[c] || L.mapped[c];
-			if (L.heroFOV[c]) hazMem[c] = blobAt(c);
+			if (L.heroFOV[c]) { hazMem[c] = blobAt(c); fireMem[c] = hazMem[c] && plainFire(c) ? now0 : -1; }
+			else if (hazMem[c] && fireMem[c] >= 0 && now0 - fireMem[c] > FIREMEM) hazMem[c] = false;   // (plain fire out of sight burns out: K8, a barricade burnt and its room behind never gone into, the flames remembered)
 		}
 		hazMem[hp] = blobAt(hp);   // (felt, even blind)
 		tenguTraps();
@@ -566,6 +575,7 @@ public final class Assist {
 		// the last act did nothing (no time passed, nowhere moved): that target is no use for a while
 		if (actTime >= 0 && actPos == hp && Actor.now() == actTime && actCell >= 0 && actKind != USE && actKind != WAIT) {
 			bad.put(actCell, Actor.now() + 30);
+			if (actKind == ENEMY && actObj >= 0 && actObj != actCell && !adjacent(actObj, hp)) bad.put(actObj, Actor.now() + 5);   // (a walk towards a foe that did nothing: that foe not walked to for a few turns. K7: 300 such walks at one moment)
 			if (actKind == PICKUP && !keyAt(actCell)) { if (fight) combatHeld.add(actCell); else passed.add(actCell); }   // (a key: only the while above; in a fight, till it's over)
 		}
 		actTime = -1;
@@ -654,9 +664,46 @@ public final class Assist {
 	/** The hazards, the characters in sight (in the way), the walk. */
 	static void walls(boolean water) {
 		hazards(water);
-		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.pos != hp) pass[m.pos] = false;
+		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.pos != hp && !swappable(m)) pass[m.pos] = false;   // (an ally the hero swaps places with is no wall: K8)
 		bfs();
 	}
+
+	/** An ally the hero swaps places with when he walks into it (Char.interact: the Dried Rose's ghost, a summon, the
+	 *  Rogue's clone): not one that can't move or is held, nor one too large for the hero's cell. K6: the plan walled
+	 *  allies off like foes, and a ghost in a corridor stalled the hero for hundreds of turns. */
+	static boolean swappable(Mob m) {
+		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || m instanceof NPC || Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
+		if (H.rooted || H.paralysed > 0 || m.rooted || m.paralysed > 0 || !L.passable[m.pos]) return false;
+		if (Char.hasProp(m, Char.Property.LARGE) && !L.openSpace[hp]) return false;
+		for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
+		for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
+		return true;
+	}
+
+	/** The walk to c goes through an ally that the game's own walk (Hero.getCloser: every character in sight a wall)
+	 *  won't take: the ally beside the hero on the plan's way, to swap places with first; else -1. */
+	static int swapStep(int c) {
+		if (c < 0 || c >= LEN || adjacent(c, hp) || c == hp || dist[c] >= INF) return -1;
+		boolean ally = false;
+		for (Mob m : mobs()) if (L.heroFOV[m.pos] && swappable(m)) ally = true;
+		if (!ally) return -1;
+		boolean[] p = new boolean[LEN];
+		for (int i = 0; i < LEN; i++) p[i] = L.passable[i] && (L.visited[i] || L.mapped[i]);
+		boolean[] pc = p.clone();
+		for (Mob m : mobs()) if (m.pos >= 0 && m.pos < LEN && H.fieldOfView != null && H.fieldOfView[m.pos]) pc[m.pos] = false;
+		List<Integer> g = gamePath(hp, c, pc);
+		// the plan's walk, over the cells pass allows (allies too), from c back: the best of the hero's neighbours
+		int[] d = new int[LEN]; Arrays.fill(d, INF); int[] q = new int[LEN]; int qh = 0, qt = 0; d[c] = 0; q[qt++] = c;
+		while (qh < qt) { int a = q[qh++], nd = d[a] + 1;
+			for (int k = 0; k < 8; k++) { int n = a + N8[k]; if (!nb(a, n) || d[n] <= nd || !(pass[n] || n == hp)) continue; d[n] = nd; q[qt++] = n; } }
+		if (d[hp] >= INF) return -1;
+		if (g != null && g.size() <= d[hp] + 2) return -1;   // (the game's own way round is as good)
+		int best = -1;   // (the next step on the plan's way: the ally to swap with, or a free cell short of it, a step at a time)
+		for (int k = 0; k < 8; k++) { int n = hp + N8[k]; if (nb(hp, n) && d[n] + 1 == d[hp] && (best < 0 || swappable(mobAt(n))) && (seenChar(n) == null || swappable(mobAt(n)))) best = n; }
+		return best;
+	}
+	static int swapFrom = -1; static float swapAt = -1;
+	static Mob mobAt(int c) { Char ch = Actor.findChar(c); return ch instanceof Mob ? (Mob) ch : null; }
 
 	static void bfs() {
 		Arrays.fill(dist, INF);
@@ -752,6 +799,7 @@ public final class Assist {
 	}
 
 	static Target front(Target t) {   // t_front: pinned, after those pinned before it
+		if ((t.kind == GO || t.kind == PICKUP) && t.cell >= 0 && t.cell != hp && bad.containsKey(t.cell)) return t;   // (a walk there did nothing a moment ago: not pinned again. K7: a boss dodge to a cell the game wouldn't walk to, offered hundreds of times with no time passing)
 		for (int j = h0; j < out.size(); j++) if (out.get(j).cell == t.cell && out.get(j).kind == t.kind && t.kind != USE) { del(j); break; }
 		if (out.size() >= CAP) out.remove(out.size() - 1);
 		t.key = 0; out.add(h0++, t);
@@ -792,6 +840,13 @@ public final class Assist {
 			h0 = 0;
 			Brain.judge();
 		}
+		// the list's "stairs up" is never plan A by default with the floor not done (K8: plan A lost to a "bad" mark, the
+		// list's entry for the way up came first, and a head-start hero went up to a floor it couldn't leave, and starved)
+		if (!out.isEmpty() && "stairs up".equals(out.get(0).why) && bag(Amulet.class) == null && floorLeft()) {
+			out.add(out.remove(0));
+			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
+		}
+		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
 		mind();
@@ -799,6 +854,53 @@ public final class Assist {
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
 		return out;
 	}
+
+	/** Two walks that take turns (K8: "quest: back to the Wandmaker" from one cell, "pick up" from the other, to and
+	 *  fro): the hero back on the same cell with the same plan A three times in OSCN decisions is a dither; that plan
+	 *  A is then kept first till it is reached (or OSCT turns), as long as no foe is in sight. */
+	static void commit() {
+		// an item use that did nothing (no time passed, the hero where he was: magic-immune, a staff that won't zap...)
+		// offered a third time at one moment is held back 20 turns (K8: the staff "zap point blank" with no time
+		// passing, 50 times; the cloak's likewise)
+		float now0 = Actor.now();
+		useBan.values().removeIf(t -> t < now0);
+		if (!useBan.isEmpty()) out.removeIf(t -> t.kind == USE && t.item != null && useBan.containsKey(System.identityHashCode(t.item) + ":" + t.action));
+		// the general zero-time guard: game time not moving over ZEROMAX decisions (walks that swap, step and come back
+		// in no time): plan A's walk is barred a while (K8 / WD: a clone swapped with back and forth, 2,500 decisions)
+		if (acts != zeroActs) { zeroActs = acts; if (now0 == zeroAt) zeroN++; else { zeroAt = now0; zeroN = 0; } }   // (only plans with an act between them count)
+		if (zeroN > ZEROMAX && !out.isEmpty()) {
+			Target z = out.get(0);
+			if ((z.kind == GO || z.kind == PICKUP) && z.cell >= 0 && z.cell != hp) { bad.put(z.cell, now0 + 30); if (z.obj >= 0 && z.obj != hp) bad.put(z.obj, now0 + 30); out.remove(0); }
+			else if (z.kind == ENEMY && z.cell >= 0) { bad.put(z.cell, now0 + 5); out.remove(0); }
+			zeroN = ZEROMAX / 2;
+		}
+		if (out.isEmpty()) return;
+		Target u = out.get(0);
+		if (u.kind == USE && u.item != null) {
+			String k = System.identityHashCode(u.item) + ":" + u.action;
+			if (k.equals(useKey) && now0 == useAt && hp == usePos && k.equals(useActKey) && useActAt == now0) {   /* (acted on, and nothing changed) */ if (++useN >= 2) { useBan.put(k, now0 + 20); out.remove(0); useKey = null; if (out.isEmpty()) return; } }
+			else { useKey = k; useAt = now0; usePos = hp; useN = 0; }
+		}
+		Target a = out.get(0); int ao = a.obj >= 0 ? a.obj : a.cell; float now = Actor.now();
+		boolean walkA = (a.kind == GO || a.kind == PICKUP) && ao >= 0 && !a.why.startsWith("escape") && !a.why.startsWith("boss") && !a.why.contains("bomb") && !a.why.startsWith("your ");   // (never over the player's own choice)
+		if (comL != L) { comL = L; oscHist.clear(); comObj = -1; oscPos = -1; }
+		if (comObj >= 0 && (now > comUntil || seenFoe || inDanger || hp == comObj || (walk(comObj) <= 1 && seenChar(comObj) != null) || walk(comObj) >= INF)) comObj = -1;
+		if (comObj >= 0 && walkA && ao != comObj) {
+			for (int j = 1; j < out.size(); j++) { Target t = out.get(j); int o = t.obj >= 0 ? t.obj : t.cell;
+				if (o == comObj && (t.kind == GO || t.kind == PICKUP)) { out.add(0, out.remove(j)); t.why = t.why + " (kept: no dithering)"; return; } }
+			Target t = new Target(comObj, seenHeap(comObj) != null ? PICKUP : GO, comWhy + " (kept: no dithering)"); t.obj = comObj; out.add(0, t); return;
+		}
+		if (!walkA || seenFoe || hp == oscPos) return;   // (only arrivals count: plans made again on the same cell aren't a dither)
+		oscPos = hp;
+		long key = (long) hp * 100003 + ao; int n = 0;
+		for (long k : oscHist) if (k == key) n++;
+		oscHist.addLast(key); while (oscHist.size() > OSCN) oscHist.removeFirst();
+		if (n >= 2 && comObj < 0) { comObj = ao; comUntil = now + OSCT; comWhy = a.why; oscHist.clear(); }
+	}
+	static float zeroAt = -1; static int zeroN, acts, zeroActs; static final int ZEROMAX = optInt("ZEROMAX", 12);
+	static final Map<String, Float> useBan = new HashMap<>(); static String useKey, useActKey; static float useAt, useActAt = -1; static int usePos, useN;
+	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1, oscPos = -1; static float comUntil; static String comWhy = "";
+	static final int OSCN = optInt("OSCN", 40), OSCT = optInt("OSCT", 40);
 
 	/** Objectives the player passed over lately go behind the rest (still there for a Down), unless an enemy is in
 	 *  sight or the hero is in danger (then what's safest stays first). */
@@ -1028,6 +1130,17 @@ public final class Assist {
 		}
 		return false;
 	}
+	/** Only plain fire on c (it burns out in a few turns; gas lingers, the magical fire room's never goes out). */
+	static boolean plainFire(int c) {
+		boolean f = false;
+		for (Blob b : L.blobs.values()) {
+			if (b == null || b.volume <= 0 || b.cur == null || c >= b.cur.length || b.cur[c] <= 0) continue;
+			if (b instanceof Fire) f = true; else if (b instanceof ToxicGas || b instanceof CorrosiveGas || b instanceof ConfusionGas || b instanceof ParalyticGas || b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing || b instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.MagicalFireRoom.EternalFire) return false;
+		}
+		return f;
+	}
+	static float cloakAt = -1; static int cloakPos = -1, cloakN;   // (the cloak offered with no time passing: not again this moment)
+	static float[] fireMem; static final int FIREMEM = optInt("FIREMEM", 8);
 	static boolean burning() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Burning")) return true; return false; }
 	static boolean fireAt(int c) { Blob f = L.blobs.get(Fire.class); return c >= 0 && c < LEN && L.heroFOV[c] && f != null && f.volume > 0 && f.cur != null && f.cur[c] > 0; }
 	static boolean fireNear(int c) { if (fireAt(c)) return true; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && fireAt(n) && L.flamable[c]) return true; } return false; }
@@ -1112,7 +1225,7 @@ public final class Assist {
 
 	static boolean risky(Heap h) {
 		if (h.type == Heap.Type.TOMB) return H.lvl < Dungeon.depth + 3;
-		if ((h.type == Heap.Type.SKELETON || h.type == Heap.Type.REMAINS) && H.HP * 3 < H.HT * 2) return true;
+		if ((h.type == Heap.Type.SKELETON || h.type == Heap.Type.REMAINS) && H.HP * 2 < H.HT) return true;   // (a wraith comes out of haunted remains only: weak, one hit kills it. K8: two thirds kept a hero landed in the pit room at 60% searching its walls till he starved)
 		return false;
 	}
 
@@ -1213,7 +1326,7 @@ public final class Assist {
 			if (adj) stepBackWaited = false;
 			if ((m.state == m.PASSIVE && (!adj || m instanceof Statue)) || (m instanceof Piranha && !adj) || (Char.hasProp(m, Char.Property.IMMOVABLE) && !adj)) continue;
 			if (!adj && walk(m.pos) > 2 * distance(m.pos, hp) + 4) continue;
-			if (!adj && !hunting(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;
+			if (!adj && !hunting(m) && !boss(m) && walk(m.pos) > distance(m.pos, hp) + 1) continue;   // (a boss always: Tengu jumps, never seen stepping nearer, and was left for "search spot" walks round his arena, 2,300 of them)
 			if (m.state == m.SLEEPING && !adj && !boss(m) && distance(m.pos, hp) > 2 && floorLeft()) continue;
 			if ((OFIGHT || ODIFF) && !adj && !hunting(m) && !boss(m) && oPick("avoid", FightModel.evaluate(H, Collections.singletonList(m)).pDeath * 100 >= OAVOID, false)) continue;   // (O: a fight it would likely lose: not started)
 			int k = adj ? (boss(m) ? 0 : 1 + m.HP) : walk(m.pos) < INF ? 1000 + walk(m.pos) * 64 + m.HP : INF;
@@ -1305,7 +1418,14 @@ public final class Assist {
 				int c = ovrC;
 				boolean useCell = !L.passable[c] || L.map[c] == Terrain.ALCHEMY;
 				boolean met = ovrObj && (ovrUnseen ? !unseenBy(c) : useCell && walk(c) <= 1) && seenHeap(c) == null && seenChar(c) == null;
-				if (met || walk(c) >= INF) ovrC = WAY;
+				if (ovrObj && seenChar(c) != null && walk(c) <= 1 && (talked.getOrDefault(seenChar(c).id(), 0) > 0 || !(seenChar(c) instanceof NPC))) met = true;   // (a character chosen, reached: talked to; else it never is "met")
+				// obedience never loops: a choice the hero gets no nearer to over OVRSTALE offers (the list's other entries
+				// done meanwhile, a walk that does nothing) is given up (K6: "your choice" offered 628 times in one game)
+				float ovrNow = ovrAt; ovrAt = Actor.now();
+				if (c != ovrKeyC) { ovrKeyC = c; ovrBest = walk(c); ovrStale = 0; }
+				else if (walk(c) < ovrBest) { ovrBest = walk(c); ovrStale = 0; }
+				else if (Actor.now() != ovrNow && ++ovrStale > OVRSTALE) { ovrC = -1; demoted.put(c, Actor.now() + DEMOTE); met = true; }
+				if (met || walk(c) >= INF) { if (ovrC != -1) ovrC = WAY; }
 				else { why[0] = "your choice"; return c; }
 			}
 			for (Mob m : mobs()) {   // the quest people
@@ -1574,7 +1694,12 @@ public final class Assist {
 	static void mind() {
 		if (mode() == 0) return;
 		boolean up = false; int pr = -1;
-		if (mindFloor == L && mindPos != hp) {
+		// (only a walk the player made himself (the d-pad, a tap) is read: one the list's entry made was no wish of
+		// its own. K6: the bot's every walk to a quest's step or a pinned use read as wanting whatever it passed
+		// nearer, "your choice" set on it, and the two took turns for 1,000+ turns)
+		boolean own = !(listActFrom == mindPos && listActFrom >= 0);
+		if (H.ready) listActFrom = -1;   // (the act's walk over: what moves the hero from here is the player's)
+		if (mindFloor == L && mindPos != hp && own) {
 			for (int j = 0; j < mindObj.length; j++) {
 				int c = mindObj[j]; int g = mindWalk[j] - (c >= 0 && c < LEN ? walk(c) : INF);
 				if (j == 0 && c < 0) break;
@@ -1749,6 +1874,15 @@ public final class Assist {
 			}
 			if (f != null) return use(f, Food.AC_EAT, -1, "starving: eat");
 		}
+		// hungry, calm: a food that fills no more than the hunger shown (Hungry is 300 of it: a ration, a small one,
+		// cooked meat) is eaten now, not at Starving: none of it goes to waste, and a rest or a fight after it won't run
+		// into starving, where regeneration stops (strategy-reference 2.6; SR's audit, gap 9). Off by default: K8-e1, 90
+		// head-start-6 games, mean depth 10.38 on against 10.71 off (the food budget's rest vetoes see less food held)
+		if (EATHUNGRY && hungry() && !starving() && !seen && !near && !passedEat && !threatNear) {
+			Item f = null; float fe = 0;
+			for (Item i : H.belongings.backpack) if (foodItem(i) && !(i instanceof MysteryMeat)) { float e = ((Food) i).energy; if (e <= Hunger.HUNGRY && e > fe) { fe = e; f = i; } }
+			if (f != null) return use(f, Food.AC_EAT, -1, "hungry: eat (none of it wasted)");
+		}
 		Item heal = Clues.healing(); boolean pot = heal != null;   // (a known Healing, or one surely Healing by its clues: a fly's drop. Agent ID)
 		String hw = heal != null && !known(heal) ? " (" + Clues.about(heal) + ")" : "";
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
@@ -1771,8 +1905,13 @@ public final class Assist {
 			Object ch = ck == null ? null : field(ck, "charge");
 			boolean on = H.buff(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.cloakStealth.class) != null || H.invisible > 0;
 			int hn = 0, close = INF; for (Mob m : mobs()) if (enemy(m) && hunting(m) && !(m instanceof NPC) && !(m instanceof Piranha)) { hn++; close = Math.min(close, walk(m.pos)); }
-			if (ck != null && !on && !ck.cursed && ch instanceof Integer && (Integer) ch > 0 && hn > 0 && close <= 4 && (ck.isEquipped(H) || H.hasTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.LIGHT_CLOAK)) && !declined(ck.getClass(), "STEALTH"))
+			// (it must turn on: magic-immune it does nothing, and an active one turns off; K7: 60 offers at one moment)
+			boolean can = ck != null && H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune.class) == null && field(ck, "activeBuff") == null && ck.actions(H).contains("STEALTH");
+			if (can && !on && !ck.cursed && ch instanceof Integer && (Integer) ch > 0 && hn > 0 && close <= 4 && (ck.isEquipped(H) || H.hasTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.LIGHT_CLOAK)) && !declined(ck.getClass(), "STEALTH")
+					&& !(cloakAt == Actor.now() && cloakPos == hp && ++cloakN > 2)) {
+				if (cloakAt != Actor.now() || cloakPos != hp) { cloakAt = Actor.now(); cloakPos = hp; cloakN = 0; }
 				return use(ck, "STEALTH", -1, "cloak: a sure first blow");
+			}
 		}
 		if (seen) return ranged();
 		// nothing in view
@@ -1789,7 +1928,7 @@ public final class Assist {
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
-			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
+			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
 		if (scrollsOk) {   // the known scrolls that sat unread: Remove Curse, Identify, Magic Mapping
 			boolean cw = false; Item unid = null;
@@ -1805,7 +1944,13 @@ public final class Assist {
 			if (OIDENT) unid = Identify.identifyTarget(H);
 			if (id != null && id.isKnown() && unid != null && !declined(ScrollOfIdentify.class, Scroll.AC_READ)) { Target t = use(id, Scroll.AC_READ, -1, "identify"); t.on = unid; return t; }
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
-			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
+			// Magic Mapping saved for the Demon Halls (strategy-reference 2.10: "save Magic Mapping scrolls for them", the
+			// Halls rushed): read there on a new floor with the way on unknown; above them only with the exit still
+			// hidden after 250 turns, and then only a spare one (more than the Halls' four floors still to come can use)
+			int halls = Dungeon.depth >= 21 && Dungeon.depth <= 24 ? 1 : 0, hallsLeft = Dungeon.depth < 21 ? 4 : 0;
+			boolean mmNow = mm != null && mm.isKnown() && !Dungeon.bossLevel() && (L.exit() <= 0 || !known[L.exit()]) && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)
+					&& (halls > 0 ? Actor.now() - floorT0 >= 1 : Actor.now() - floorT0 > 250 && (!MMSAVE || mm.quantity() > hallsLeft || AsBasics.shortOfFood()));
+			if (mmNow) return use(mm, Scroll.AC_READ, -1, halls > 0 ? "magic mapping: the Halls, rushed" : "magic mapping");
 			// read unknown scrolls to learn them while it's safe, early on a floor (mapping is worth most then)
 			if (Clues.ON) { Target t = Clues.testScroll(threatNear, (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 < 400); if (t != null) return t; }   // (agent ID: only a read of use whatever it is)
 			else if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
@@ -1823,7 +1968,7 @@ public final class Assist {
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
 			PotionOfLiquidFlame lf = new PotionOfLiquidFlame();
 			if (lf.isKnown() || ((water(hp) || !scr) && !burn))
-				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i))) return use(i, Potion.AC_DRINK, -1, "drink to learn");
+				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i)) && !AsItems.remedyHeld(i)) return use(i, Potion.AC_DRINK, -1, "drink to learn");   // (remedyHeld: maybe the floor's Frost / Liquid Flame for its room)
 		}
 		boolean foeInView = false; for (Mob m : mobs()) if (enemy(m) && !(m instanceof NPC)) foeInView = true;   // (MT: no swapping with a foe about, sleeping or not)
 		if (OGEAR && !foeInView) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }

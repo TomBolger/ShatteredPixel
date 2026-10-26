@@ -92,6 +92,22 @@ public final class MobTable {
 		return null;
 	}
 
+	/** (M2) The Amulet's curse by kind (AscensionChallenge.modifiers): damage, armour, accuracy, evasion and health. */
+	static final java.util.Map<String, Double> ASC = new java.util.HashMap<>();
+	static { Object[][] a = { { "Rat", 10.0 }, { "Snake", 9.0 }, { "Gnoll", 9.0 }, { "Swarm", 8.5 }, { "Crab", 8.0 }, { "Slime", 8.0 }, { "Skeleton", 5.0 }, { "Thief", 5.0 },
+			{ "DM100", 4.5 }, { "Guard", 4.0 }, { "Necromancer", 4.0 }, { "Bat", 2.5 }, { "Brute", 2.25 }, { "Shaman", 2.25 }, { "Spinner", 2.0 }, { "DM200", 2.0 },
+			{ "Ghoul", 1.67 }, { "Elemental", 1.67 }, { "Warlock", 1.5 }, { "Monk", 1.5 }, { "Golem", 1.33 }, { "RipperDemon", 1.2 }, { "Succubus", 1.2 }, { "Eye", 1.1 }, { "Scorpio", 1.1 } };
+		for (Object[] r : a) ASC.put((String) r[0], (Double) r[1]); }
+
+	/** (M2) The kind as it is on the way up with the Amulet (cursed). */
+	public static Fighter cursed(String name) {
+		Fighter f = fighter(name); if (f == null) return null;
+		double k = ASC.getOrDefault(name, 1.0); if (k == 1) return f;
+		f.hp = f.ht = (int) Math.round(f.ht * k); f.dmg = f.dmg.scale(k); f.dr = f.dr.scale(k); f.acc *= k; f.eva *= k;
+		if (f.zapDmg != null) f.zapDmg = f.zapDmg.scale(k); if (f.rageDmg != null) f.rageDmg = f.rageDmg.scale(k); if (f.deathDmg != null) f.deathDmg = f.deathDmg.scale(k);
+		return f;
+	}
+
 	/** The spawn mix at depth d: kinds and weights (summing to 1). */
 	public static String[] kinds(int d) { return ROT[Math.max(1, Math.min(26, d))]; }
 }

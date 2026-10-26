@@ -173,7 +173,16 @@ public final class HeroView {
 		if (hb != null && lvlPlus == 0) { Object hl = field(hb, "healingLeft"); if (hl instanceof Integer) f.healLeft = (Integer) hl; }   // (shown: the buff's icon and its description)
 		PotionOfHealing heal = h.belongings.getItem(PotionOfHealing.class);
 		if (heal != null && heal.isKnown()) { f.heals = heal.quantity(); f.healAmount = Math.round(0.8f * f.ht + 14); }
+		double st = curse(h);   // (M2, PN's v4 notes: the Amulet's curse, its stacks shown on the buff: at 6 the hero at half speed (at most 1), at 8 harm every turn, (stacks - 4) / 4 a turn off boss floors: AscensionChallenge)
+		if (st >= 6 && Tune.ASCEND) f.speed = Math.min(f.speed / 2, 1);
+		if (st >= 8 && Tune.ASCEND && !com.shatteredpixel.shatteredpixeldungeon.Dungeon.bossLevel()) f.bleed = (st - 4) / 4;
 		return f;
+	}
+
+	/** (M2) The Amulet's curse stacks (0: none): AscensionChallenge.stacks, as the buff shows. */
+	public static double curse(Hero h) {
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge c = h == null ? null : h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.class);
+		if (c == null) return 0; Object v = field(c, "stacks"); return v instanceof Float ? (Float) v : 0;
 	}
 
 	/** The damage still to come from the hero's poison (Poison.act: left / 3 + 1 a turn), bleeding (each turn its level,

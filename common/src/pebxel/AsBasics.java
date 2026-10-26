@@ -41,7 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
-		foodSeen(); hazNote(); shotNote(); fishNote();
+		foodSeen(); hazNote(); shotNote(); fishNote(); hidNote();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -79,6 +79,7 @@ final class AsBasics {
 		if (stuck instanceof GreatCrab && !adjacent(stuck.pos, hp)) { Target r = harmfulAt(stuck); if (r != null) return r; }
 		int c = stepAwayFrom(stuck.pos);
 		if (c >= 0) return new Target(c, GO, "stalled: away from it");
+		if (stuck instanceof GreatCrab) { Target r = crabCornered(stuck); if (r != null) return r; }
 		// cornered by a foe no blow gets through (the crab sees it coming): unseen (its blows land), away, or a gamble
 		Class<?>[] esc = { PotionOfInvisibility.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfMirrorImage.class, com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class };
 		boolean read = !blind();
@@ -94,14 +95,14 @@ final class AsBasics {
 	// never ends). Away from it, and to wait for it, only where there's room to slip off again.
 	// =============================================================================================================
 	static final boolean CRABEND = opt("BCRABEND", true);
-	static int crabPos = -1; static float crabSeenAt = -99; static Level crabL;
+	static int crabPos = -1, crabOffers; static float crabSeenAt = -99; static Level crabL; static final int CRABMAX = optInt("BCRABMAX", 150);
 
 	/** Plan A taking the hero into (or keeping it in) a dead end with the crab hunting it: a cell with room instead. */
 	static Target crab(Target planA) {
 		if (!CRABEND || planA == null) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		Mob cr = null; for (Mob m : mobs()) if (m instanceof GreatCrab && enemy(m) && hunting(m)) cr = m;
-		if (crabL != L) { crabL = L; crabSeenAt = -99; }
+		if (crabL != L) { crabL = L; crabSeenAt = -99; crabOffers = 0; }
 		if (cr != null) { crabPos = cr.pos; crabSeenAt = Actor.now(); }
 		else if (Actor.now() - crabSeenAt > 20 || L.heroFOV[crabPos]) return null;   // (out of sight lately, hunting: where it was seen, coming)
 		if (h.rooted) return null;
@@ -118,6 +119,7 @@ final class AsBasics {
 			int sc = 3 * Math.min(distance(c, crp), 5) - 2 * dist[c] + (sight(crp, c) ? 0 : 12);
 			if (sc > bs && !pocket(c, crp, cd)) { bs = sc; best = c; } }
 		if (best < 0) return null;
+		if (++crabOffers > CRABMAX) return null;   // (K8: 1,654 of these on one floor, a floor timeout: past this, plan A as it is)
 		return new Target(best, GO, "the crab: not into a dead end");
 	}
 
@@ -327,6 +329,21 @@ final class AsBasics {
 		return null;
 	}
 
+	/** The Great Crab beside the hero with no step away (a dead end: the brief's seed 1048, 300+ blows all parried).
+	 *  It parries the hero's blows, shots and wands' damage while it sees him (GreatCrab.defenseSkill / damage), but
+	 *  not what else they do, nor what isn't a blow: a wand's knockback (Blast Wave) or gas (Corrosion), a ward's or a
+	 *  living earth's blows (it parries only its own target), a Blindweed under it (blind, it sees no blow coming), a
+	 *  Sorrowmoss (poison), a bomb (from beside it, the blast is the hero's too: only with health to spare). */
+	static Target crabCornered(Mob crab) {
+		Hero h = Dungeon.hero;
+		for (Class<?> c : new Class<?>[]{ WandOfBlastWave.class, WandOfCorrosion.class, WandOfWarding.class, WandOfLivingEarth.class, WandOfFrost.class })
+			for (Item i : h.belongings.backpack) if (c.isInstance(i) && ((Wand) i).curCharges > 0 && !i.cursed) return use(i, Wand.AC_ZAP, crab.pos, "the crab, cornered: " + c.getSimpleName().replace("WandOf", ""));
+		for (Class<?> c : new Class<?>[]{ com.shatteredpixel.shatteredpixeldungeon.plants.Blindweed.Seed.class, com.shatteredpixel.shatteredpixeldungeon.plants.Sorrowmoss.Seed.class })
+			for (Item i : h.belongings.backpack) if (c.isInstance(i)) return use(i, Item.AC_THROW, crab.pos, "the crab, cornered: a seed under it");
+		if (h.HP * 2 > h.HT) for (Item i : h.belongings.backpack) if (i.getClass() == com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb.class) return use(i, "LIGHTTHROW", crab.pos, "the crab, cornered: a bomb");
+		return null;
+	}
+
 	/** A cell within 4 steps out of the sight of src, no other foe beside it, nearest first. */
 	static int hideFrom(int src, Mob not) {
 		int hp = Dungeon.hero.pos, best = -1, bd = INF;
@@ -382,6 +399,9 @@ final class AsBasics {
 		if (h.rooted) return null;
 		Mob sh = casterNear(); if (sh == null) return null;
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return null;   // (one beside him: that fight first)
+		// a boss floor with the boss in sight: the boss's own tactics (AsBosses) lead, the corner yields (M2: at the Dwarf
+		// King, "off the immune king" and "to a corner" took turns every turn, no blow struck, till he died)
+		if (Dungeon.bossLevel()) for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) return null;
 		if (cornerL != L) { cornerL = L; cornerFailed.clear(); }
 		int[] ds = crabDist(sh.pos);
 		List<Mob> others = new ArrayList<>(); List<int[]> ods = new ArrayList<>();
@@ -460,7 +480,9 @@ final class AsBasics {
 		if (fishSeenL != L) { fishSeenL = L; fishSeen.clear(); fishSeenAt = -99; }
 		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { if (!fishSeen.contains(m)) fishSeen.add(m); fishSeenAt = Actor.now(); }
 	}
+	static final Map<Integer, Integer> wfTries = new HashMap<>(); static Level wfL; static final int WFTRIES = optInt("BWFTRIES", 60);
 	static Target waterFood(Target planA) {
+		if (wfL != L) { wfL = L; wfTries.clear(); }
 		if (!WATERFOOD || planA == null || seenFoe || inDanger || Dungeon.hero.rooted || !(shortOfFood() || Assist.hungry())) return null;
 		if (planA.kind == PICKUP && planA.why.startsWith("hungry")) return null;
 		for (Mob m : fishSeen) if (m.isAlive()) return null;
@@ -468,10 +490,11 @@ final class AsBasics {
 		Hero h = Dungeon.hero; int best = -1, bd = INF;
 		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hp : L.heaps.valueList()) {
 			if (!Assist.sees(hp) || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
-			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null) continue;
+			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null || wfTries.getOrDefault(c, 0) > WFTRIES) continue;
 			int d = waterWalk(c); if (d < bd) { bd = d; best = c; }
 		}
 		if (best < 0 || bd > 30) return null;
+		wfTries.merge(best, 1, Integer::sum);   // (offered over and over and never had: given up. K8, 1,854 offers in the Blacksmith's mine, starving)
 		return new Target(best, best == h.pos ? PICKUP : GO, "short of food: the food in the water");
 	}
 	/** Steps to c over known passable cells, water too (the plan's own walk keeps out of it). */
@@ -514,14 +537,8 @@ final class AsBasics {
 		// gas or fire remembered where it was last seen, behind a door shut since: it never clears, and the only way on
 		// stays shut for good (K6-b1: 800 searches in a shop, the corridor's toxic gas remembered). Gone by now.
 		if (hazAge()) return null;
-		// an ally (the Dried Rose's ghost, a summon) standing in the only way on: the plan walls it off like any
-		// character, but the hero swaps places with an ally he walks into (Char.interact): K6, a ghost in a corridor
-		// kept a hero searching one spot 300 times
-		for (Mob m : mobs()) if (m.isAlive() && m.alignment == Char.Alignment.ALLY && L.heroFOV[m.pos] && dist[m.pos] >= INF && !Char.hasProp(m, Char.Property.IMMOVABLE)) {
-			if (adjacent(m.pos, hp)) return new Target(m.pos, GO, "stuck: swap places with the ally in the way");
-			int b = -1, bd = INF; for (int k : PathFinder.NEIGHBOURS8) { int n = m.pos + k; if (n >= 0 && n < L.length() && dist[n] > 0 && dist[n] < bd && open[n]) { bd = dist[n]; b = n; } }
-			if (b >= 0) return new Target(b, GO, "stuck: to the ally in the way");
-		}
+		// (an ally in the only way on: the plan walks through it now, swapping places: Assist.swappable / swapStep, K8.
+		// K6's swap here fired for any ally in view, and the Rogue's clone, swapped for free, was swapped with for ever)
 		if (Dungeon.branch != 0) {
 			for (com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr : L.transitions) if (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_ENTRANCE && known[tr.cell()])
 				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;
@@ -651,13 +668,131 @@ final class AsBasics {
 		if (!FOOD || planA == null || !shortOfFood() || Dungeon.bossLevel()) return null;
 		String w = planA.why;
 		if (!(w.startsWith("look") || w.equals("grass") || w.startsWith("search") || w.startsWith("dead end"))) return null;
-		int st = L.exit();
+		boolean amulet = Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null;
+		int st = amulet ? L.entrance() : L.exit();   // (with the Amulet the way on is up: K8, "on down" from 24 and "up" from 25 for 4,000 decisions)
 		if (st < 0 || st >= L.length() || !known[st] || walk(st) >= INF || L.map[st] == Terrain.LOCKED_EXIT) return null;
 		if (w.startsWith("look") && !w.contains("grass") && FLOORFOOD && !foodHere) return null;   // (the floor's food not found yet: it is somewhere unexplored)
 		if (w.startsWith("look") && !w.contains("grass")) {   // (a room left unexplored may hold food: only a far one is given up)
 			int near = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < near && unseenBy(c)) near = dist[c];
 			if (near <= 12) return null;
+			// a barricade just burnt: the storage room behind it (food among its 3-4 prizes, often) is not given up (K8)
+			if (AsItems.barL == L && AsItems.barAim >= 0) for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && distance(c, AsItems.barAim) <= 4 && unseenBy(c)) return null;
 		}
-		return new Target(st, st == Dungeon.hero.pos ? PICKUP : GO, "short of food: on down");
+		return new Target(st, st == Dungeon.hero.pos ? PICKUP : GO, amulet ? "short of food: on up" : "short of food: on down");
+	}
+
+	// =============================================================================================================
+	// the pit jump (WeakFloorRoom over PitRoom): a room of chasm with a well seen at its bottom ("a distant well"); a
+	// fall through that room lands in the pit room below (Chasm: fallIntoPit), whose remains hold a ring, artifact or
+	// gear, a potion or two, food, and the crystal key of its own door: shut from outside, the only way in is down.
+	// With the floor done, the way down is that jump, not the stairs (the fall costs half the health: from near full).
+	// =============================================================================================================
+	static final boolean PITJUMP = opt("BPITJUMP", true);
+	static final int PITHP = optInt("BPITHP", 85);
+	static Target pitJump(Target planA) {
+		if (!PITJUMP || planA == null || !"stairs".equals(planA.why) || Dungeon.bossLevel() || Dungeon.depth >= 24 || seenFoe || inDanger) return null;
+		Hero h = Dungeon.hero;
+		if (h.rooted || h.HP * 100 < h.HT * PITHP || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Levitation.class) != null || bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return null;
+		if (Dungeon.bossLevel(Dungeon.depth + 1)) return null;   // (below is a boss: no pit room there)
+		int well = -1;
+		if (L.customTiles != null) for (Object t : L.customTiles) if (t instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.WeakFloorRoom.HiddenWell) {
+			com.shatteredpixel.shatteredpixeldungeon.tiles.CustomTilemap ct = (com.shatteredpixel.shatteredpixeldungeon.tiles.CustomTilemap) t;
+			int c = ct.tileX + ct.tileY * L.width(); if (c >= 0 && c < L.length() && L.visited[c]) well = c; }   // (the well drawn at the bottom: seen)
+		if (well < 0) return null;
+		// the room's chasm: the pit cells joined to the well's
+		boolean[] in = new boolean[L.length()]; int[] q = new int[L.length()]; int qh = 0, qt = 0; in[well] = true; q[qt++] = well;
+		while (qh < qt) { int c = q[qh++]; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && !in[n] && L.pit[n] && !L.solid[n] && distance(n, c) == 1) { in[n] = true; q[qt++] = n; } } }
+		int best = -1, bd = INF;
+		for (int c = 0; c < L.length(); c++) if (in[c] && known[c] && Actor.findChar(c) == null && walk(c) < bd) { bd = walk(c); best = c; }
+		if (best < 0 || bd >= INF) return null;
+		return new Target(best, GO, "pit jump: down through the weak floor, into the room below");
+	}
+
+	// =============================================================================================================
+	// a room the floor hides (OG's evidence_hidden): the level makes every ordinary floor a food item, put in one of
+	// its standard rooms (Level.create: addItemToSpawn(FOOD); RegularLevel.randomDropCell), and an iron key for every
+	// locked door it paints; the "secrets" feeling says a secret room is there. The floor done (plan A the stairs),
+	// with no food seen on it, a locked door and no key, or that feeling: the walls with the unknown behind them are
+	// searched (an intentional search always finds what is within reach: Hero.search), the most promising first, to a
+	// budget, before going on.
+	// =============================================================================================================
+	static final boolean HIDDEN = opt("BHIDDEN", true);
+	static final int HIDSRCH = optInt("BHIDSRCH", 24), HIDTURNS = optInt("BHIDTURNS", 160);
+	static Level hidL; static int hidN, hidDepth = -1; static float hidT0 = -1, hidLast = -1; static boolean hidFood, hidKey; static Object hidHero;
+	static final Set<Integer> hidDone = new HashSet<>(), hidSeen = new HashSet<>();   // (floors whose hunt is over, or left: a floor gone back up to isn't hunted again)
+	static void hidNote() {
+		if (hidHero != Dungeon.hero) { hidHero = Dungeon.hero; hidDone.clear(); hidSeen.clear(); hidDepth = -1; }
+		if (hidL != L) { if (hidDepth >= 0) hidDone.add(hidDepth); if (!hidSeen.add(Dungeon.depth * 100 + Dungeon.branch)) hidDone.add(Dungeon.depth); hidL = L; hidDepth = Dungeon.depth; hidN = 0; hidT0 = -1; hidLast = -1; hidFood = false; hidKey = false; }
+		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hh : L.heaps.valueList()) if (Assist.sees(hh) && hh.type == com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP && !hh.isEmpty()) {
+			Item top = hh.peek();
+			if (top instanceof Food && !(top instanceof Blandfruit)) hidFood = true;
+			if (top instanceof com.shatteredpixel.shatteredpixeldungeon.items.keys.IronKey) hidKey = true;
+		}
+		if (foodHere) hidFood = true;
+		if (com.shatteredpixel.shatteredpixeldungeon.journal.Notes.keyCount(new com.shatteredpixel.shatteredpixeldungeon.items.keys.IronKey(Dungeon.depth)) > 0) hidKey = true;
+	}
+	/** What says a room is hidden, or null. */
+	static String hidEvidence() {
+		if (!hidFood) return "hidden room: the floor's food not seen";
+		if (!hidKey) for (int c = 0; c < L.length(); c++) if (known[c] && L.map[c] == Terrain.LOCKED_DOOR) return "hidden room: a locked door, its key not seen";
+		if (L.feeling == Level.Feeling.SECRETS) return "hidden room: the floor's secret";
+		return null;
+	}
+	static Target hiddenRoom(Target planA) {
+		if (!HIDDEN || planA == null || !"stairs".equals(planA.why) || Dungeon.bossLevel() || Dungeon.depth <= 1 || Dungeon.branch != 0 || seenFoe || inDanger) return null;
+		Hero h = Dungeon.hero;
+		if (h.HP * 2 < h.HT || bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return null;
+		hidNote();
+		if (hidDone.contains(Dungeon.depth)) return null;
+		String ev = hidEvidence(); if (ev == null) return null;
+		float now = Actor.now();
+		if (hidT0 < 0) hidT0 = now;
+		if (hidN >= HIDSRCH || now - hidT0 > HIDTURNS) return null;
+		boolean foodHunt = ev.contains("food");
+		if (starving() && !(foodHunt && !hasFood())) return null;   // (starving with food in the pack: on down; with none, the floor's food is the hunt)
+		if (!foodHunt && shortOfFood()) return null;
+		// the best spot: unsearched walls with the unknown behind (Assist.wallWorth), for the walk there
+		int best = -1; long bk = 0;
+		for (int c = 0; c < L.length(); c++) {
+			if (dist[c] >= INF || !open[c] || c == L.entrance() || c == L.exit() || (c != h.pos && seenChar(c) != null) || bad.containsKey(c)) continue;
+			int g = 0; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && distance(n, c) == 1) g += wallWorth(n); }
+			if (g <= 0) continue;
+			long sc = (long) g * 1024 / (dist[c] + 3);
+			if (sc > bk) { bk = sc; best = c; }
+		}
+		if (best < 0) { hidN = HIDSRCH; return null; }   // (no wall left with the unknown behind it)
+		if (best == h.pos) { if (now != hidLast) { hidN++; hidLast = now; } Target t = new Target(h.pos, WAIT, ev + ": search"); t.action = SEARCH_ACT; return t; }
+		return new Target(best, GO, ev + ": to search");
+	}
+
+	// =============================================================================================================
+	// kiting (OG's "hit and step back"): a lone foe that walks slower than the hero (crippled, slowed, chilled, or
+	// the hero hasted: Char.speed, as its status shows) and fights hand to hand. Beside it, a step back to a cell it
+	// isn't beside: it spends more than the hero's turn catching up, and the shots (bow, staff, thrown: the hands'
+	// own "shoot" / "zap" / "throw") land while it comes.
+	// =============================================================================================================
+	static final boolean KITE = opt("BKITE", true);
+	static final int KITEN = optInt("BKITEN", 12);   // steps back from one foe at most
+	static int kiteId = -1, kiteN; static Level kiteL;
+	static Target kite(Target planA) {
+		if (!KITE || planA == null || planA.kind != ENEMY || inDanger) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.rooted || h.paralysed > 0) return null;
+		Mob foe = null; int n = 0;
+		for (Mob m : mobs()) if (hostile(m) && (hunting(m) || adjacent(m.pos, hp))) { n++; foe = m; }
+		if (n != 1 || !adjacent(foe.pos, hp) || ranged(foe) || boss(foe) || Char.hasProp(foe, Char.Property.IMMOVABLE) || foe instanceof Piranha || foe instanceof GreatCrab) return null;
+		if (foe.speed() > h.speed() * 0.67f) return null;
+		if (kiteL != L || kiteId != foe.id()) { kiteL = L; kiteId = foe.id(); kiteN = 0; }
+		if (kiteN >= KITEN) return null;
+		if (!rangedToHand()) return null;   // (hand to hand only, a step back buys little: the shots are the gain)
+		int best = -1, bs = -INF;
+		for (int k : PathFinder.NEIGHBOURS8) { int c = hp + k;
+			if (c < 0 || c >= L.length() || distance(c, hp) != 1 || !open[c] || seenChar(c) != null || danger[c] || adjacent(c, foe.pos) || (water(c) && Assist.fishSeen)) continue;
+			int sc = distance(c, foe.pos) * 4;
+			for (int k2 : PathFinder.NEIGHBOURS8) { int m2 = c + k2; if (m2 >= 0 && m2 < L.length() && open[m2] && distance(m2, c) == 1) sc++; }   // (room to go on stepping back)
+			if (sc > bs) { bs = sc; best = c; } }
+		if (best < 0) return null;
+		kiteN++;
+		return new Target(best, GO, "kite: a step back from the slower " + foe.getClass().getSimpleName());
 	}
 }

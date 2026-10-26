@@ -32,12 +32,14 @@ public final class FoeView {
 		f.dist = h == null ? 1 : Math.max(1, com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.distance(m.pos, h.pos));
 		f.asleep = m.state == m.SLEEPING;
 		f.ranged = shooter(m);
+		if (Tune.KINDS && h != null && f.ranged && f.dist > 1) f.dist = Math.max(f.dist, walk(h.pos, m.pos, f.dist + 8));   // (M2: the hero's walk to a shooter, round what he has seen of the walls: every step a bolt)
 		if (m instanceof Goo) {   // (Goo.attackSkill / damageRoll: enraged below half health, pumped up x3)
 			boolean low = m.HP * 2 <= m.HT; if (low) { f.acc = 15; f.eva = (int) (m.defenseSkill * 1.5); } Object pu = HeroView.field(m, "pumpedUp"); boolean pumped = pu instanceof Integer && (Integer) pu > 0;
 			int max = low ? 12 : 8;
-			f.dmg = pumped ? Dist.normal(3, 3 * max) : Dist.normal(1, max);
+			f.dmg = pumped && !Tune.KINDS ? Dist.normal(3, 3 * max) : Dist.normal(1, max);
 			f.dr = Dist.normal(0, 2);
-			if (!low && !pumped) { f.lowAt = m.HT / 2; f.lowAcc = 15; f.lowEva = (int) (m.defenseSkill * 1.5); f.lowDmg = Dist.normal(1, 12); }
+			if (!low && (!pumped || Tune.KINDS)) { f.lowAt = m.HT / 2; f.lowAcc = 15; f.lowEva = (int) (m.defenseSkill * 1.5); f.lowDmg = Dist.normal(1, 12); }
+			if (Tune.KINDS) { f.pump = 0.2; f.pumpNow = pumped; f.hitDirect = 1.2 * Tune.FOEFX; }   // (M2: Goo.doAttack pumps up 1 turn in 5 (2 when low): the Assist's tactic steps out of reach and lets it waste the blast; its ooze, a third of its blows, ~1 a turn till washed)
 		} else {
 			int[] v = new int[SAMPLES];
 			Random.pushGenerator(0x5eed + m.getClass().getName().hashCode());
@@ -54,11 +56,43 @@ public final class FoeView {
 		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;
 		if (Tune.FOES) effects(f, f.name);
 		if (Tune.FOES && m instanceof Ghoul) for (Mob o : com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.mobs)   // (MT: a ghoul gets up again while its pair is near: Ghoul.die)
-			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }
+			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = Tune.KINDS ? Math.max(1, Math.round(f.ht / 10f)) : (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }   // (M2: it gets up with a tenth of its health, Ghoul.GhoulLifeLink, 5 turns on: M2-a had ghoul fights at P(death) >= 0.5 won 9 times in 12)
 		if (Tune.FOES && m instanceof GnollTrickster) f.dmg = f.dmg.shift(4);   // (MT: each dart that lands poisons, more each time: GnollTrickster.attackProc, ~4 a hit early on)
 		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
-		if (m instanceof Brute && rage(m)) { f.rageHp = 0; }   // (already raging: its shield is in shielding())
+		if (m instanceof Brute && rage(m)) { f.rageHp = 0; f.ragingNow = Tune.KINDS; }   // (already raging: its shield is in shielding())
+		if (Tune.KINDS) kinds(f, m);
+		ascension(f, m);
 		return f;
+	}
+
+	/** (M2) The Amulet's curse on the way up (AscensionChallenge.statModifier: the buff is shown, its table is the
+	 *  source): the foe's damage, armour, accuracy and evasion times its kind's factor (Char.attack / hit; its health is
+	 *  already the cursed one): a shaman 2.25, a brute 2.25, a warlock 1.5, a rat 10. */
+	static void ascension(Fighter f, Mob m) {
+		double k = 1;
+		try { k = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.statModifier(m); } catch (Throwable e) { }
+		if (k == 1 || !Tune.ASCEND) return;
+		f.dmg = f.dmg.scale(k); f.dr = f.dr.scale(k); f.acc *= k; f.eva *= k;
+		if (f.zapDmg != null) f.zapDmg = f.zapDmg.scale(k);
+		if (f.burstDmg != null) f.burstDmg = f.burstDmg.scale(k);
+		if (f.rageDmg != null) f.rageDmg = f.rageDmg.scale(k);
+		if (f.lowDmg != null) { f.lowDmg = f.lowDmg.scale(k); f.lowAcc *= k; f.lowEva *= k; }
+		if (f.deathDmg != null) f.deathDmg = f.deathDmg.scale(k);
+		f.hitDirect *= k;
+	}
+
+	/** (M2) The kinds' behaviour that changes a fight's course (their source; sized against the game in the Arena):
+	 *  AS_OKINDS=0 for the old sums. */
+	static void kinds(Fighter f, Mob m) {
+		if (m instanceof Brute) f.rageDecay = 4;   // (BruteRage.act: the shield loses 4 a turn, it dies when it's gone)
+		if (m instanceof Elemental) f.ranged = false;   // (it walks up and strikes; its bolt (a fire, a frost) only every 3-5 turns)
+		if (Char.hasProp(m, Char.Property.IMMOVABLE)) { f.immobile = true; f.ranged = false; }   // (DM-201: stays put)
+		if (m instanceof Eye) {   // (Eye.doAttack: a charge of 2 turns, the beam, 4-6 turns' cooldown (blows beside it only): beam to beam 7)
+			f.ranged = false; f.burstEvery = 7; f.burstCharge = 2; f.burstReady = m.HP > 0 && Boolean.TRUE.equals(HeroView.field(m, "beamCharged"));
+		}
+		if (m instanceof Monk) f.reach = 0.75;   // (Monk.defenseSkill: focused, it parries a blow, focus back in 6-7 turns of its time (moving, sooner): the arena's monks lasted 1.4 times the old sums)
+		if (m instanceof Scorpio) f.reach = 0.7;   // (Scorpio.getCloser: beside the hero it backs off: struck less often. In an open room it shot half as often too, but in the games' corridors it shot as often as ever (M2-a: 9.9 health in 5 turns against the model's 4.3 with half the shots): its shots as they are)
+		if (m instanceof Spinner) { f.fleeHit = 0.5; f.fleeT = 7; f.hitDirect = 5 * Tune.FOEFX; }   // (Spinner.attackProc: half its bites poison for 7-8 (15 in all, Poison.act) and it flees till the poison is done)
 	}
 
 	/** The kinds' quirks that change a fight's sums (from their source). */
@@ -80,12 +114,31 @@ public final class FoeView {
 	static void effects(Fighter f, String n) {
 		double k = Tune.FOEFX;
 		switch (n) {
-			case "Eye": f.burstDmg = Dist.normal(30, 50); f.burstEvery = 6; f.zapDmg = null; break;   // (Eye.doAttack: charge, beam, 4-6 turns' cooldown, beside the hero too)
+			case "Eye": f.burstDmg = Dist.normal(30, 50); f.burstEvery = Tune.KINDS ? f.burstEvery : 6; f.zapDmg = null; break;   // (Eye.doAttack: charge, beam, 4-6 turns' cooldown, beside the hero too)
 			case "FireElemental": f.hitDirect = 6 * k; break;   // (Elemental.meleeProc: sets it burning)
-			case "Spinner": f.hitDirect = 5 * k; break;         // (half its bites poison for 7-8)
+			case "Spinner": if (!Tune.KINDS) f.hitDirect = 5 * k; break;         // (half its bites poison for 7-8: M2's kinds() with its fleeing)
 			case "RipperDemon": f.hitDirect = 2 * k; break;     // (it leaps in for more)
 			case "Succubus": f.hitDirect = 1 * k; f.leech = 1; break;   // (charm: a blow lost, its health back)
 		}
+	}
+
+	/** (M2) Steps from a to b over the passable cells the hero has seen (b itself counted whatever it is), at most
+	 *  limit (more: limit); its own search, PathFinder's shared arrays untouched (the game reads them). */
+	static int walk(int a, int b, int limit) {
+		com.shatteredpixel.shatteredpixeldungeon.levels.Level L = com.shatteredpixel.shatteredpixeldungeon.Dungeon.level;
+		int len = L.length(), w = L.width(); if (a == b) return 0;
+		int[] d = new int[len]; java.util.Arrays.fill(d, -1); int[] q = new int[len]; int qh = 0, qt = 0;
+		d[a] = 0; q[qt++] = a;
+		while (qh < qt) {
+			int c = q[qh++]; if (d[c] >= limit) break;
+			for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) {
+				int n = c + k; if (n < 0 || n >= len || d[n] >= 0 || Math.abs(n % w - c % w) > 1) continue;
+				if (n == b) return d[c] + 1;
+				if (!L.passable[n] || !(L.visited[n] || L.mapped[n] || L.heroFOV[n])) continue;
+				d[n] = d[c] + 1; q[qt++] = n;
+			}
+		}
+		return limit;
 	}
 
 	static boolean rage(Mob m) { for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("BruteRage")) return true; return false; }
