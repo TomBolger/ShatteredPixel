@@ -673,7 +673,7 @@ public class Controls {
 		planDue = false;
 		try {
 			Hero h = Dungeon.hero;
-			if (Game.scene() instanceof GameScene && h != null && h.isAlive() && h.ready && Ui.topWindow() == null && !onToolbar && !touching) refreshTargets(aiming());
+			if (Game.scene() instanceof GameScene && h != null && h.isAlive() && h.ready && Ui.topWindow() == null && !onToolbar) refreshTargets(aiming());
 		} catch (Throwable t) { System.out.println("pebxel: idle list " + t); }
 	}
 	private void makeTargets(boolean aiming) {
