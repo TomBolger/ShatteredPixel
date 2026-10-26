@@ -33,6 +33,7 @@ import java.util.*;
 public class AssistBot {
 	static WatchApp app;
 	static boolean v;
+	static final int SLOWLOG = Integer.parseInt(System.getenv().getOrDefault("SLOWLOG", "0"));   // (MT: plans slower than this many ms printed)
 	static final boolean WATCH = "1".equals(System.getenv("WATCH"));
 	static WatchDriver watch;
 	/** FAST (default unless WATCH; FAST=0 for the old way): frames of FRAMEDT (default 0.2 s, the most Shattered itself
@@ -300,6 +301,7 @@ public class AssistBot {
 			// is asked without leaving a trace in the Assistant's state: AssistSandbox)
 			List<Assist.Target> plan = watch != null && Controls.legacy == null ? AssistSandbox.run(() -> Assist.plan(false, box)) : Assist.plan(false, box);
 			long dn = System.nanoTime() - n0; planNs += dn; plans++; maxPlanNs = Math.max(maxPlanNs, dn);
+			if (SLOWLOG > 0 && dn > SLOWLOG * 1000000L) System.out.printf("SLOWPLAN %.1f ms depth %d hp %d/%d: %s%n", dn / 1e6, Dungeon.depth, Dungeon.hero.HP, Dungeon.hero.HT, plan.isEmpty() ? "-" : plan.get(0).why);
 			if (Assist.lastError != null) { System.out.println("  ASSIST ERROR " + Assist.lastError); Assist.lastError.printStackTrace(System.out); Assist.lastError = null; }
 			decisions++;
 			for (int k = 0; k < PERTURB; k++) System.identityHashCode(new Object());   // (tests: the game must not care)
@@ -333,7 +335,7 @@ public class AssistBot {
 			}
 			lastPos = Dungeon.hero.pos; lastKey = key;
 			if (DeterminismTest.trace != null) DeterminismTest.trace.add(Math.round(Statistics.duration) + "/" + Actor.now() + " d" + Dungeon.depth + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + " " + key + " r" + rngState() + " " + actorState());   // (DeterminismTest)
-			BotStats.decision(t); FightCal.decision();
+			BotStats.decision(t); FightCal.decision(); BotItems.decided(t);
 			whys.merge(t.why, 1, Integer::sum);
 			if (v && System.getenv("VMOBS") != null) { StringBuilder sb = new StringBuilder("    mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.HP); sb.append(" f").append(Lockstep.frames); System.out.println(sb); }
 			String line = "  t" + Math.round(Statistics.duration) + "/" + Math.round(Actor.now()) + " pos " + Dungeon.hero.pos + " hp " + Dungeon.hero.HP + "/" + Dungeon.hero.HT + ": " + t + (plan.size() > 1 ? "   | B: " + plan.get(1) : "");   // (not String.format: 4% of a game)
@@ -379,6 +381,7 @@ public class AssistBot {
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);
 		System.out.println(BotStats.line());
+		System.out.println(BotItems.artLine());
 		if (Sense.ON) System.out.println(Sense.line());
 		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
