@@ -70,6 +70,7 @@ final class Brain {
 	static List<Mob> foes = new ArrayList<>(); static Fighter me; static List<Fighter> fs = new ArrayList<>();
 	static double R; static long seed; static Look.Out base; static boolean fight;
 	static String lastWhy = "";
+	static Role lastRole; static float lastAt = -99;   // the brain's last change of plan A (Rules: keep going)
 
 	// ---- stats (per game: AssistBot prints them) ----
 	static int decisions, fights, overrides, vetoes, slow; static long nanos, maxNanos;
@@ -171,15 +172,17 @@ final class Brain {
 		}
 		Cand pick = best != null && (vb - va > MARGIN || a.veto) ? best : null;
 		if (DBG && (fight || pick != null)) dump(cs, pick);
-		if (pick == null) return;
+		if (pick == null) { tally(a.t); return; }
 		String key = pick.role + "<" + a.role + (a.veto ? " veto" : "");
 		lastWhy = key + String.format(" %+.2f/%+.2f", vb, va);
 		overBy.merge(key, 1, Integer::sum); overrides++;
-		if (!ON) return;
+		if (!ON) { tally(a.t); return; }
 		if (!out.contains(pick.t)) { if (out.size() >= Assist.CAP) out.remove(out.size() - 1); out.add(0, pick.t); }
 		else { out.remove(pick.t); out.add(0, pick.t); }
 		if (a.veto && out.size() > 1) { out.remove(a.t); out.add(a.t); }   // (vetoed: last, still there for a Down)
-		pick.t.why = pick.t.why + " [brain " + String.format("%+.2f", vb - Math.max(va, -99)) + "]";
+		if (pick.role != Role.CARRY) pick.t.why = pick.t.why + " [brain " + String.format("%+.2f", vb - Math.max(va, -99)) + "]";
+		lastRole = pick.role; lastAt = Actor.now();
+		tally(out.get(0));
 	}
 
 	/** The fight in sight, as the fight model sees it (Assist.oFight's choice of foes). */
@@ -237,14 +240,14 @@ final class Brain {
 			case ESCAPE: {
 				int k = 0; for (Item i : h.belongings.backpack) if (i.getClass() == c.t.item.getClass()) k += i.quantity();
 				Look.Out o = Look.run(me, fs, new Look.Plan().lose(1).flee(0), seed);
-				c.v = gone(o, LATER * whole(), Budget.rescue(h, Math.max(1, k), ESCEFF)) - fightV(base, n, vh, vh2);
+				c.v = gone(o, LATER * whole(n, vh, vh2), Budget.rescue(h, Math.max(1, k), ESCEFF)) - fightV(base, n, vh, vh2);
 				c.note = "escape " + o;
 				return;
 			}
 			case UP: case DOWN: {
 				int w = Math.max(0, Assist.walk(c.t.obj >= 0 ? c.t.obj : c.t.cell));
 				Look.Out o = Look.run(me, fs, new Look.Plan().flee(w), seed);
-				double later = c.role == Role.UP ? LATER * whole() : arrive(o);
+				double later = c.role == Role.UP ? LATER * whole(n, vh, vh2) : -arrive(o) * R;
 				c.v = gone(o, later, 0) - fightV(base, n, vh, vh2) - (c.role == Role.UP ? 0.02 : Assist.floorLeft() ? 0.2 : 0.05);
 				c.note = (c.role == Role.UP ? "up " : "down ") + w + " " + o;
 				return;
@@ -267,14 +270,15 @@ final class Brain {
 		double u = o.healsUsed, spent = u <= 1 ? u * vh : vh + (u - 1) * vh2;
 		return -o.pDeath * R - spent + HPW * o.hpLeft / Math.max(1, me.ht);
 	}
-	/** Gone from the fight (after o's walk): later, the chance of dying when it's met again; spent: the item used. */
-	static double gone(Look.Out o, double later, double spent) { return -(o.pDeath + (1 - o.pDeath) * later) * R - spent + HPW * (1 - o.pDeath); }
-	/** The fight met again later with full health (rested), on the same numbers. */
-	static double whole() {
+	/** Gone from the fight (after o's walk): later, the value of what comes after (the fight met again, a new floor
+	 *  hurt); spent: the item used. */
+	static double gone(Look.Out o, double later, double spent) { return -o.pDeath * R + (1 - o.pDeath) * later - spent + HPW * (1 - o.pDeath); }
+	/** The fight met again later with full health (rested), on the same numbers, its Healing counted as any fight's. */
+	static double whole(int n, double vh, double vh2) {
 		Fighter f = me.copy(); f.hp = f.ht; f.shield = 0;
 		List<Fighter> l = new ArrayList<>(); for (Fighter x : fs) { Fighter y = x.copy(); y.dist = Math.max(y.dist, 4); y.asleep = false; l.add(y); }
 		Look.Out o = Look.run(f, l, new Look.Plan(), seed ^ 0x77);
-		return o.pDeath;
+		return fightV(o, n, vh, vh2) - HPW;   // (the rest it took, a full bar's worth)
 	}
 	/** Down the stairs hurt: the next floor's danger, worse the less health there is to meet it with. */
 	static double arrive(Look.Out o) {
@@ -297,11 +301,15 @@ final class Brain {
 		for (Cand c : cs) if (c.valued() || c.veto) System.out.println("    " + c + "  " + c.note);
 	}
 
+	/** Plan A's kind, counted (the bot acts on every plan A: equips, drinks, escapes, rests made). */
+	static void tally(Target t) { Role r = role(t); if (r != Role.CARRY && r != Role.OTHER) planAs.merge(r.name().toLowerCase(), 1, Integer::sum); }
+	static final Map<String, Integer> planAs = new TreeMap<>();
+
 	/** The game's tally (AssistBot prints it with the result). */
 	static String stats() {
-		String s = String.format("decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s}", decisions, fights, overrides,
-				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired());
-		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); Rules.reset();
+		String s = String.format("decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", decisions, fights, overrides,
+				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
+		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset();
 		return s;
 	}
 }

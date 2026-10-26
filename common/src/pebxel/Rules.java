@@ -55,6 +55,10 @@ final class Rules {
 		veto("gear: swap back", c -> c.role == Role.EQUIP && swappedBack(c.t.item)),
 		// a swap in a fight costs a turn of free blows: only when the lookahead says the new piece wins it (Brain.value)
 		veto("gear: blind swap in a fight", c -> c.role == Role.EQUIP && Brain.fight && !(c.valued() && c.v > Brain.MARGIN)),
+		// -- the brain's own steadiness ------------------------------------------------------------------------------
+		// a walk to the stairs, chosen last turn over the fight, kept on: re-weighed from scratch each step it went back
+		// and forth (a step nearer, the foe a step nearer too)
+		boost("keep going: the stairs", c -> (c.role == Role.UP || c.role == Role.DOWN) && c.role == Brain.lastRole && Actor.now() - Brain.lastAt <= 2, Brain.MARGIN),
 		// -- the boss ahead: arrive whole, with the scrolls read ---------------------------------------------------
 		// (strategy-reference 4.x: every boss guide starts "full health, upgrades in"; Thomas: "boss preparation")
 		propose("boss next: rest first", c -> stairsDown(c) && bossNext() && calm() && H().HP * 100 < H().HT * 95 && !Assist.starving()
