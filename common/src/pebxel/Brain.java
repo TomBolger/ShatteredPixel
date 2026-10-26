@@ -92,6 +92,7 @@ final class Brain {
 	 *  is not pinned (AS_BRAIN=0: counted only). */
 	static Target offer(String src, Target t) {
 		if (t == null) return null;
+		if (t.src == null) t.src = src;
 		Cand c = new Cand(t, src, role(t)); offers.add(c);
 		return screened(c) ? null : t;
 	}
@@ -101,6 +102,7 @@ final class Brain {
 	static Target hands(Target planA) {
 		Target t = Assist.hands(planA);
 		for (int k = 0; k < 3 && t != null; k++) {
+			if (t.src == null) t.src = "hands";
 			Cand c = new Cand(t, "hands", role(t)); offers.add(c);
 			if (!screened(c)) return t;
 			if (t.item == null && t.action == null) return null;

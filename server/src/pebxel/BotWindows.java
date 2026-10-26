@@ -28,11 +28,7 @@ public final class BotWindows {
 
 	static final String[] NEGATIVE = {"cancel", "no", "back", "close", "leave", "not now", "nevermind", "never mind", "return", "i'll decide later", "go to patreon", "not yet"};
 
-	static boolean negative(String s) {
-		String l = s.toLowerCase(Locale.ROOT).trim();
-		for (String n : NEGATIVE) if (l.equals(n) || l.startsWith(n + " ") || l.startsWith(n + ",")) return true;
-		return false;
-	}
+	static boolean negative(String s) { return AsWindows.negative(s); }
 
 	static boolean lastBack;
 	static Answer answer(Gizmo g, String why) { lastBack = g == null; return new Answer(g, null, why); }
@@ -65,71 +61,28 @@ public final class BotWindows {
 			if (!bs.isEmpty()) return answer(bs.get(0).g, "back did nothing: first");
 		}
 		if (sameKind > 6 || visits > 4) return answer(null, "same window again and again: back");
-		{ String want = AsArtifacts.windowAnswer(w); Gizmo b = want == null ? null : byText(bs, want); if (b != null) return answer(b, "artifact: " + want); }   // (a swap's slot, the hourglass's freeze, the chalice's yes or no: AsArtifacts)
-		// item selectors (a scroll, the alchemy, a quest asking for an item)
-		// (only a bag asks for an item: other windows keep a selector of their own for after one of their buttons,
-		// and answering it directly broke them: the Blacksmith's reforge window threw, killing the game's thread)
-		WndBag.ItemSelector sel = w instanceof WndBag || w instanceof pebxel.ui.WndWatchBag ? selector(w) : null;
-		if (sel != null) {
-			String prompt = ""; try { prompt = String.valueOf(sel.textPrompt()); } catch (Throwable e) { }
-			if (prompt.toLowerCase(Locale.ROOT).contains("sell")) {   // (the shop asks again after each sale: a few spare weapons and armour, then Back)
-				Item it = sales < 3 ? spare() : null;
-				return it != null ? new Answer(null, it, "sell a spare") : new Answer(null, null, "done selling: back");
-			}
-			if (sel == com.shatteredpixel.shatteredpixeldungeon.windows.WndEnergizeItem.selector) {   // (the pot's "+": AsAlchemy's junk, else back; never the first selectable, the worn weapon)
-				Item e = Cheat.ON ? null : AsAlchemy.energizePick();
-				return e != null ? new Answer(null, e, "energize " + BotItems.kind(e)) : new Answer(null, null, "nothing to energize: back");
-			}
-			Item ch = AsChoices.select(sel);   // (a quest's selector: AsChoices, as the Assistant would suggest)
-			if (ch != null) return new Answer(null, ch, "choice: " + AsChoices.why);
-			Item it = BotItems.answerSelector(sel);
-			return it != null ? new Answer(null, it, "select") : new Answer(null, null, "nothing to select: back");
-		}
+		// the test set-ups' own answers (the simulated player's subclass, god mode's random picks, MINES=0), then the
+		// Assistant's (AsWindows: the same answer the watch frames for Select)
 		String n = w.getClass().getName();
-		// windows that only tell something
-		if (bs.isEmpty() || kind.startsWith("WndInfo") || kind.equals("WndMessage") || kind.equals("WndStory") || kind.equals("WndTitledMessage")
-				|| kind.equals("WndJournal") || kind.equals("WndWatchHero") || kind.equals("WndHero") || kind.equals("WndWatchRecords") || kind.equals("WndKeyBindings")
-				|| kind.equals("WndWatchMenu") || kind.equals("WndGame") || kind.equals("WndSettings") || kind.equals("WndChallenges") || kind.equals("WndSupportPrompt"))
-			return new Answer(null, null, "read: back");
-		// buying in a shop: buy (the cheat has gold)
-		if (kind.equals("WndTradeItem") && byText(bs, "sell") != null && sales < 3) { sales++; return new Answer(byText(bs, "sell"), null, "sell"); }
-		if (kind.equals("WndTradeItem")) { Gizmo b = byText(bs, "buy"); return b != null ? new Answer(b, null, "buy") : new Answer(null, null, "can't buy: back"); }
-		// the quests' choices (AsChoices: the Ghost's reward, the Wandmaker's wand, the Blacksmith's favours, leaving the mine)
-		Ui.Part qc = AsChoices.choose(w, bs);
-		if (qc != null) return answer(qc.g, "choice: " + AsChoices.why);
-		Ui.Part ic = AsItems.choose(w, bs);   // (an item's own window: the Augmentation's choice, the Beacon's set / return: AsItems)
-		if (ic != null) return answer(ic.g, "item choice");
-		// the hero's subclass and armour ability, quest rewards: one of the choices (each game its own), confirmed
-		if (HumanTalents.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null && (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility"))) {   // (TALENTS=human: the simulated player's random pick)
-			com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass hc = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass;
-			String want = kind.equals("WndChooseSubclass") ? HumanTalents.subclass(hc).shortDesc() : HumanTalents.ability(hc).shortDesc();
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero hero = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero;
+		if (Cheat.ON && AsWindows.selector(w) == com.shatteredpixel.shatteredpixeldungeon.windows.WndEnergizeItem.selector) return new Answer(null, null, "nothing to energize: back");
+		if (HumanTalents.ON && hero != null && (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility"))) {   // (TALENTS=human: the simulated player's random pick)
+			String want = kind.equals("WndChooseSubclass") ? HumanTalents.subclass(hero.heroClass).shortDesc() : HumanTalents.ability(hero.heroClass).shortDesc();
 			Gizmo b = byText(bs, want.toLowerCase(Locale.ROOT));
 			if (b != null) return new Answer(b, null, "the human's pick");
 		}
-		if (kind.equals("WndChooseSubclass") && !Cheat.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null) {   // (honest games: the build's subclass)
-			Gizmo b = byText(bs, Build.subclass(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
-			if (b != null) return new Answer(b, null, "the build's subclass");
-		}
-		if (kind.equals("WndChooseAbility") && !Cheat.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null) {   // (honest games: the build's armour ability)
-			Gizmo b = byText(bs, Build.ability(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
-			if (b != null) return new Answer(b, null, "the build's armour ability");
-		}
-		if (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility") || n.contains("WndSadGhost") || n.contains("WndWandmaker") || n.contains("WndImp") || n.contains("WndBlacksmith")) {
-			List<Gizmo> pos = positives(bs);
-			if (pos.isEmpty()) for (Ui.Part p : bs) if (!negative(p.text)) pos.add(p.g);   // (item pictures: no words on them)
-			if (pos.isEmpty()) return new Answer(null, null, "no choice: back");
-			if (false && !Cheat.ON && n.contains("WndSadGhost") && pos.size() == 2) {   // (now AsChoices)   // (honest games: the guide's pick, the armour unless the weapon is far better)
-				boolean wpn = ghostWeapon();
-				return new Answer(pos.get(wpn ? 0 : 1), null, wpn ? "the Ghost's weapon" : "the Ghost's armour");
-			}
-			return new Answer(pos.get(rnd.nextInt(pos.size())), null, "choose");
-		}
-		// the Blacksmith's mine: MINES=0 keeps out of it
 		if (n.contains("CavesLevel") && "0".equals(System.getenv("MINES"))) { Gizmo b = byText(bs, "not yet"); if (b != null) return new Answer(b, null, "not the mine"); }
-		// questions (WndOptions and the like): the first positive answer; asked over and over: the next one
-		List<Gizmo> pos = positives(bs);
-		if (pos.isEmpty()) return new Answer(null, null, "only no: back");
-		return new Answer(pos.get(Math.min(sameKind, pos.size() - 1)), null, "yes");
+		AsWindows.Pick p = AsWindows.decide(w);
+		if (Cheat.ON && (p.why.startsWith("the build's") || p.why.equals("choose"))) {   // (god mode: one of the choices, each game its own)
+			List<Gizmo> pos = positives(bs);
+			if (pos.isEmpty()) for (Ui.Part q : bs) if (!negative(q.text)) pos.add(q.g);
+			if (!pos.isEmpty()) return new Answer(pos.get(rnd.nextInt(pos.size())), null, "choose");
+		}
+		if (p.why.equals("yes") && sameKind > 0) {   // (asked over and over: the next one)
+			List<Gizmo> pos = positives(bs);
+			if (!pos.isEmpty()) return new Answer(pos.get(Math.min(sameKind, pos.size() - 1)), null, "yes");
+		}
+		return new Answer(p.g, p.item, p.why);
 	}
 
 	/** The Ghost's reward (both shown in its window): the weapon only if 2+ tiers above the one held and the armour no better than the one worn. */
@@ -147,15 +100,9 @@ public final class BotWindows {
 
 	/** A screen other than the dungeon's (the Amulet's: Stay, to climb back to the surface with it; ASCEND=0: Exit, the win there). */
 	public static Answer decideScene(com.watabou.noosa.Scene sc) {
-		List<Ui.Part> bs = Controls.buttons(sc);
-		String kind = sc.getClass().getSimpleName();
-		if (kind.equals("AlchemyScene")) return BotAlchemy.scene(sc);
-		if (kind.equals("AmuletScene")) {
-			Gizmo b = byText(bs, "0".equals(System.getenv("ASCEND")) ? "call it a day" : "not done");
-			if (b != null) return new Answer(b, null, "the Amulet");
-		}
-		List<Gizmo> pos = positives(bs);
-		return pos.isEmpty() ? new Answer(null, null, "back") : new Answer(pos.get(0), null, "first");
+		if (sc.getClass().getSimpleName().equals("AlchemyScene")) return BotAlchemy.scene(sc);
+		AsWindows.Pick p = AsWindows.decideScene(sc);
+		return new Answer(p.g, p.item, p.why);
 	}
 
 	static List<Gizmo> positives(List<Ui.Part> bs) {

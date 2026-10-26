@@ -74,11 +74,12 @@ public class WndWatchBag extends WatchWindow implements Navigable {
 	}
 
 	/** The frame on an item's cell (the Assistant's pick in a choosing it opened), if it is shown and can be chosen. */
-	public void focusOn(Item item) {
+	public boolean focusOn(Item item) {
 		for (int r = 0; r < rowCells.size(); r++) {
 			List<Button> cs = rowCells.get(r);
-			for (int k = 0; k < cs.size(); k++) if (cellItem.get(cs.get(k)) == item && cs.get(k).active) { row = r; col = k; rowMode = false; return; }
+			for (int k = 0; k < cs.size(); k++) if (cellItem.get(cs.get(k)) == item && cs.get(k).active) { row = r; col = k; rowMode = false; return true; }
 		}
+		return false;
 	}
 	private final java.util.IdentityHashMap<Button, Item> cellItem = new java.util.IdentityHashMap<>();
 

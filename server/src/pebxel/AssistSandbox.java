@@ -21,7 +21,7 @@ final class AssistSandbox {
 	static <T> T run(Supplier<T> s) {
 		if (fields == null) {
 			fields = new ArrayList<>();
-			for (Field f : Assist.class.getDeclaredFields()) {
+			for (Class<?> k : new Class<?>[]{Assist.class, AsIntent.class, AsObey.class}) for (Field f : k.getDeclaredFields()) {   // (DS: the player's side too: his way, his liking, what he passed over)
 				if (!Modifier.isStatic(f.getModifiers())) continue;
 				boolean fin = Modifier.isFinal(f.getModifiers());
 				Class<?> t = f.getType();
@@ -38,7 +38,7 @@ final class AssistSandbox {
 				if (v == null) continue;
 				if (v.getClass().isArray()) { int n = Array.getLength(v); Object c = Array.newInstance(v.getClass().getComponentType(), n); System.arraycopy(v, 0, c, 0, n); copy[i] = c; }
 				else if (v instanceof Collection) copy[i] = new ArrayList<>((Collection<?>) v);
-				else if (v instanceof Map) copy[i] = new LinkedHashMap<>((Map<?, ?>) v);
+				else if (v instanceof Map) { Map<Object, Object> m = new LinkedHashMap<>((Map<?, ?>) v); m.replaceAll((k, x) -> x instanceof AsIntent.Skip ? ((AsIntent.Skip) x).copy() : x); copy[i] = m; }
 			}
 		} catch (IllegalAccessException e) { throw new RuntimeException(e); }
 		try { return s.get(); }

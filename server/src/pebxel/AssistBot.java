@@ -199,6 +199,9 @@ public class AssistBot {
 		WatchSettings.assist(Integer.parseInt(System.getenv().getOrDefault("MODE", "1")));
 		WatchSettings.itemAssist(!"0".equals(System.getenv("ITEMS")));
 		Assist.reset();
+		if (watch != null) watch.human = new Random(seed * 7 + 3);
+		if (watch != null && WILFUL) watch.newWilful(seed);
+		obey = OBEY > 0 && watch == null ? new Obey() : null; obeyN = 0;
 		BotWindows.newGame(seed); BotItems.newGame(); Coverage.newGame(); BotAlchemy.newGame(); BotStats.newGame(); IdStats.newGame(); FoodStats.newGame(); FightCal.newGame(); FightX.newGame(); GearStats.newGame(); Cheat.newGame(seed); HumanTalents.newGame(seed);
 		Random talentR = new Random(seed * 13 + 5);
 
@@ -237,7 +240,8 @@ public class AssistBot {
 			if (!(Game.scene() instanceof GameScene) && Ui.topWindow() == null) {   // another screen (the Amulet's, alchemy): answered like a window
 				Coverage.scene(Game.scene());
 				if (Game.scene() != lastScene) { lastScene = Game.scene(); sceneFrames = 0; }
-				if (++sceneFrames % 30 == 2) { BotWindows.Answer an = BotWindows.decideScene(Game.scene()); System.out.println("  SCENE " + Game.scene().getClass().getSimpleName() + " -> " + an);
+				if (PLAYER && watch != null) { if (++sceneFrames % 30 == 2) watch.playerWindow(null, HUMANP); }   // (the player: Select, the frame on the Assistant's step)
+				else if (++sceneFrames % 30 == 2) { BotWindows.Answer an = BotWindows.decideScene(Game.scene()); System.out.println("  SCENE " + Game.scene().getClass().getSimpleName() + " -> " + an);
 					if (watch == null || !watch.answerScene(Game.scene(), an)) { if (an.g != null) Ui.press(an.g); else com.watabou.noosa.NoosaAccess.back(Game.scene()); } }
 				if (sceneFrames > 3000) { end = "stuck on " + Game.scene().getClass().getSimpleName(); break; }
 				fk[1]++; continue;
@@ -266,7 +270,12 @@ public class AssistBot {
 				if (w != lastWnd) { lastWnd = w; wndFrames = 0; windows++; }
 				wndFrames++;
 				// answered on its 2nd frame (laid out by then), again every 30 frames it stays; for ever: gone
-				if (wndFrames % 30 == 2) { Lockstep.doing = "window " + w.getClass().getName(); BotWindows.Answer an = BotWindows.decide(w); if (v) System.out.println("    -> " + an); if (watch == null || !watch.answer(w, an)) { if (Ui.topWindow() == w) BotWindows.doDirect(w, an); } }
+				if (PLAYER && watch != null) {   // (the player: Select, the frame on the Assistant's pick; what Select can't answer is a bug)
+					if (wndFrames % 30 == 2) { Lockstep.doing = "window " + w.getClass().getName(); watch.playerWindow(w, HUMANP); }
+					if (watch.wndNoTurn > 150) { Coverage.problem("select-only: windows round and round: " + w.getClass().getName()); System.out.println("  SELECT LOOP windows " + w.getClass().getName() + " why " + Controls.windowWhy); watch.wndNoTurn = 0; while (Ui.topWindow() != null) Ui.topWindow().hide(); continue; }
+					if (wndFrames > 400) { System.out.println("  SELECT STUCK " + w.getClass().getName() + " why " + Controls.windowWhy + " buttons " + Controls.buttons(w).size()); Coverage.problem("select-only: window stuck: " + w.getClass().getName()); w.hide(); }
+				}
+				else if (wndFrames % 30 == 2) { Lockstep.doing = "window " + w.getClass().getName(); BotWindows.Answer an = BotWindows.decide(w); if (v) System.out.println("    -> " + an); if (watch == null || !watch.answer(w, an)) { if (Ui.topWindow() == w) BotWindows.doDirect(w, an); } }
 				else if (wndFrames > 400 || BotWindows.sinceTurn > 40) { if (BotWindows.sinceTurn > 40) { Coverage.problem("windows round and round: " + w.getClass().getName()); BotWindows.sinceTurn = 0; while (Ui.topWindow() != null) Ui.topWindow().hide(); continue; } System.out.println("  WINDOW STUCK " + w.getClass().getName() + ": hidden"); Coverage.problem("window stuck: " + w.getClass().getName()); w.hide(); }
 				fk[2]++; continue;
 			}
@@ -288,9 +297,11 @@ public class AssistBot {
 				if (tr != null) { Cheat.apply(); StairsTest.jump(tr); continue; }
 			}
 			if (Cheat.SETUP && Cheat.setup()) continue;   // (head start, kits, mild cheat: a floor change started, or items given)
-			if (Cheat.ON) { Cheat.apply(); if (watch == null || !watch.talents()) { if (HumanTalents.ON) HumanTalents.spend(Dungeon.hero); else Cheat.spendTalents(talentR); } if (Ui.topWindow() != null) continue; }
+			if (PLAYER && watch != null) { watch.wndNoTurn = 0; if (Cheat.ON) Cheat.apply(); }   // (the player spends his points himself: the Assistant offers the talents, Select)
+			else if (Cheat.ON) { Cheat.apply(); if (watch == null || !watch.talents()) { if (HumanTalents.ON) HumanTalents.spend(Dungeon.hero); else Cheat.spendTalents(talentR); } if (Ui.topWindow() != null) continue; }
 			else if (HumanTalents.ON) HumanTalents.spend(Dungeon.hero);   // (TALENTS=human: a simulated player's picks)
 			else Build.spendTalents(Dungeon.hero);   // (the guide's build: a player's own choice)
+			if (Controls.aiming() && PLAYER && watch != null) { if (HUMANP) watch.humanPlayer(null); else watch.selectOnly(null); for (int k = 0; k < 20 && Controls.aiming(); k++) step(); continue; }   // (the player: Select on the aiming list's first)
 			if (Controls.aiming()) {   // (left over: aim at plan A of the aiming list, else cancel)
 				List<Assist.Target> al = Assist.plan(true, null);
 				if (!al.isEmpty() && al.get(0).kind == Assist.ENEMY) { if (watch == null || !watch.act(al.get(0))) Assist.act(al.get(0)); }
@@ -323,6 +334,10 @@ public class AssistBot {
 			if (!plan.isEmpty() && t == plan.get(0)) Sense.grade(plan);   // (a cheat helper's pick with no plan: nothing to grade)
 			if (HUMAN > 0 && plan.size() > 1 && t == plan.get(0) && ++humanN % HUMAN == 0 && (plan.get(1).kind == Assist.GO || plan.get(1).kind == Assist.PICKUP) && t.kind != Assist.ENEMY) {   // (a player who now and then takes plan B)
 				Assist.chose(plan.get(1), t); t = plan.get(1); }
+			if (obey != null && !plan.isEmpty()) {   // (OBEY=n: every n-th skill suggestion passed over, plan B taken; plan A coming back is insisting)
+				obey.look(plan.get(0));
+				if (t == plan.get(0) && plan.size() > 1 && Obey.testable(t) && ++obeyN % OBEY == 0) { obey.passed(t, plan.get(1)); Assist.chose(plan.get(1), t); t = plan.get(1); }
+			}
 			String key = t.kind + ":" + t.cell + ":" + t.action + ":" + (t.item == null ? "" : t.item.getClass().getSimpleName());
 			boolean still = Dungeon.hero.pos == lastPos && key.equals(lastKey) && t.kind != Assist.WAIT && !"wait".equals(t.action);
 			if (still) { stuckEvents++; sameRun++; } else sameRun = 0;
@@ -352,7 +367,7 @@ public class AssistBot {
 			if (t.kind == Assist.USE && t.item != null) BotItems.pending(t.item, t.action);
 			Lockstep.doing = "acting on " + t + " at depth " + Dungeon.depth;
 			if (decisions == TEST_HANG) synchronized (AssistBot.class) { try { AssistBot.class.wait(); } catch (InterruptedException e) { } }   // (tests: the watchdog)
-			boolean ok = watch != null && Controls.aiming() == false && (SELECTONLY ? watch.selectOnly(t) : watch.act(t));
+			boolean ok = watch != null && Controls.aiming() == false && (WILFUL ? watch.wilfulPlayer(t) : HUMANP ? watch.humanPlayer(t) : SELECTONLY ? watch.selectOnly(t) : watch.act(t));
 			if (!ok && Ui.topWindow() == null && Dungeon.hero.ready && Actor.now() == tn && Dungeon.hero.pos == pn) ok = Assist.act(t);
 			// (the actor thread picks the action up on a later frame: until then hero.ready still reads true. Once it has
 			// and the action came to nothing, the hero is the actor waiting again with no action: no use waiting longer.
@@ -361,7 +376,7 @@ public class AssistBot {
 			for (int k = 0; k < 150 && Dungeon.hero.ready && Actor.now() == tn && Dungeon.hero.pos == pn && Ui.topWindow() == null && Dungeon.hero.isAlive()
 					&& !(watch == null && k > 0 && Dungeon.hero.curAction == null && Actor.processing()); k++) { step(); fk[4]++; }   // (through the watch, a press takes frames to arrive)
 			if (FRAMESBY) { fkWhy.merge(t.why, fk[4] - fa, Long::sum); if (fk[4] - fa >= 150) fkWhy.merge("150: " + t.why, 1L, Long::sum); }
-			if (SELECTONLY && watch != null) watch.stall = Dungeon.hero.ready && Actor.now() == tn && Dungeon.hero.pos == pn && Ui.topWindow() == null ? watch.stall + 1 : 0;
+			if (PLAYER && watch != null) watch.stall = Dungeon.hero.ready && Actor.now() == tn && Dungeon.hero.pos == pn && Ui.topWindow() == null ? watch.stall + 1 : 0;
 			if (!ok) { actFails++; if (Assist.lastError != null) { System.out.println("  ACT ERROR " + Assist.lastError); Assist.lastError.printStackTrace(System.out); Assist.lastError = null; } Dungeon.hero.rest(false); }
 		}
 		} catch (Throwable ex) {
@@ -382,7 +397,9 @@ public class AssistBot {
 		System.out.printf("plan time: avg %.2f ms, max %.1f ms over %d plans%n", planNs / 1e6 / Math.max(1, plans), maxPlanNs / 1e6, plans);
 		if (!end.equals("WIN") && !end.equals("died") && !v) { System.out.println("last decisions:"); for (String l : recent) System.out.println(l); }
 		if (watch != null) System.out.println("WATCH " + watch.summary());
-		if (watch != null) System.out.println("LIST " + (Controls.legacy != null ? "old" : "new") + (SELECTONLY ? " select-only" : " bot") + " mode " + WatchSettings.assist() + " " + watch.listSummary() + " plans " + Controls.plans);
+		if (obey != null) System.out.println("OBEY every " + OBEY + ": " + obey.line());
+		if (watch != null && PLAYER) { int tp = 0; if (Dungeon.hero != null) for (int ti = 1; ti <= 4; ti++) tp += Math.max(0, Dungeon.hero.talentPointsAvailable(ti)); System.out.println("PLAYER " + (WILFUL ? "wilful" : HUMANP ? "human" : "select") + " talentsleft " + tp + " " + watch.playerSummary()); }
+		if (watch != null) System.out.println("LIST " + (Controls.legacy != null ? "old" : "new") + (HUMANP ? " human" : SELECTONLY ? " select-only" : " bot") + " mode " + WatchSettings.assist() + " " + watch.listSummary() + " plans " + Controls.plans);
 		Coverage.watch = watch == null ? "" : watch.summary();
 		Coverage.report(end);
 		System.out.println(BotStats.line());
@@ -425,6 +442,11 @@ public class AssistBot {
 	/** WATCH=1 PLAYER=select: the player only ever presses Select (plan A); OLDLIST=1: the watch's Down list as it was
 	 *  before the Assistant drove it (OldTargets), to compare presses on the same seeds. */
 	static final boolean SELECTONLY = "select".equals(System.getenv("PLAYER"));
+	/** PLAYER=human: a simulated player, mostly Select, now and then the 2nd or 3rd choice or a tap (WatchDriver.humanPlayer). */
+	static final boolean HUMANP = "human".equals(System.getenv("PLAYER")), WILFUL = "wilful".equals(System.getenv("PLAYER")), PLAYER = SELECTONLY || HUMANP || WILFUL;
+	/** OBEY=n (no watch): every n-th suggestion that isn't a fight is passed over (plan B taken), and plan A coming back
+	 *  within Obey.WINDOW decisions is counted as insisting, by the skill that proposed it. */
+	static final int OBEY = Integer.parseInt(System.getenv().getOrDefault("OBEY", "0")); static Obey obey; static int obeyN;
 	static final int PERTURB = Integer.parseInt(System.getenv().getOrDefault("PERTURB", "0"));
 	static final int HUMAN = Integer.parseInt(System.getenv().getOrDefault("HUMAN", "0")); static int humanN;
 	static final boolean VRND = System.getenv("VRND") != null;

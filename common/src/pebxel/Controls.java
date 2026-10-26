@@ -69,7 +69,7 @@ public class Controls {
 		public void press(int k, boolean held) { hudPress(k, held); }
 		public int targetCell() { return currentTarget(); }
 		public int targetKind() {
-			if (Dungeon.hero == null || !Dungeon.hero.ready || targets.isEmpty() || Dungeon.level == null) return 0;
+			if (Dungeon.hero == null || !Dungeon.hero.ready || targets.isEmpty() || Dungeon.level == null || planDue) return 0;
 			Assist.Target t = current();
 			if (t != null) return kindOf(t);
 			int c = currentTarget();   // (a bare cell: a test's list)
@@ -79,9 +79,9 @@ public class Controls {
 			if (Dungeon.level.heaps.get(c) != null) return 2;
 			return c == Dungeon.hero.pos ? 0 : 3;
 		}
-		public com.shatteredpixel.shatteredpixeldungeon.items.Item targetItem() { Assist.Target t = current(); return t == null || !Dungeon.hero.ready ? null : t.item; }
-		public int toolbarHint() { Assist.Target t = current(); return t == null || !Dungeon.hero.ready || onToolbar || touching ? -1 : buttonOf(t); }
-		public int targetCount() { return Dungeon.hero != null && Dungeon.hero.ready ? targets.size() : 0; }
+		public com.shatteredpixel.shatteredpixeldungeon.items.Item targetItem() { Assist.Target t = current(); return t == null || !Dungeon.hero.ready || planDue ? null : t.item; }
+		public int toolbarHint() { Assist.Target t = current(); return t == null || !Dungeon.hero.ready || onToolbar || touching || planDue ? -1 : buttonOf(t); }
+		public int targetCount() { return Dungeon.hero != null && Dungeon.hero.ready && !planDue ? targets.size() : 0; }
 		public int mapZoomLevel() { Camera c = Camera.main; return c == null ? 1 : c.zoom < 1.5f ? 0 : c.zoom < 3f ? 1 : 2; }
 		public boolean zoomLocked() { return zlock && WatchSettings.assist() == 2; }
 		public void tag(int which, boolean held) {
@@ -259,7 +259,16 @@ public class Controls {
 	private void menuButton(Group menu, int b, boolean held, Window w) {
 		List<Ui.Part> bs = buttons(menu);
 		if (b == BACK) { if (w != null) w.onBackPressed(); else com.watabou.noosa.NoosaAccess.back(Game.scene()); return; }
-		if (focusOwner != menu) { focusOwner = menu; focus = 0; }
+		if (focusOwner != menu) { focusOwner = menu; focus = 0; suggest(menu, w); }
+		// the Assistant would close it (nothing it wants here): no frame, Select closes; Up or Down shows the frame
+		if (closeFirst && sugFor == menu) {
+			closeFirst = false;
+			if (b == SELECT && !held) { if (w != null) w.onBackPressed(); else com.watabou.noosa.NoosaAccess.back(Game.scene()); }
+			return;
+		}
+		// Select on the Assistant's pick in a window that stays (the alchemy's steps, a quest's two): its next pick
+		// (the player's own pick too, where the window keeps the choice: the Intuition's picture, then its guess)
+		if (b == SELECT && !held && sugFor == menu && !(menu instanceof pebxel.ui.Navigable)) resuggest = true;
 		if (menu instanceof pebxel.ui.Navigable) {
 			pebxel.ui.Navigable n = (pebxel.ui.Navigable) menu;
 			if (b == UP || b == DOWN) n.nav(b == UP ? -1 : 1);
@@ -282,8 +291,14 @@ public class Controls {
 				boolean wraps = next >= 0 && (b == DOWN ? next < focus : next > focus);
 				// (a lone button in sight scrolls too: Up read nothing back above the only button once it was in view)
 				if (n == null || (!wraps && (!visible(w, n) || next == focus))) {
+					int y0 = w.camera.y;
 					scroll(w, (b == DOWN ? -1 : 1) * (viewBottom(w) - viewTop(w)) / 2);
-					if (n == null || !visible(w, n)) return;   // keep reading; the button comes into view later
+					if (n == null) return;
+					if (!visible(w, n) && w.camera.y != y0) return;   // keep reading; the button comes into view later
+					// (at the window's end and still not whole there: framed all the same, on to the next if it was the
+					// framed one; Down stayed on a button scrolled past for ever when the frame started lower down)
+					if (!visible(w, n) && next == focus) { next = b == DOWN ? (focus + 1) % bs.size() : (focus + bs.size() - 1) % bs.size(); n = (Component) bs.get(next).g; }
+					if (!visible(w, n)) { focus = next; keepInView(w, n); return; }
 				}
 				if (wraps) {
 					scroll(w, b == DOWN ? 100000 : -100000);
@@ -295,7 +310,7 @@ public class Controls {
 			if (next >= 0) focus = next;
 			return;
 		}
-		if (bs.isEmpty()) return;
+		if (bs.isEmpty()) { if (b == SELECT && w != null) w.onBackPressed(); return; }   // (a page that only tells something: Select closes it, as OK)
 		focus = Math.max(0, Math.min(bs.size() - 1, focus));
 		if (b == SELECT) { if (held) Ui.hold(bs.get(focus).g); else Ui.press(bs.get(focus).g); }
 	}
@@ -531,7 +546,7 @@ public class Controls {
 		if (h == null || !h.ready || h.sprite == null || c == null) return;
 		PointF r = restCentre(c), hc = heroCentre(c, c.zoom);
 		if (Math.abs(r.x - hc.x) > 2 || Math.abs(r.y - hc.y) > 2) { zman = false; view(-1, TURN); return; }
-		if (h.pos == Dungeon.level.exit() || Dungeon.level.heaps.get(h.pos) != null) GameScene.handleCell(h.pos);
+		if (!h.rooted && (h.pos == Dungeon.level.exit() || Dungeon.level.heaps.get(h.pos) != null)) GameScene.handleCell(h.pos);   // (rooted on the stairs: nothing happened and no time passed, for ever)
 		else if (!GameScene.cancel()) h.search(true);
 		targetsStale = true; acted();
 	}
@@ -614,14 +629,56 @@ public class Controls {
 	/** The list, made again once a turn: when game time has passed, the hero moved, a floor, aiming started or ended,
 	 *  the settings changed, or a press may have changed something (targetsStale). Assist.plan costs about half a
 	 *  millisecond; every frame would be 15 ms a second for nothing. */
-	private void refreshTargets(boolean aiming) {
+	/** Is a new list due (refreshTargets would make one)? */
+	private boolean due(boolean aiming) {
 		// (aiming started or ended since: the other list. A zap or throw chosen in the item window kept the walking
 		// list, so Down offered items and the way on, not the enemies, until the hero moved)
 		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
 		// (Near, Off, locked: the list is what shows at the player's zoom, made again when it changes; Far: a zoom keeps it)
 		int settings = WatchSettings.assist() * 2 + (WatchSettings.itemAssist() ? 1 : 0) + (far() ? 0 : 8 * (userZoom() + 1) + (zlock ? 32 : 0));
-		if (waiting(now, aiming)) return;
-		if (!targetsStale && Dungeon.hero.pos == lastPos && Dungeon.depth == lastDepth && aiming == lastAiming && now == lastNow && settings == lastSettings) return;
+		if (waiting(now, aiming)) return false;
+		return !(!targetsStale && Dungeon.hero.pos == lastPos && Dungeon.depth == lastDepth && aiming == lastAiming && now == lastNow && settings == lastSettings);
+	}
+	private void refreshTargets(boolean aiming) {
+		if (!due(aiming)) return;
+		long t0 = System.nanoTime();
+		try { makeTargets(aiming); }
+		finally { long dn = System.nanoTime() - t0; planNs += dn; if (dn > planMaxNs) planMaxNs = dn; if (dn > 16_000_000) slowPlans++; if (dn > 33_000_000) slowerPlans++;
+			budget(dn);
+			if (slowLogMs > 0 && dn > slowLogMs * 1_000_000L) System.out.printf("SLOWLIST %.1f ms d%d t%d hp %d/%d: %s%n", dn / 1e6, Dungeon.depth, Math.round(com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now()), Dungeon.hero.HP, Dungeon.hero.HT, (plan.isEmpty() ? "-" : plan.get(0).why) + " | " + Assist.timing()); }
+	}
+	/** The lists' cost (the phone's frame budget: Thomas's phone may be 3-5 times slower than the PC): total, worst,
+	 *  how many took over 16 ms and over 33 ms (a frame at 30 a second). */
+	public static long planNs, planMaxNs, slowPlans, slowerPlans; public static int slowLogMs;
+	/** The phone's budget: a list's cost, smoothed over the last twenty or so (the first few left out: the code still
+	 *  being compiled). A phone slow enough that lists average over 20 ms (40 ms) plays the brain's fights out fewer times
+	 *  (bot.Look.RUNS: 150, 100 of 300): its lookahead is most of a list in a fight. A PC averages 2-3 ms: never. */
+	static double emaMs = -1; static final int RUNS0 = pebxel.bot.Look.RUNS;
+	private static void budget(long dn) {
+		if (plans <= 5) return;
+		double ms = dn / 1e6; emaMs = emaMs < 0 ? ms : emaMs * 0.95 + ms * 0.05;
+		int want = emaMs > 40 ? Math.min(RUNS0, 100) : emaMs > 20 ? Math.min(RUNS0, 150) : RUNS0;
+		if (emaMs < 12 && pebxel.bot.Look.RUNS < RUNS0) want = RUNS0;   // (back to the full count once it's quick again)
+		else if (want > pebxel.bot.Look.RUNS) want = pebxel.bot.Look.RUNS;   // (between the marks: as it is)
+		if (want != pebxel.bot.Look.RUNS) { System.out.println("pebxel: lists average " + Math.round(emaMs) + " ms: the lookahead plays fights out " + want + " times"); pebxel.bot.Look.RUNS = want; }
+	}
+	/** WatchSession (and the tests' watch): a list due when the hero is ready is made after the frame has been sent
+	 *  (idle), not before it: the frame that shows him arrive goes out at once, the list a frame later. A press still
+	 *  makes the list there and then, as it must. */
+	public static boolean deferPlans;
+	private boolean planDue;
+	/** After the frame was sent (the phone's spare time before the next): the list, if one was put off. */
+	public void idle() {
+		if (!planDue) return;
+		planDue = false;
+		try {
+			Hero h = Dungeon.hero;
+			if (Game.scene() instanceof GameScene && h != null && h.isAlive() && h.ready && Ui.topWindow() == null && !onToolbar) refreshTargets(aiming());
+		} catch (Throwable t) { System.out.println("pebxel: idle list " + t); }
+	}
+	private void makeTargets(boolean aiming) {
+		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		int settings = WatchSettings.assist() * 2 + (WatchSettings.itemAssist() ? 1 : 0) + (far() ? 0 : 8 * (userZoom() + 1) + (zlock ? 32 : 0));
 		String why = log ? (targetsStale ? "stale " : "") + (Dungeon.hero.pos != lastPos ? "pos " : "") + (now != lastNow ? "time " + lastNow + "->" + now + " " : "") + (aiming != lastAiming ? "aim " : "") : "";
 		obeyed(Dungeon.hero.pos != lastPos || now != lastNow, Dungeon.depth == lastDepth);
 		targetsStale = false; lastPos = Dungeon.hero.pos; lastDepth = Dungeon.depth; lastAiming = aiming; lastNow = now; lastSettings = settings;
@@ -811,7 +868,8 @@ public class Controls {
 		if (WatchSettings.assist() == 0 || !WatchSettings.itemAssist()) return;
 		int n = talentPoints();
 		if (n <= 0 || n == talentsPassed) { if (n <= 0) talentsPassed = -1; return; }
-		for (Assist.Target t : ts) if (t.kind == Assist.ENEMY || (t.kind == Assist.USE && t.item != null)) return;   // (a fight, or the hands have something: later)
+		for (Assist.Target t : ts) if (t.kind == Assist.ENEMY) return;   // (a fight: later)
+		if (!ts.isEmpty() && ts.get(0).kind == Assist.USE && ts.get(0).item != null) return;   // (the hands' plan A first: then the talents. Any use further down kept them back for good: a select-only Mage on the emulator died on floor 2 with his point unspent)
 		for (Mob m : Dungeon.level.mobs) if (Dungeon.level.heroFOV[m.pos] && m.alignment == Char.Alignment.ENEMY && m.invisible <= 0) return;
 		Assist.Target t = new Assist.Target(Dungeon.hero.pos, Assist.USE, "talents"); t.action = TALENTS; t.obj = -1;
 		ts.add(0, t);
@@ -1072,13 +1130,13 @@ public class Controls {
 			else if (w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndHero && talentPoints() == 0) { w.hide(); talentsOpen = false; w = Ui.topWindow(); }
 		}
 		if (pick != null) {   // the backpack a use opened to choose in (what to identify...): the frame on the Assistant's pick
-			if (w instanceof pebxel.ui.WndWatchBag) { ((pebxel.ui.WndWatchBag) w).focusOn(pick); pick = null; }
+			if (w instanceof pebxel.ui.WndWatchBag) { ((pebxel.ui.WndWatchBag) w).focusOn(pick); pick = null; pickedFor = w; }
 			else if (w == null && Dungeon.hero != null && Dungeon.hero.ready) pick = null;
 		}
 		Group menu = w != null ? w : !(Game.scene() instanceof GameScene) ? Game.scene() : null;
 		// (a window a tap opened starts at its top too: one left where Shattered put it, centred, showed the middle of
 		// a long talent with neither its name nor its Upgrade button)
-		if (touching && menu != null && focusOwner != menu) { focusOwner = menu; focus = 0; if (w != null && tall(w)) scroll(w, 100000); }
+		if (touching && menu != null && focusOwner != menu) { focusOwner = menu; focus = 0; if (w != null && tall(w)) scroll(w, 100000); suggest(menu, w); }
 		if (touching) { frame.hide(); if (menu != null) { marker.hide(); return; } }
 		else if (menu != null) {
 			if (w != null && decided) windowSince = true;
@@ -1090,6 +1148,12 @@ public class Controls {
 			if (focusOwner != menu) {
 				focusOwner = menu; focus = 0;
 				if (w != null && tall(w)) scroll(w, 100000);   // a new tall window starts at its top
+				suggest(menu, w);
+			} else if (resuggest) { resuggest = false; suggest(menu, w); }
+			if (closeFirst && sugFor == menu) {   // (no frame: Select closes)
+				frame.hide(); for (Ui.Part p : bs) if (p.g instanceof pebxel.ui.Focusable) ((pebxel.ui.Focusable) p.g).focus(false);
+				if (w != null && keptFor != w) { keptFor = w; keepInView(w, null); }
+				return;
 			}
 			if (bs.isEmpty()) { frame.hide(); if (w != null) keepInView(w, null); return; }
 			if (talentFocus != null) {   // the talents the Assistant opened: the frame on the guide's next talent (Build), the choice the player's
@@ -1124,11 +1188,56 @@ public class Controls {
 		if (!(Game.scene() instanceof GameScene) || Dungeon.hero == null) { marker.hide(); edge(-1); return; }
 		zoomed();
 		if (onToolbar || !Dungeon.hero.ready) { marker.hide(); edge(-1); return; }   // (the toolbar's highlight is drawn by the HUD)
+		if (deferPlans && due(aiming())) { planDue = true; marker.hide(); edge(-1); return; }   // (made after the frame is sent: idle)
 		refreshTargets(aiming());
 		int cell = targets.isEmpty() || pending ? -1 : cellOf(targets.get(Math.min(target, targets.size() - 1)));
 		if (cell < 0) { marker.hide(); edge(-1); return; }   // (an action of the toolbar's: its button's reticle shows it, WatchHud)
 		marker.at(cell);
 		if (edge(cell)) marker.hide();
+	}
+
+	// ---- the Assistant's answer to a window: the frame starts on it (AsWindows), so Select takes it ----
+	private boolean closeFirst, resuggest; private com.watabou.noosa.Gizmo suggested; private Group sugFor; private Window pickedFor;
+	/** The Assistant's reason for the frame's place in the window on show ("" none: tests, the hint). */
+	public static String windowWhy = "";
+	/** Where the frame starts in a window or screen just shown: on the Assistant's pick (a button, or an item in a bag
+	 *  asking for one); nothing it wants there: no frame, and Select closes it. The player's own backpack and menus, and
+	 *  everything outside the game, start on the first button as always. */
+	private void suggest(Group menu, Window w) {
+		closeFirst = false; suggested = null; sugFor = menu; windowWhy = "";
+		Hero h = Dungeon.hero;
+		if (WatchSettings.assist() == 0 || h == null || !h.isAlive()) return;
+		String sk = Game.scene() == null ? "" : Game.scene().getClass().getSimpleName();
+		boolean screen = w == null && (sk.equals("AlchemyScene") || sk.equals("AmuletScene"));
+		if (w == null ? !screen : !(Game.scene() instanceof GameScene || sk.equals("AlchemyScene"))) return;
+		if (w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndHero) {   // the talents: the frame on the build's next (Build), the choice the player's
+			if (talentPoints() > 0 && talentFocus == null) { talentFocus = Build.nextTalent(h); talentTries = 0; }
+			return;
+		}
+		if (w != null && w == pickedFor) return;   // (the use's own pick, framed already)
+		AsWindows.Pick p = w != null ? AsWindows.decide(w) : AsWindows.decideScene((com.watabou.noosa.Scene) menu);
+		if (Assist.lastError != null) { System.out.println("pebxel: window " + Assist.lastError); Assist.lastError = null; }
+		if (p == AsWindows.NONE) return;
+		windowWhy = p.why;
+		if (log) System.out.println("pebxel: window " + (w != null ? w.getClass().getName() : sk) + ": " + p);
+		if (p.item != null) {
+			if (menu instanceof pebxel.ui.WndWatchBag) {
+				pebxel.ui.WndWatchBag wb = (pebxel.ui.WndWatchBag) menu;
+				// (in another bag, the scroll holder, the pouch: that bag's tab first; it opens in its place, and the frame
+				// goes on the item there. Before, the frame stayed on the first row and Select chose something else, round
+				// and round at the alchemy pot's energy)
+				if (!wb.focusOn(p.item)) for (com.shatteredpixel.shatteredpixeldungeon.items.bags.Bag bg : h.belongings.getBags()) if (bg != h.belongings.backpack && bg.items.contains(p.item) && wb.focusOn(bg)) break;
+				suggested = wb.focused();
+			}
+			return;
+		}
+		List<Ui.Part> bs = buttons(menu);
+		if (p.g != null) {
+			if (menu instanceof pebxel.ui.Navigable) { suggested = ((pebxel.ui.Navigable) menu).focused() == p.g ? p.g : null; return; }
+			for (int i = 0; i < bs.size(); i++) if (bs.get(i).g == p.g || AsChoices.isIn(p.g, bs.get(i).g)) { focus = i; suggested = bs.get(i).g; return; }
+			return;
+		}
+		if (!bs.isEmpty() || menu instanceof pebxel.ui.Navigable) closeFirst = true;
 	}
 
 	// ---- what the watch may do by itself before hearing back (its predict.c) ----

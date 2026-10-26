@@ -83,6 +83,8 @@ public final class Assist {
 		public String why = "";
 		/** A proposer's own view of what this is worth, in floors next to carrying on (Brain: NaN none). */
 		public double hint = Double.NaN;
+		/** The skill that proposed it (Brain.offer's name: tests, obedience), or null. */
+		public String src;
 		/** USE: how many of the item there were when offered (a use the player made himself is no pass). */
 		int qty = -1;
 		int key;
@@ -143,7 +145,7 @@ public final class Assist {
 	static final Map<Integer, Integer> talked = new HashMap<>();
 	static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
 	static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
-	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; private static Item actItem;
+	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; static Item actItem;
 	static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
 	static float floorT0;
 	static int eatBand;
@@ -266,8 +268,11 @@ public final class Assist {
 	public static List<Target> plan(boolean aiming, IntPredicate onScreen) {
 		try {
 			if (Dungeon.hero == null || Dungeon.level == null || !Dungeon.hero.isAlive()) return new ArrayList<>();
+			long t0 = System.nanoTime();
 			setup(onScreen);
+			long t1 = System.nanoTime(), b0 = Brain.nanos;
 			List<Target> r = aiming ? aimList() : planList();
+			setupNs = t1 - t0; listNs = System.nanoTime() - t1; brainNs = Brain.nanos - b0;
 			last = r;
 			return r;
 		} catch (Throwable e) {
@@ -275,6 +280,10 @@ public final class Assist {
 			try { return fallback(aiming); } catch (Throwable e2) { return new ArrayList<>(); }
 		}
 	}
+
+	/** The last plan's cost (Controls' slow-list log): the set-up, the list, the brain's share of the list. */
+	static long setupNs, listNs, brainNs;
+	public static String timing() { return String.format("setup %.1f list %.1f (brain %.1f) ms", setupNs / 1e6, listNs / 1e6, brainNs / 1e6); }
 
 	/** The player chose t while planA was entry 0 (call before act; nothing happens when t is plan A). */
 	public static void chose(Target t, Target planA) {
@@ -284,6 +293,7 @@ public final class Assist {
 			// a blow chosen (an attack, a throw or zap at someone): a fight, never a pass over what lies about, nor over the
 			// entries cycled past on the way to it (Thomas: "combat caused us to ignore pickups")
 			if ((t.kind == ENEMY && t.action == null) || (t.kind == USE && t.cell >= 0 && t.cell != p && Actor.findChar(t.cell) != null)) { strikeAt = Actor.now(); strikePos = p; }
+			AsIntent.chose(t, planA);   // (agent DS: his way and his liking, for the entries after plan A)
 			if (t.same(planA)) return;
 			resumeCell = -1;
 			mindFloor = null;   // (the mind is read afresh from here: a reading from before the choice took the walk the player chose for one towards another objective)
@@ -326,6 +336,7 @@ public final class Assist {
 
 	static void pass(Target e, int went, int from) {
 		Level l = Dungeon.level; Hero h = Dungeon.hero;
+		AsObey.passed(e, went, from); AsIntent.skipped(e);
 		if (e.kind == USE && e.item != null) decline(e.item.getClass(), e.action);
 		if (e.kind == WAIT && REST_ACT.equals(e.action)) decline(null, REST_ACT);
 		if (e.kind == WAIT && e.why.startsWith("hold") && went != from) holdOff = true;   // (walked off instead of holding: the player's call)
@@ -340,7 +351,7 @@ public final class Assist {
 			if (e.kind == PICKUP && keyAt(o)) demoted.put(o, Actor.now() + DEMOTE);   // (a key opens a locked room: back a while, never gone for the floor)
 			else if (e.kind == PICKUP) skippedHeaps.add(o);
 			else if (l.map[o] == Terrain.HIGH_GRASS) { grassSkip = true; grassKey = h.exp + h.lvl * 101; }   // (Pebble PD: grass skipped till a kill)
-			else demoted.put(o, Actor.now() + DEMOTE);
+			else demoted.put(o, Actor.now() + DEMOTE * AsIntent.demoteMult(o));   // (passed over again: longer)
 			if (goal == o) goal = -1;
 		}
 	}
@@ -368,7 +379,7 @@ public final class Assist {
 			Hero h = Dungeon.hero; Level l = Dungeon.level; if (h == null || l == null || cell < 0) return;
 			int dx = l.cellToPoint(cell).x - l.cellToPoint(h.pos).x, dy = l.cellToPoint(cell).y - l.cellToPoint(h.pos).y;
 			if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-			ovrC = cell; ovrObj = false; ovrDir = pang(dx, dy); goal = -1; resumeCell = -1;
+			ovrC = cell; ovrObj = false; ovrDir = pang(dx, dy); goal = -1; resumeCell = -1; AsIntent.tapped(cell, h.pos);
 		} catch (Throwable e) { lastError = e; }
 	}
 
@@ -387,7 +398,7 @@ public final class Assist {
 	public static void newTurn() { }
 
 	/** Forget everything (a new game). */
-	public static void reset() { floor = null; mindFloor = null; last = new ArrayList<>(); }
+	public static void reset() { floor = null; mindFloor = null; last = new ArrayList<>(); AsIntent.reset(); }
 
 	/** Do it, as the game would on a tap / item use. Returns false when nothing could be done. Never throws. */
 	public static boolean act(Target t) { return act(t, false); }
@@ -431,6 +442,9 @@ public final class Assist {
 					break;
 			}
 			if (t.cell < 0) return false;
+			// (rooted, a walk goes nowhere and no time passes: the roots never wore off, and Select did nothing for ever
+			// (DS-sel1: two select-only games stuck on the stairs). A search spends the turn)
+			if ((t.kind == GO || t.kind == PICKUP) && h.rooted && t.cell != h.pos && Actor.findChar(t.cell) == null) { noteSearch(); h.search(true); return true; }
 			if ((t.kind == GO || t.kind == PICKUP || t.kind == ENEMY) && setupOk(Dungeon.level) && hp == h.pos) {   // (an ally on the only good way: swap places first)
 				int sw = swapStep(t.cell);
 				if (sw >= 0 && sw != swapFrom && Actor.now() != swapAt) { swapFrom = h.pos; swapAt = Actor.now(); GameScene.handleCell(sw); return true; }   // (once a moment, never back to the cell just left: the Rogue's clone swaps in no time)
@@ -572,7 +586,7 @@ public final class Assist {
 		int kk = com.shatteredpixel.shatteredpixeldungeon.Statistics.enemiesSlain; boolean kill = killKey >= 0 && kk != killKey; killKey = kk;
 		if (f) foeAt = Actor.now();
 		fight = f;
-		if ((!combatHeld.isEmpty() || grassHeld) && !f && (kill || Actor.now() - foeAt >= CALM)) { combatHeld.clear(); grassHeld = false; }
+		if ((!combatHeld.isEmpty() || grassHeld) && !f && (kill || Actor.now() - foeAt >= CALM)) { AsIntent.afterFight(combatHeld); combatHeld.clear(); grassHeld = false; }
 		remember();
 		// the last act did nothing (no time passed, nowhere moved): that target is no use for a while
 		if (actTime >= 0 && actPos == hp && Actor.now() == actTime && actCell >= 0 && actKind != USE && actKind != WAIT) {
@@ -848,13 +862,15 @@ public final class Assist {
 			out.add(out.remove(0));
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
-		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
-		if (mode() != 0) AsPacing.after(out);   // (agent MD: a wait that has not paid, given up)
-		if (mode() != 0) AsEscape.after(out);   // (agent HE: a known way out, used before it's too late)
+		if (mode() != 0) { untagged(out); AsHealth.after(out); tag(out, "health"); }   // (agent EG: the health policy, a last pass over plan A)
+		if (mode() != 0) { untagged(out); AsPacing.after(out); tag(out, "pacing"); }   // (agent MD: a wait that has not paid, given up)
+		if (mode() != 0) { untagged(out); AsEscape.after(out); tag(out, "escape"); }   // (agent HE: a known way out, used before it's too late)
 		if (mode() != 0) commit();
+		if (mode() != 0) AsObey.gate(out);   // (agent DS: what the player passed over isn't plan A again, whoever proposes it)
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
 		mind();
+		AsIntent.rank(out);   // (agent DS: the entries after plan A as this player's likely next moves)
 		planned.values().removeIf(t -> t < Actor.now());
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
 		if (mode() != 0) AsEyes.stepwise(out);   // (ST: in an eye's sight a walk goes a step at a time)
@@ -864,6 +880,11 @@ public final class Assist {
 	/** Two walks that take turns (K8: "quest: back to the Wandmaker" from one cell, "pick up" from the other, to and
 	 *  fro): the hero back on the same cell with the same plan A three times in OSCN decisions is a dither; that plan
 	 *  A is then kept first till it is reached (or OSCT turns), as long as no foe is in sight. */
+	/** Target.src for the entries a last pass adds (tests: which skill proposed plan A). */
+	static final Set<Target> was = Collections.newSetFromMap(new IdentityHashMap<>());
+	static void untagged(List<Target> l) { was.clear(); was.addAll(l); }
+	static void tag(List<Target> l, String src) { for (Target t : l) if (t.src == null && !was.contains(t)) t.src = src; }
+
 	static void commit() {
 		// an item use that did nothing (no time passed, the hero where he was: magic-immune, a staff that won't zap...)
 		// offered a third time at one moment is held back 20 turns (K8: the staff "zap point blank" with no time
@@ -1299,7 +1320,7 @@ public final class Assist {
 	static String dk(Class<?> c, String a) { return (c == null ? "-" : c.getSimpleName()) + ":" + a; }
 	static void decline(Class<?> c, String a) {
 		String k = dk(c, a); declined.remove(k); declined.put(k, situation(c, a));
-		while (declined.size() > 8) declined.remove(declined.keySet().iterator().next());
+		while (declined.size() > 32) declined.remove(declined.keySet().iterator().next());   // (8 forgot a pass over after a few more: offered again)
 		if (c == ScrollOfUpgrade.class) upgradeHeld = true;
 	}
 	/** Passed over on this floor, and nothing has changed since (more of the item came, or, for resting, the hero is
@@ -1314,7 +1335,7 @@ public final class Assist {
 		Hero h = Dungeon.hero; if (h == null) return 0;
 		if (c == null) return REST_ACT.equals(a) ? (h.HT - h.HP) * 4 / Math.max(1, h.HT) : 0;
 		int n = 0; for (Item i : h.belongings) if (i.getClass() == c) n += i.quantity();
-		return n;
+		return n * 16 + AsObey.need(c, a);   // (a drink or a meal: offered again once he is worse off)
 	}
 
 	// =============================================================================================================
@@ -1610,11 +1631,14 @@ public final class Assist {
 			int nt = -1, ns = INF;
 			for (int c = 0; c < LEN; c++) {
 				int sd = dist[c]; if (sd < 1 || sd >= INF || off(c, wd) > CONE || bad.containsKey(c)) continue;
+				if (AsIntent.ON && c == L.exit() && floorLeft()) continue;   // (DS: not down the stairs with the floor not done, as his way on)
 				Heap hh = seenHeap(c); Char ch = seenChar(c);
-				int w = (hh != null && heapOk(hh)) || (ch instanceof NPC && L.heroFOV[c]) ? 3 : c == L.exit() || unseenBy(c) || (L.map[c] == Terrain.LOCKED_DOOR && Notes.keyCount(new IronKey(Dungeon.depth)) > 0) ? 4 : 0;
+				int w = (hh != null && heapOk(hh)) || (ch instanceof NPC && L.heroFOV[c]) ? 3 : c == L.exit() || unseenBy(c) || (L.map[c] == Terrain.LOCKED_DOOR && Notes.keyCount(new IronKey(Dungeon.depth)) > 0) ? 4
+						: known[c] && (L.map[c] == Terrain.DOOR || L.map[c] == Terrain.OPEN_DOOR) && sd > 1 ? 5 : 0;   // (DS: a door that way, been through or not)
 				if (w > 0 && sd * w < ns) { ns = sd * w; nt = c; }
 			}
-			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(0, t); } ovrC = WAY; }
+			// (Thomas: the bot's plan A first, his way on as plan B till he takes it: then it leads, "your choice")
+			if (nt >= 0) { zero = true; Target t = put(nt, seenHeap(nt) != null ? PICKUP : GO, 0, "your way on"); zero = false; if (t != null) { out.remove(t); out.add(AsIntent.ON && AsIntent.WAYB ? Math.min(1, out.size()) : 0, t); } ovrC = WAY; }
 			wayOn = -1;
 		}
 		// the interrupted walk, taken up again (30 turns), the fight first
@@ -1714,6 +1738,7 @@ public final class Assist {
 				int c = mindObj[j]; int g = mindWalk[j] - (c >= 0 && c < LEN ? walk(c) : INF);
 				if (j == 0 && c < 0) break;
 				if (g > 0) { if (j == 0) break; if ((c == EXIT || c == ENT) && floorLeft()) continue;   // (walking past the stairs isn't wanting them, with the floor not done)
+					if (demoted(c) || skippedHeaps.contains(c)) continue;   // (DS: nor walking past a thing he passed over)
 					up = true; if (g >= 2 && (od < 0 || off(c, od) <= 8)) { pr = c; up = false; break; } }
 			}
 		}

@@ -141,6 +141,7 @@ public final class WindowFit {
 			frame.run();
 			Component f = oc.focused();
 			if (f != null && want.contains(f) && Controls.visible(w, f)) seen.add(f);
+			if (System.getenv("FITDBG") != null) System.out.println("    reach " + name + " i " + i + " focused " + (f == null ? null : label(f)) + " at " + (f == null ? 0 : w.camera.y + (f.top() - w.camera.scroll.y) * w.camera.zoom) + " cam " + w.camera.y + " visible " + (f != null && Controls.visible(w, f)) + " why " + Controls.windowWhy);
 			oc.button(Controls.DOWN);
 		}
 		if (seen.size() < want.size()) {
