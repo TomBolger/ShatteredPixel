@@ -360,7 +360,7 @@ final class Brain {
 
 	static final boolean DBG = Assist.opt("ADBG", false) || Assist.opt("BDBG", false);
 	static void dump(List<Cand> cs, Cand pick) {
-		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " foes " + fs.size() + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
+		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " [" + Budget.dump(H) + "]" + " foes " + fs.size() + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
 		for (Cand c : cs) if (c.valued() || c.veto) System.out.println("    " + c + "  " + c.note);
 	}
 

@@ -61,7 +61,24 @@ public final class FoeView {
 		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; f.ragingNow = Tune.KINDS; }   // (already raging: its shield is in shielding())
 		if (Tune.KINDS) kinds(f, m);
+		ascension(f, m);
 		return f;
+	}
+
+	/** (M2) The Amulet's curse on the way up (AscensionChallenge.statModifier: the buff is shown, its table is the
+	 *  source): the foe's damage, armour, accuracy and evasion times its kind's factor (Char.attack / hit; its health is
+	 *  already the cursed one): a shaman 2.25, a brute 2.25, a warlock 1.5, a rat 10. */
+	static void ascension(Fighter f, Mob m) {
+		double k = 1;
+		try { k = com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.statModifier(m); } catch (Throwable e) { }
+		if (k == 1 || !Tune.ASCEND) return;
+		f.dmg = f.dmg.scale(k); f.dr = f.dr.scale(k); f.acc *= k; f.eva *= k;
+		if (f.zapDmg != null) f.zapDmg = f.zapDmg.scale(k);
+		if (f.burstDmg != null) f.burstDmg = f.burstDmg.scale(k);
+		if (f.rageDmg != null) f.rageDmg = f.rageDmg.scale(k);
+		if (f.lowDmg != null) { f.lowDmg = f.lowDmg.scale(k); f.lowAcc *= k; f.lowEva *= k; }
+		if (f.deathDmg != null) f.deathDmg = f.deathDmg.scale(k);
+		f.hitDirect *= k;
 	}
 
 	/** (M2) The kinds' behaviour that changes a fight's course (their source; sized against the game in the Arena):
