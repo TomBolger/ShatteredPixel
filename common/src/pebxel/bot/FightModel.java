@@ -246,7 +246,7 @@ public final class FightModel {
 					}
 					int ni = -1; double nd = Double.MAX_VALUE, na = Double.MAX_VALUE; int sl = -1;
 					for (int i = 0; i < n; i++) if (hp[i] > 0) {
-						if (awake[i]) { na = Math.min(na, arr[i]); double d = foes0.get(i).dist - t * foes0.get(i).speed; if (d < nd) { nd = d; ni = i; } }
+						if (awake[i]) { na = Math.min(na, arr[i]); if (Tune.KINDS && !p.afar && (foes0.get(i).ranged || foes0.get(i).immobile)) continue; double d = foes0.get(i).dist - t * foes0.get(i).speed; if (d < nd) { nd = d; ni = i; } }   // (M2: shots at the ones coming; a shooter is walked up to (a bow duel with a warlock went on till the hero died), unless the plan is to shoot from afar)
 						else if (sl < 0 || foes0.get(i).dist < foes0.get(sl).dist) sl = i;
 					}
 					if (shots > 0 && ni >= 0) {

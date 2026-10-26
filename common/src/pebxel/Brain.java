@@ -270,11 +270,10 @@ final class Brain {
 			com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand w = (com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) i;
 			if (Assist.charged(w, w) && Assist.attackWand(w.getClass(), ed)) { it = w; act = com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand.AC_ZAP; wand = true; break; } }
 		if (it == null || Assist.declined(it.getClass(), act)) return;
-		Fighter m0 = me.copy(); m0.rangedShots = 0;
-		Look.Out walk = Look.run(m0, fs, plan(), seed);
+		Look.Out walk = base, shoot = Look.run(me, fs, plan().afar(), seed);
 		Cand k = new Cand(Assist.use(it, act, c.pos, "brain: from afar (a caster)"), "brain", Role.RANGED);
-		k.v = fightV(base, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - fightV(walk, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - (wand ? CHARGE : 0);
-		k.note = "afar " + base + " | walk " + walk;
+		k.v = fightV(shoot, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - fightV(walk, me.heals, Budget.rescue(h, Math.max(1, me.heals), 1), Budget.rescue(h, Math.max(1, me.heals - 1), 1)) - (wand ? CHARGE : 0);
+		k.note = "afar " + shoot + " | walk " + walk;
 		cs.add(k);
 	}
 

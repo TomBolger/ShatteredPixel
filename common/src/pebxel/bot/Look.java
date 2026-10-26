@@ -31,7 +31,9 @@ public final class Look {
 		public double healAt = Tune.get("BHEALAT", 35) / 100;   // policy: drink below this share of health (0 never)
 		public int flee = -1;         // walk away this many steps and be gone (-1: stay and fight)
 		public int healing;           // Healing already drunk, still to come (the hero's Healing buff: healingLeft; HeroView puts it in me.healLeft too: the larger counts)
-		public boolean sleepersDone = true;   // only sleepers left: the fight is over (FightModel's own sums: walk up to them)
+		public boolean sleepersDone = true;
+		public boolean afar;          // (M2) shots at the shooters too (the brain's "from afar"), not only at the ones coming
+		public Plan afar() { afar = true; return this; }   // only sleepers left: the fight is over (FightModel's own sums: walk up to them)
 		public Plan drink() { drink = true; return this; }
 		public Plan lose(int n) { lose = n; return this; }
 		public Plan flee(int n) { flee = n; return this; }
