@@ -102,6 +102,7 @@ final class AsAscent {
 		// something worth a step or two off the way
 		Target p = pick(hp, w);
 		if (p != null) return p;
+		if (!entKnown && ent >= 0 && ent < L.length() && known[ent]) return null;   // (the stairs seen, the way there shut for now: a foe in a corridor, a door: the usual rules; exploring away from them flip-flopped with the way up, K7)
 		if (!entKnown) return explore(hp);
 		// at the stairs: hurt, the curse harmless, the next floor no boss's: rest first (the foes that come are kills)
 		if (w == 0 && st < 8 && Dungeon.depth > 1 && !Dungeon.bossLevel(Dungeon.depth - 1) && h.HP * 100 < h.HT * RESTAT && calm() && !hungry() && !declined(null, REST_ACT))
@@ -125,7 +126,7 @@ final class AsAscent {
 		}
 		if (best < 0) return null;
 		if (best == ent) return new Target(ent, GO, "ascent: up");
-		return new Target(best, GO, now ? "ascent: out of the scorpio's line, on" : "ascent: on, out of the scorpio's line");
+		return AsBolts.tried(new Target(best, GO, now ? "ascent: out of the scorpio's line, on" : "ascent: on, out of the scorpio's line"));
 	}
 	/** Steps from the stairs up to each cell, over the known way. */
 	static int[] fromStairs(int ent) {
@@ -154,7 +155,8 @@ final class AsAscent {
 
 	/** An item a few steps off the way: Healing and food (more when short of it) further. */
 	static Target pick(int hp, int w) {
-		int best = -1, bk = INF;
+		int best = -1, bk = INF; Hero h = Dungeon.hero;
+		boolean hurt = h.HP * 2 < h.HT && (seenFoe || threatNear || stacks() >= 2);
 		for (Heap hh : L.heaps.valueList()) {
 			if (!heapOk(hh) || seenChar(hh.pos) != null && hh.pos != hp) continue;
 			int d = hh.pos == hp ? 0 : walk(hh.pos);
@@ -163,6 +165,7 @@ final class AsAscent {
 			boolean dear = hh.type == Heap.Type.HEAP && (top instanceof PotionOfHealing || precious(top) || (top instanceof Food && foodLeft() < 2));
 			int ent = L.entrance(), off = w >= INF ? d : d + (known[ent] && walk(ent) < INF ? Math.max(0, distance(hh.pos, ent) - w) : 0);   // (the detour: there, then on to the stairs)
 			if (off > (dear ? PICK * 2 : PICK) || hh.type != Heap.Type.HEAP && !dear) continue;
+			if (!dear && hurt && d > 0) continue;   // (hurt with foes about: on up, the next floor emptied as it's climbed into)
 			if (off < bk) { bk = off; best = hh.pos; }
 		}
 		return best < 0 ? null : new Target(best, PICKUP, "ascent: on the way");

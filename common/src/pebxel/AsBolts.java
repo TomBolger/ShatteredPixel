@@ -45,8 +45,24 @@ final class AsBolts {
 	}
 	static int inLine(List<Mob> sh, int c) { int n = 0; for (Mob m : sh) if (lineOn(m, c)) n++; return n; }
 
+	/** A step offered last decision that came to nothing (the hero where he was, no time gone): not offered again
+	 *  there (K7-b: twice a step off an eye's beam that the game never took, offered for ever). */
+	static int triedPos = -1, triedCell = -1; static float triedAt = -1; static final Set<Integer> fails = new HashSet<>();
+	static Target tried(Target t) {
+		if (t != null) { see(); triedCell = t.cell; }
+		return t;
+	}
+	/** The hero still where he was and no time gone since the last step offered: that step failed (kept, with any
+	 *  others failed there); else the list starts again. */
+	static void see() {
+		int p = Dungeon.hero.pos; float n = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		if (p == triedPos && n == triedAt) { if (triedCell >= 0) fails.add(triedCell); } else { fails.clear(); triedPos = p; triedAt = n; }
+		triedCell = -1;
+	}
+	static boolean failed(int c) { return Dungeon.hero.pos == triedPos && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now() == triedAt && (fails.contains(c) || c == triedCell); }
+
 	/** A cell a foe can stand by: free, open, known, not in danger. */
-	static boolean free(int c) { return c >= 0 && c < L.length() && open[c] && known[c] && seenChar(c) == null && !danger[c] && !L.avoid[c] && walk(c) < INF; }
+	static boolean free(int c) { return !failed(c) && c >= 0 && c < L.length() && open[c] && known[c] && seenChar(c) == null && !danger[c] && !L.avoid[c] && walk(c) < INF; }
 
 	// =============================================================================================================
 	// an eye's charged beam
@@ -76,7 +92,7 @@ final class AsBolts {
 		}
 		if (best < 0) return null;
 		Hero h = Dungeon.hero;
-		Target t = new Target(best, GO, "bolts: off the eye's beam");
+		Target t = tried(new Target(best, GO, "bolts: off the eye's beam"));
 		t.hint = 0.2 + Math.max(1, Brain.R) * Math.min(1, beamHi() / (double) Math.max(1, h.HP)) * 0.5;
 		return t;
 	}
@@ -111,7 +127,7 @@ final class AsBolts {
 		}
 		if (best < 0) return null;
 		double hi = 0; for (Mob m : sh) if (lineOn(m, hp)) { Fighter f = FoeView.of(m, h); Dist d = f.zapDmg != null ? f.zapDmg : f.rangedDmg != null ? f.rangedDmg : f.dmg; hi += d.mean(); }
-		Target t = new Target(best, GO, "bolts: out of every line");
+		Target t = tried(new Target(best, GO, "bolts: out of every line"));
 		t.hint = 0.15 + Math.max(1, Brain.R) * Math.min(1, hi * 2 / Math.max(1, h.HP)) * 0.3;
 		return t;
 	}
