@@ -29,10 +29,10 @@ public final class Identify {
 	private Identify() { }
 
 	// the kinds and their rates a floor (random: the decks' mean / 15 x about one potion and one scroll a floor)
-	static final Class<?>[] POT = { PotionOfStrength.class, PotionOfHealing.class, PotionOfMindVision.class, PotionOfFrost.class, PotionOfLiquidFlame.class,
+	public static final Class<?>[] POT = { PotionOfStrength.class, PotionOfHealing.class, PotionOfMindVision.class, PotionOfFrost.class, PotionOfLiquidFlame.class,
 			PotionOfToxicGas.class, PotionOfHaste.class, PotionOfInvisibility.class, PotionOfLevitation.class, PotionOfParalyticGas.class, PotionOfPurity.class, PotionOfExperience.class };
 	static final double[] POTR = { 0.5, 3, 2, 1.5, 1.5, 1.5, 1, 1, 1, 1, 1, 0.5 };
-	static final Class<?>[] SCR = { ScrollOfUpgrade.class, ScrollOfIdentify.class, ScrollOfRemoveCurse.class, ScrollOfMirrorImage.class, ScrollOfRecharging.class,
+	public static final Class<?>[] SCR = { ScrollOfUpgrade.class, ScrollOfIdentify.class, ScrollOfRemoveCurse.class, ScrollOfMirrorImage.class, ScrollOfRecharging.class,
 			ScrollOfTeleportation.class, ScrollOfLullaby.class, ScrollOfMagicMapping.class, ScrollOfRage.class, ScrollOfRetribution.class, ScrollOfTerror.class, ScrollOfTransmutation.class };
 	static final double[] SCRR = { 0.75, 3, 2, 1.5, 1.5, 1.5, 1, 1, 1, 1, 1, 0.5 };
 	static { for (int i = 1; i < 12; i++) { POTR[i] /= 15; SCRR[i] /= 15; } }
@@ -45,7 +45,10 @@ public final class Identify {
 	static void ensure(Hero h) {
 		if (game == h && seed == Dungeon.seed) return;
 		game = h; seed = Dungeon.seed; found.clear(); held.clear(); maxDepth = 0;
+		rowF.clear(); told.clear(); among.clear(); changed();
 	}
+	/** A new game (or a game loaded): every clue forgotten. */
+	public static boolean fresh(Hero h) { boolean f = game != h || seed != Dungeon.seed; ensure(h); return f; }
 
 	/** Called each plan: new copies of an unknown label in the pack count as found. */
 	public static void observe(Hero h) {
@@ -58,27 +61,100 @@ public final class Identify {
 		held.clear(); held.putAll(now);
 	}
 
+	// ---- clues (pebxel.Clues: what the player saw, put in here as evidence on the labels) ----
+	/** Per label, a likelihood factor per kind (its index in POT / SCR): a bat's drop is Healing, a scorpio's never
+	 *  Healing or Strength, a Stone of Intuition's wrong guess ruled out... */
+	static final Map<Class<?>, double[]> rowF = new HashMap<>();
+	/** Per label, the clue in words ("a bat dropped it"), for the why text. */
+	static final Map<Class<?>, String> told = new HashMap<>();
+	/** "One of these labels is that kind" (a puzzle room's potion lying on its floor, the shop's Healing...): the
+	 *  kind's column outside the labels times (1 - f w), f how sure it has been seen by now, w the share of the time
+	 *  the kind is among them at all. */
+	public static final class Among { public final Class<?> kind; public final Set<Class<?>> labels; public double f, w = 1; public final String what;
+		Among(Class<?> k, Set<Class<?>> s, String what) { kind = k; labels = s; this.what = what; } }
+	static final List<Among> among = new ArrayList<>();
+	static int version;
+	/** Evidence changed (the odds are worked out again). */
+	public static void changed() { version++; }
+	static double[] row(Class<?> label) { boolean pot = Potion.class.isAssignableFrom(label); return rowF.computeIfAbsent(label, k -> { double[] r = new double[12]; Arrays.fill(r, 1); return r; }); }
+	/** This label's likelihood for each kind times like (by the POT / SCR order); why: the clue in words. */
+	public static void like(Class<?> label, double[] like, String why) {
+		double[] r = row(label); for (int i = 0; i < 12; i++) r[i] *= like[i];
+		if (why != null && !told.containsKey(label)) told.put(label, why);
+		changed();
+	}
+	/** This label is surely not that kind (a wrong guess, a harmless splash). */
+	public static void exclude(Class<?> label, Class<?> kind, String why) {
+		boolean pot = Potion.class.isAssignableFrom(label); int k = pos(pot ? POT : SCR, kind); if (k < 0) return;
+		double[] r = row(label); if (r[k] == 0) return; r[k] = 0; changed();
+		if (why != null && !told.containsKey(label)) told.put(label, why);
+	}
+	public static Among among(Class<?> kind, Set<Class<?>> labels, String what) { Among a = new Among(kind, labels, what); among.add(a); changed(); return a; }
+	/** The clue that most sways this label, in words, or null. */
+	public static String clue(Class<?> label) { return told.get(label); }
+	public static int pos(Class<?>[] K, Class<?> c) { for (int i = 0; i < K.length; i++) if (K[i] == c) return i; return -1; }
+	public static Class<?>[] kinds(boolean pot) { return pot ? POT : SCR; }
+	public static double rate(boolean pot, Class<?> kind) { int i = pos(pot ? POT : SCR, kind); return i < 0 ? 0 : (pot ? POTR : SCRR)[i]; }
+	static final double EPS = 0.04;   // (a puzzle room's potion taken for another special room's prize: Level.findPrizeItem)
+
+	// the odds, worked out once per change (p is asked hundreds of times a plan)
+	static final Map<Class<?>, double[]> cacheP = new HashMap<>(), cacheS = new HashMap<>();
+	static long keyP = Long.MIN_VALUE, keyS = Long.MIN_VALUE;
+
 	/** P(label is kind): the balanced odds. A known label: 1 or 0. */
 	public static double p(Class<?> label, Class<?> kind) {
 		boolean pot = Potion.class.isAssignableFrom(label);
-		Class<?>[] K = pot ? POT : SCR; double[] R = pot ? POTR : SCRR;
+		Class<?>[] K = pot ? POT : SCR;
 		Set<?> unk = pot ? Potion.getUnknown() : Scroll.getUnknown();
 		if (!unk.contains(label)) return label == kind ? 1 : 0;
 		if (!unk.contains(kind)) return 0;
+		double[] r = odds(pot, unk).get(label); int b = pos(K, kind);
+		return r == null || b < 0 ? 0 : r[b];
+	}
+	/** Every unknown label's odds over the kinds (by POT / SCR order; known kinds 0). */
+	public static Map<Class<?>, double[]> odds(boolean pot) { return odds(pot, pot ? Potion.getUnknown() : Scroll.getUnknown()); }
+	static Map<Class<?>, double[]> odds(boolean pot, Set<?> unk) {
+		long key = ((long) version * 31 + unk.size()) * 31 + found.hashCode() * 7L + maxDepth;
+		Map<Class<?>, double[]> out = pot ? cacheP : cacheS;
+		if ((pot ? keyP : keyS) == key) return out;
+		if (pot) keyP = key; else keyS = key;
+		out.clear();
+		Class<?>[] K = pot ? POT : SCR; double[] R = pot ? POTR : SCRR;
 		List<Class<?>> L = new ArrayList<>(); for (Class<?> c : K) if (unk.contains(c)) L.add(c);
 		int n = L.size(), F = Math.max(1, maxDepth);
+		if (n == 0) return out;
+		int[] ki = new int[n]; for (int b = 0; b < n; b++) ki[b] = pos(K, L.get(b));
 		double[][] M = new double[n][n];
 		for (int a = 0; a < n; a++) {
 			int cnt = found.getOrDefault(L.get(a), 0); double mx = -1e300;
-			for (int b = 0; b < n; b++) { double r = R[idx(K, L.get(b))]; M[a][b] = cnt * Math.log(r) - r * F; mx = Math.max(mx, M[a][b]); }
-			for (int b = 0; b < n; b++) M[a][b] = Math.exp(M[a][b] - mx);
+			for (int b = 0; b < n; b++) { double r = R[ki[b]]; M[a][b] = cnt * Math.log(r) - r * F; mx = Math.max(mx, M[a][b]); }
+			double[] rf = rowF.get(L.get(a));
+			for (int b = 0; b < n; b++) M[a][b] = Math.exp(M[a][b] - mx) * (rf == null ? 1 : rf[ki[b]]);
 		}
+		for (Among am : among) {
+			int b = L.indexOf(am.kind); if (b < 0) continue;
+			double fac = Math.max(EPS, 1 - am.f * am.w);
+			if (fac >= 1) continue;
+			for (int a = 0; a < n; a++) if (!am.labels.contains(L.get(a))) M[a][b] *= fac;
+		}
+		for (int a = 0; a < n; a++) { double t = 0; for (int b = 0; b < n; b++) t += M[a][b]; if (t <= 0) for (int b = 0; b < n; b++) M[a][b] = 1e-9; }   // (clues that contradict: back to even)
 		for (int it = 0; it < 60; it++) {
 			for (int a = 0; a < n; a++) { double t = 0; for (int b = 0; b < n; b++) t += M[a][b]; if (t > 0) for (int b = 0; b < n; b++) M[a][b] /= t; }
 			for (int b = 0; b < n; b++) { double t = 0; for (int a = 0; a < n; a++) t += M[a][b]; if (t > 0) for (int a = 0; a < n; a++) M[a][b] /= t; }
 		}
-		int a = L.indexOf(label), b = L.indexOf(kind); double t = 0; for (int k = 0; k < n; k++) t += M[a][k];
-		return t > 0 ? M[a][b] / t : 0;
+		for (int a = 0; a < n; a++) {
+			double t = 0; for (int b = 0; b < n; b++) t += M[a][b];
+			double[] r = new double[12]; for (int b = 0; b < n; b++) r[ki[b]] = t > 0 ? M[a][b] / t : 0;
+			out.put(L.get(a), r);
+		}
+		return out;
+	}
+	/** The kind this label likeliest is (null: known or none). */
+	public static Class<?> likeliest(Class<?> label) {
+		boolean pot = Potion.class.isAssignableFrom(label);
+		double[] r = odds(pot).get(label); if (r == null) return null;
+		int b = -1; for (int i = 0; i < 12; i++) if (b < 0 || r[i] > r[b]) b = i;
+		return b < 0 ? null : (pot ? POT : SCR)[b];
 	}
 	static int idx(Class<?>[] K, Class<?> c) { for (int i = 0; i < K.length; i++) if (K[i] == c) return i; return 1; }
 

@@ -581,7 +581,8 @@ public final class Assist {
 		od = ovrC != -1 ? ovrDir : -1;
 		if (grassSkip && H.exp + H.lvl * 101 != grassKey) grassSkip = false;
 		zero = false; h0 = 0;
-		if (OIDENT || OSHOP) Identify.observe(H);
+		if (OIDENT || OSHOP || Clues.ON) Identify.observe(H);
+		Clues.observe();   // (agent ID: the clues seen to what the unknown potions and scrolls are)
 	}
 
 	static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
@@ -1741,10 +1742,11 @@ public final class Assist {
 			}
 			if (f != null) return use(f, Food.AC_EAT, -1, "starving: eat");
 		}
-		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
+		Item heal = Clues.healing(); boolean pot = heal != null;   // (a known Healing, or one surely Healing by its clues: a fly's drop. Agent ID)
+		String hw = heal != null && !known(heal) ? " (" + Clues.about(heal) + ")" : "";
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
-		if (oPick("heal", pot && H.HP * 100 < H.HT * Tune.HEALMAX && oHeal(adj, hard), seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0))) return use(heal, Potion.AC_DRINK, -1, "low: heal");
-		if (!seen && threatNear && H.HP * 100 < H.HT * HEALPCT && pot && !declined(PotionOfHealing.class, Potion.AC_DRINK)) return use(heal, Potion.AC_DRINK, -1, "low, it's coming: heal");   // (waiting for one seen coming: healed first)
+		if (oPick("heal", pot && H.HP * 100 < H.HT * Tune.HEALMAX && oHeal(adj, hard), seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0))) return use(heal, Potion.AC_DRINK, -1, "low: heal" + hw);
+		if (!seen && threatNear && H.HP * 100 < H.HT * HEALPCT && pot && !declined(heal.getClass(), Potion.AC_DRINK)) return use(heal, Potion.AC_DRINK, -1, "low, it's coming: heal" + hw);   // (waiting for one seen coming: healed first)
 		Waterskin ws = bag(Waterskin.class);
 		if (adj && H.HP * 4 < H.HT && !pot && ws != null && ws.actions(H).contains("DRINK")) return use(ws, "DRINK", -1, "low: waterskin");
 		if (adj && !pot && oPick("esc", oLosing(OESC), H.HP * 4 < H.HT)) {   // dying beside one: a known way out first
@@ -1752,7 +1754,7 @@ public final class Assist {
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
 			if (!OFIGHT || H.HP * 100 < H.HT * Tune.GAMBLE) {   // (MT: the unknowns only when low: the model's 30% came at two thirds of health, 226 times in 120 games)
-			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
+			if (OIDENT || Clues.ON) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble" + (Clues.ON ? " (" + Clues.about(g) + ")" : "")); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
 			}
@@ -1798,7 +1800,8 @@ public final class Assist {
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
 			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
 			// read unknown scrolls to learn them while it's safe, early on a floor (mapping is worth most then)
-			if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
+			if (Clues.ON) { Target t = Clues.testScroll(threatNear, (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 < 400); if (t != null) return t; }   // (agent ID: only a read of use whatever it is)
+			else if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
 				for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i) && !declined(i.getClass(), Scroll.AC_READ)) return use(i, Scroll.AC_READ, -1, "read to learn");
 		}
 		int ent = L.entrance(), ex = L.exit();
@@ -1806,7 +1809,8 @@ public final class Assist {
 			Sungrass.Seed s = bag(Sungrass.Seed.class); if (s != null) return use(s, "PLANT", -1, "sungrass");
 		}
 		boolean left = floorLeft();
-		if (H.HP * 2 >= H.HT && !starving() && !left && !threatNear) {   // drink unknown potions to learn them at the floor's end, safely
+		if (Clues.ON) { Target t = Clues.testPotion(threatNear, left); if (t != null) return t; }   // (agent ID: at the floor's end, at a puzzle's door, never a likely Healing)
+		else if (H.HP * 2 >= H.HT && !starving() && !left && !threatNear) {   // drink unknown potions to learn them at the floor's end, safely
 			boolean scr = false, burn = false;
 			for (Item i : H.belongings.backpack) scr |= i instanceof Scroll;
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
