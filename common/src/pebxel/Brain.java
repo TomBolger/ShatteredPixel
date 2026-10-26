@@ -155,6 +155,7 @@ final class Brain {
 		List<Cand> cs = new ArrayList<>();
 		for (Target t : out) { Cand c = null; for (Cand o : offers) if (o.t == t) c = o; cs.add(c != null ? c : new Cand(t, "list", role(t))); }
 		if (fight && FIGHTV) own(cs);
+		if (!fight && SKIPV) try { skip(cs); } catch (Throwable e) { Assist.lastError = e; }
 		// the values, then the table's rows
 		for (Cand c : cs) if (!c.valued()) value(c);
 		Rules.apply(cs, legacyA);
@@ -220,6 +221,33 @@ final class Brain {
 			if (!has(cs, Role.DOWN) && stairsOk(ex) && Assist.L.map[ex] != Terrain.LOCKED_EXIT && Dungeon.depth % 5 != 4) cs.add(new Cand(new Target(ex, ex == h.pos ? Assist.PICKUP : Assist.GO, "escape: down the stairs (brain)"), "brain", Role.DOWN));
 		}
 	}
+	// (M2) descend or explore: the rest of a floor is worth its finds (food, XP, items: BLOOT floors for a whole floor,
+	// by the share still unexplored) and costs its danger: a foe in sight, awake, not yet after the hero, that the fight
+	// model says would likely kill him (met again BMEET of the time if he stays). When the danger outweighs the finds,
+	// the stairs down (known, a short walk, not past the foe; not the boss's) are offered with that value. The food
+	// side (short of food: on down) is K6's AsBasics.hurry.
+	static final boolean SKIPV = Assist.opt("BSKIP", true);
+	static final double LOOT = Assist.optInt("BLOOT", 60) / 100.0, MEET = Assist.optInt("BMEET", 50) / 100.0, SKIPPD = Assist.optInt("BSKIPPD", 15) / 100.0;
+	static void skip(List<Cand> cs) {
+		Hero h = H;
+		if (has(cs, Role.DOWN) || Dungeon.bossLevel() || Dungeon.depth % 5 == 4 || Assist.L.locked || Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null || !Assist.floorLeft()) return;
+		int ex = Assist.L.exit();
+		if (ex < 0 || ex >= Assist.L.length() || !Assist.known[ex] || Assist.L.map[ex] == Terrain.LOCKED_EXIT || Assist.walk(ex) > 20 || Assist.bad.containsKey(ex)) return;
+		List<Mob> ds = new ArrayList<>();
+		for (Mob m : Assist.mobs()) if (Assist.enemy(m) && m.state != m.SLEEPING && m.state != m.PASSIVE && !(m instanceof NPC) && !(m instanceof Piranha) && !Char.hasProp(m, Char.Property.IMMOVABLE)) ds.add(m);
+		if (ds.isEmpty()) return;
+		for (Mob m : ds) if (Assist.distance(m.pos, ex) < Assist.walk(ex)) return;   // (it's nearer the stairs than he is)
+		double pd = FightModel.evaluate(h, ds).pDeath;
+		if (pd < SKIPPD) return;
+		int seen = 0, left = 0; for (int c = 0; c < Assist.L.length(); c++) if (Assist.dist[c] > 0 && Assist.dist[c] < Assist.INF) { if (Assist.unseenBy(c)) left++; else seen++; }
+		double share = Math.min(1, Math.max(0.1, left * 4.0 / Math.max(1, seen + left * 4)));   // (an unknown edge cell stands for the room beyond it)
+		double r = Budget.ahead(h), v = MEET * pd * r - LOOT * share;
+		Cand c = new Cand(new Target(ex, ex == h.pos ? Assist.PICKUP : Assist.GO, "escape: down the stairs (brain: the floor's danger)"), "brain", Role.DOWN);
+		c.v = v; c.note = String.format(java.util.Locale.ROOT, "skip pd %.2f share %.2f R %.1f", pd, share, r);
+		cs.add(c); skips++;
+	}
+	static int skips;
+
 	static boolean has(List<Cand> cs, Role r) { for (Cand c : cs) if (c.role == r) return true; return false; }
 	/** Stairs known, a short walk off, no foe nearer to them than the hero. */
 	static boolean stairsOk(int s) {
@@ -315,8 +343,9 @@ final class Brain {
 
 	/** The game's tally (AssistBot prints it with the result). */
 	static String stats() {
-		String s = String.format("decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", decisions, fights, overrides,
+		String s = String.format("skips %d decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", skips, decisions, fights, overrides,
 				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
+		skips = 0;
 		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset(); lastDepth = fledFrom = -1; fledAt = -999; lastPlanRole = null;
 		return s;
 	}
