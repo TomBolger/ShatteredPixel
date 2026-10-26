@@ -846,20 +846,21 @@ public final class Assist {
 		if (out.isEmpty()) return;
 		Target a = out.get(0); int ao = a.obj >= 0 ? a.obj : a.cell; float now = Actor.now();
 		boolean walkA = (a.kind == GO || a.kind == PICKUP) && ao >= 0 && !a.why.startsWith("escape") && !a.why.startsWith("boss") && !a.why.contains("bomb") && !a.why.startsWith("your ");   // (never over the player's own choice)
-		if (comL != L) { comL = L; oscHist.clear(); comObj = -1; }
+		if (comL != L) { comL = L; oscHist.clear(); comObj = -1; oscPos = -1; }
 		if (comObj >= 0 && (now > comUntil || seenFoe || inDanger || hp == comObj || (walk(comObj) <= 1 && seenChar(comObj) != null) || walk(comObj) >= INF)) comObj = -1;
 		if (comObj >= 0 && walkA && ao != comObj) {
 			for (int j = 1; j < out.size(); j++) { Target t = out.get(j); int o = t.obj >= 0 ? t.obj : t.cell;
 				if (o == comObj && (t.kind == GO || t.kind == PICKUP)) { out.add(0, out.remove(j)); t.why = t.why + " (kept: no dithering)"; return; } }
 			Target t = new Target(comObj, seenHeap(comObj) != null ? PICKUP : GO, comWhy + " (kept: no dithering)"); t.obj = comObj; out.add(0, t); return;
 		}
-		if (!walkA || seenFoe) return;
+		if (!walkA || seenFoe || hp == oscPos) return;   // (only arrivals count: plans made again on the same cell aren't a dither)
+		oscPos = hp;
 		long key = (long) hp * 100003 + ao; int n = 0;
 		for (long k : oscHist) if (k == key) n++;
 		oscHist.addLast(key); while (oscHist.size() > OSCN) oscHist.removeFirst();
 		if (n >= 2 && comObj < 0) { comObj = ao; comUntil = now + OSCT; comWhy = a.why; oscHist.clear(); }
 	}
-	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1; static float comUntil; static String comWhy = "";
+	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1, oscPos = -1; static float comUntil; static String comWhy = "";
 	static final int OSCN = optInt("OSCN", 40), OSCT = optInt("OSCT", 40);
 
 	/** Objectives the player passed over lately go behind the rest (still there for a Down), unless an enemy is in
