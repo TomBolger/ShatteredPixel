@@ -172,6 +172,11 @@ public final class GearValue {
 
 	/** What to put on now (null: nothing): the pack's piece whose cost beats the worn by at least need (a share, e.g.
 	 *  0.05: not for a rounding's worth), the most. Worn pieces known cursed stay (they can't come off). */
+	/** Set by the assistant when its own armour plan (AsGear) chooses the armour. */
+	public static boolean armorElsewhere;
+	/** That plan's chosen armour, never spare (sold or dropped). */
+	public static Item keepArmor;
+
 	public static Item bestEquip(Hero h, double need) {
 		Item best = null; double bestGain = 0; Item bestCur = null;
 		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
@@ -179,6 +184,7 @@ public final class GearValue {
 		for (Item i : h.belongings.backpack) {
 			if (!judged(i)) continue;
 			boolean wpn = !(i instanceof Armor);
+			if (!wpn && armorElsewhere) continue;   // (HE: AsGear's armour plan decides the armour)
 			EquipableItem cur = wpn ? h.belongings.weapon() : h.belongings.armor();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
 			if (cur instanceof MagesStaff || cur instanceof ClassArmor) continue;
@@ -201,7 +207,7 @@ public final class GearValue {
 		double[] bs = { slotCost(h, true), slotCost(h, false) };
 		List<Item> out = new ArrayList<>();
 		for (Item i : h.belongings.backpack) {
-			if (!judged(i) || i.isEquipped(h)) continue;
+			if (!judged(i) || i.isEquipped(h) || (i == keepArmor && keepArmor != null)) continue;
 			double base = bs[i instanceof Armor ? 1 : 0], c = costWith(h, i, base);
 			if (c >= base * 0.98 && !futureUse(h, i, base)) out.add(i);
 		}

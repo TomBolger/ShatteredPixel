@@ -808,7 +808,7 @@ final class AsItems {
 		// addItemToSpawn), so an unknown kind first found on this floor may well be it (K6: the room's food left
 		// behind on most floors that had one). Thrown from 3 or more off (a gas it turns out to be stays off the hero).
 		Item bel = rem == null ? Clues.believed(PotionOfFrost.class, Clues.PUZ) : null;   // (agent ID: the colour the clues believe is the room's Frost first)
-		Potion g = rem == null ? (bel instanceof Potion && ok(bel, Item.AC_THROW) ? (Potion) bel : floorGuess()) : null;
+		Potion g = rem == null ? (bel instanceof Potion && ok(bel, Item.AC_THROW) ? (Potion) bel : floorGuess(PotionOfFrost.class)) : null;
 		if (rem == null && (g == null || hpf < 0.5f)) return null;
 		// (the fire's cells aren't passable: a throw stops on the cell before one, as at a barricade. So the aim is a
 		// free floor cell beside the fire: a Frost potion's freeze there reaches it (EternalFire looks round each cell))
@@ -860,12 +860,18 @@ final class AsItems {
 		for (Item i : H.belongings) if (i instanceof Potion && !Assist.known(i)) potionFloor.putIfAbsent(i.getClass(), Dungeon.depth);
 	}
 	/** An unknown potion of a kind first found on this floor (the fewest held first: the remedy is one potion), or null. */
-	static Potion floorGuess() {
-		Potion best = null;
-		for (Item i : H.belongings) if (i instanceof Potion && !Assist.known(i) && !(i instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.exotic.ExoticPotion) && Integer.valueOf(Dungeon.depth).equals(potionFloor.get(i.getClass())) && ok(i, Item.AC_THROW))
-			if (best == null || i.quantity() < best.quantity()) best = (Potion) i;
+	static Potion floorGuess(Class<?> kind) {
+		Potion best = null; double bq = -1;
+		for (Item i : H.belongings) if (i instanceof Potion && !Assist.known(i) && !(i instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.exotic.ExoticPotion) && Integer.valueOf(Dungeon.depth).equals(potionFloor.get(i.getClass())) && ok(i, Item.AC_THROW)) {
+			// (HE: never a likely Healing: EG saw the guess throw one. Skipped when the clues think it likelier Healing
+			// than the remedy, or Healing at 25% or more; the likeliest remedy first, then the fewest held)
+			double ph = Identify.pHeal(i), q = Identify.p(i.getClass(), kind);
+			if (ph >= HEALGUESS || ph > q) continue;
+			if (best == null || q > bq + 1e-9 || (Math.abs(q - bq) <= 1e-9 && i.quantity() < best.quantity())) { best = (Potion) i; bq = q; }
+		}
 		return best;
 	}
+	static final double HEALGUESS = Assist.optInt("HEALGUESS", 25) / 100.0;
 	/** Unknown potions found on this floor kept back from drinking to learn while a room's remedy is still wanted:
 	 *  the magical fire burns in sight, a barricade with the unknown behind it is seen. */
 	static boolean remedyHeld(Item i) {
@@ -922,7 +928,7 @@ final class AsItems {
 		// (no plain Bomb on a barricade: bombs are kept for the climb, AsEconomy.bombSpendOk)
 		// none known: the storage room put a Potion of Liquid Flame among the floor's items (StorageRoom.paint): an
 		// unknown kind first found here, thrown from 3 or more off and off grass (K6: the room's food never reached)
-		Potion g = floorGuess();
+		Potion g = floorGuess(PotionOfLiquidFlame.class);
 		if (g != null && bd >= 3 && !L.flamable[hp] && hpf >= 0.5f) return use(g, Item.AC_THROW, aim, "barricade: an unknown potion found here (the room's Liquid Flame is among the floor's)");
 		return null;
 	}
@@ -930,7 +936,7 @@ final class AsItems {
 	 *  from here: to the nearest spot one lands from, 3 or 4 off its aim (K6: the storage room's food never seen). */
 	static Target toBarricade() {
 		if (AsQuests.graveOpen() || hpf < 0.5f || barWait()) return null;
-		boolean rem = has(PotionOfLiquidFlame.class) != null || wand(WandOfFireblast.class) != null || has(InfernalBrew.class) != null || floorGuess() != null;
+		boolean rem = has(PotionOfLiquidFlame.class) != null || wand(WandOfFireblast.class) != null || has(InfernalBrew.class) != null || floorGuess(PotionOfLiquidFlame.class) != null;
 		if (!rem) return null;
 		Set<Integer> aims = new HashSet<>();
 		for (int c = 0; c < LEN; c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c]) {
