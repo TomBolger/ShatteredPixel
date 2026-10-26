@@ -80,7 +80,7 @@ final class AsItems {
 		if (H == null || L == null || !H.isAlive() || !Assist.setupOk(L)) return false;
 		float now = Actor.now();
 		if (prepAt == now && prepPos == H.pos && prepL == L) return true;
-		if (prepL != L) { ban.clear(); tries.clear(); cross = null; }
+		if (prepL != L) { ban.clear(); tries.clear(); cross = null; done.clear(); }
 		prepAt = now; prepPos = H.pos; prepL = L;
 		hp = H.pos; W = L.width(); LEN = L.length(); hpf = H.HP / (float) Math.max(1, H.HT);
 		ban.values().removeIf(t -> t < now);
@@ -148,6 +148,7 @@ final class AsItems {
 			Target t;
 			if ((t = hazard()) != null) return t;
 			if (Assist.foul(hp) || Assist.burning()) return null;   // (out of the gas / fire first: Assist's escape)
+			if ((t = litBombs(planA)) != null) return t;
 			if ((t = crossing()) != null) return t;   // (a puzzle's crossing under way: its steps)
 			if (near.isEmpty()) return null;
 			PotionOfHealing ph = H.belongings.getItem(PotionOfHealing.class);
@@ -187,6 +188,31 @@ final class AsItems {
 	static int x(int c) { return c % W; }
 	static int y(int c) { return c / W; }
 	static int dist(int a, int b) { return Math.max(Math.abs(x(a) - x(b)), Math.abs(y(a) - y(b))); }
+	/** A lit bomb lying in sight (its fuse shows) whose blast reaches c (a step to spare). */
+	static boolean blast(int c) {
+		for (Heap h : L.heaps.valueList()) { if (!h.seen) continue; for (Item i : h.items) if (i instanceof Bomb && ((Bomb) i).fuse != null && dist(h.pos, c) <= bombRange(i) + (c == hp ? 0 : 1)) return true; }
+		return false;
+	}
+	/** A lit bomb about to go off (ours or a foe's): out of its blast, and plan A not into it (wait instead). */
+	static Target litBombs(Target planA) {
+		boolean any = false; for (Heap h : L.heaps.valueList()) if (h.seen) for (Item i : h.items) if (i instanceof Bomb && ((Bomb) i).fuse != null) any = true;
+		if (!any) return null;
+		if (blast(hp)) {
+			int best = -1, bd = Assist.INF;
+			for (int c = 0; c < LEN; c++) if (Assist.dist[c] > 0 && Assist.dist[c] < bd && Assist.open[c] && Actor.findChar(c) == null && !blast(c)) { bd = Assist.dist[c]; best = c; }
+			if (best >= 0) { Target t = new Target(best, Assist.GO, IT + "bomb: out of the blast"); t.obj = best; return t; }
+			return null;
+		}
+		if (planA != null && planA.cell >= 0 && planA.cell != hp && (planA.kind == Assist.GO || planA.kind == Assist.PICKUP || planA.kind == Assist.ENEMY)) {
+			int step = planA.cell;
+			if (blast(step) || (planA.kind == Assist.ENEMY && dist(step, hp) > 1)) {   // (walking up to a foe by the bomb: no)
+				boolean into = blast(step); if (!into) for (int k = 0; k < 8; k++) { int n = hp + Assist.N8[k]; if (Assist.nb(hp, n) && blast(n) && dist(n, step) < dist(hp, step)) into = true; }
+				if (into) { Target t = new Target(hp, Assist.WAIT, IT + "bomb: wait for it"); t.action = Assist.WAIT_ACT; t.obj = -1; return t; }
+			}
+		}
+		return null;
+	}
+
 	/** A thrown thing aimed at c lands on c (nothing in the way). */
 	static boolean lands(int c) { return c != hp && c >= 0 && c < LEN && Assist.line(hp, c); }
 	/** A bolt aimed at the char on c hits it. */
@@ -300,7 +326,8 @@ final class AsItems {
 			ScrollOfPassage pa = has(ScrollOfPassage.class);
 			if (pa != null && sc && Dungeon.interfloorTeleportAllowed() && Dungeon.depth > 1) return use(pa, Scroll.AC_READ, -1, "passage: out of here");
 			BeaconOfReturning be = has(BeaconOfReturning.class);
-			if (be != null && be.returnDepth >= 0 && (be.returnDepth != Dungeon.depth || dist(be.returnPos, hp) > 8)) { beaconReturn = true; return use(be, Spell.AC_CAST, -1, "beacon: return"); }
+			BeaconOfReturning.BeaconTracker bt = H.buff(BeaconOfReturning.BeaconTracker.class);
+			if (be != null && bt != null && bt.returnDepth >= 0 && bt.returnBranch == Dungeon.branch && (bt.returnDepth != Dungeon.depth || dist(bt.returnPos, hp) > 8)) { beaconReturn = true; return use(be, Spell.AC_CAST, -1, "beacon: return"); }
 		}
 		return null;
 	}
@@ -610,7 +637,8 @@ final class AsItems {
 	// =============================================================================================================
 
 	static final int LEV = 1, INVIS = 2, PURE = 3;
-	static final class Cross { int heap, home, kind; Level l; float until; }
+	static final class Cross { int heap, home, kind, tries; Level l; float until; }
+	static final Set<Integer> done = new HashSet<>();   // prizes given up on this floor
 	static Cross cross;
 
 	/** Can the remedy's buff take the hero over c (beyond the plain walk)? */
@@ -634,7 +662,7 @@ final class AsItems {
 		return d[b];
 	}
 	static boolean prize(Heap h) {
-		if (h == null || h.isEmpty() || !h.seen || Assist.passed.contains(h.pos) || Assist.skippedHeaps.contains(h.pos)) return false;
+		if (h == null || h.isEmpty() || !h.seen || Assist.passed.contains(h.pos) || Assist.skippedHeaps.contains(h.pos) || done.contains(h.pos)) return false;
 		if (h.type == Heap.Type.FOR_SALE || h.type == Heap.Type.TOMB) return false;
 		if (h.type == Heap.Type.LOCKED_CHEST && Notes.keys(new com.shatteredpixel.shatteredpixeldungeon.items.keys.GoldenKey(Dungeon.depth)) <= 0) return false;
 		if (h.type == Heap.Type.CRYSTAL_CHEST && Notes.keys(new com.shatteredpixel.shatteredpixeldungeon.items.keys.CrystalKey(Dungeon.depth)) <= 0) return false;
@@ -655,11 +683,16 @@ final class AsItems {
 		int goal = h != null && !h.isEmpty() && h.seen ? c.heap : c.home;
 		if (goal == c.home && (hp == c.home || Assist.dist[c.home] < Assist.INF && !Assist.danger[hp] && !L.pit[hp])) { cross = null; return null; }
 		if (b == null) { if (goal == c.heap && Assist.walk(c.heap) >= Assist.INF) { cross = null; return null; } }
-		if (hp == goal) return goal == c.heap ? new Target(hp, Assist.PICKUP, IT + "puzzle: the prize") : null;
+		if (hp == goal) {   // (on it: picked up; twice and still there, it can't be: given up)
+			if (goal != c.heap) return null;
+			if (++c.tries > 2) { done.add(c.heap); cross = null; return null; }
+			return new Target(hp, Assist.PICKUP, IT + "puzzle: the prize");
+		}
 		int[] f = new int[1]; int w = crossWalk(hp, goal, c.kind, f);
 		if (w >= Assist.INF) { cross = null; return null; }
 		if (b != null && c.kind == LEV && goal == c.heap && w + 2 > t && !hasWayBack(c)) { c.heap = -1; }   // (not enough time left to get back: home)
 		int step = w == 1 ? goal : f[0];
+		if (Assist.bad.containsKey(step) || H.rooted) { if (c.heap >= 0) done.add(c.heap); cross = null; return null; }   // (the step did nothing when tried: given up)
 		Target r = new Target(step, step == c.heap ? Assist.PICKUP : Assist.GO, IT + "puzzle: " + (goal == c.heap ? "to the prize" : "back") + " (" + (c.kind == LEV ? "levitating" : c.kind == INVIS ? "invisible" : "purity") + ")");
 		r.obj = step; return r;
 	}
@@ -668,7 +701,7 @@ final class AsItems {
 	/** Start a crossing: a prize seen that the plain walk can't reach (or only through danger), within the buff's
 	 *  time over the cells it lets the hero cross, and the potion known. */
 	static Target puzzles() {
-		if (cross != null) return null;
+		if (cross != null || Dungeon.bossLevel()) return null;
 		Target t;
 		if ((t = magicalFire()) != null) return t;
 		if ((t = barricade()) != null) return t;
@@ -871,7 +904,7 @@ final class AsItems {
 			for (int c = 0; c < LEN; c++) { Trap tr = L.traps.get(c); if (tr != null && tr.visible && tr.active && L.heroFOV[c] && trapArea(tr) > 0 && dist(c, hp) <= 6 && bolt(c)) return use(s, Spell.AC_CAST, c, "reclaim the trap: " + tr.getClass().getSimpleName()); }
 		}
 		BeaconOfReturning be = has(BeaconOfReturning.class);
-		if (be != null && be.returnDepth < 0 && hp == L.entrance() && !Dungeon.bossLevel() && Dungeon.depth % 5 != 0) { beaconReturn = false; return use(be, Spell.AC_CAST, -1, "beacon: set at the stairs"); }
+		if (be != null && H.buff(BeaconOfReturning.BeaconTracker.class) == null && hp == L.entrance() && !Dungeon.bossLevel() && Dungeon.depth % 5 != 0) { beaconReturn = false; return use(be, Spell.AC_CAST, -1, "beacon: set at the stairs"); }
 		return null;
 	}
 
