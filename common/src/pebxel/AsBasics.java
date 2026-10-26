@@ -467,7 +467,7 @@ final class AsBasics {
 		if (Actor.now() - fishSeenAt < 20) return null;
 		Hero h = Dungeon.hero; int best = -1, bd = INF;
 		for (com.shatteredpixel.shatteredpixeldungeon.items.Heap hp : L.heaps.valueList()) {
-			if (!hp.seen || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
+			if (!Assist.sees(hp) || hp.type != com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.HEAP || !(hp.peek() instanceof Food) || hp.peek() instanceof Blandfruit) continue;
 			int c = hp.pos; if (!L.water[c] || !known[c] || bad.containsKey(c) || Actor.findChar(c) != null) continue;
 			int d = waterWalk(c); if (d < bd) { bd = d; best = c; }
 		}
