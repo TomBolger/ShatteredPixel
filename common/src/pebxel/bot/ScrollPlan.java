@@ -39,6 +39,19 @@ import java.util.*;
  * sewers holding rarely pays (HOLD1's lesson), deeper it can.
  *
  * Only what the player sees: shown levels and enchantments (HeroView.visLevel), known scrolls, the source's odds.
+ *
+ * Anchoring: the fight model's own floor survival (RunProjection's exp(-(0.05 + 0.55 load))) put Goo at 0.1-0.4 and
+ * Tengu at 0.1-0.3, so the planner held everything for the bosses. Here a floor's death rate is the bot's own
+ * (SEMP: honest games; SMILD: half again the health), times (load + D0) / (base load + D0), load the floor's health
+ * lost in whole bars (cost / health, summed over its fights) plus TIME a thousand a fight's turn.
+ *
+ * What the batches said (288 full mild games each, baseline 16.26): holding loses wherever it is allowed: from the
+ * sewers 14.80-15.36 (the sewer deaths doubled, 13 to 24-41, ten of them holding scrolls), from the prison on 15.55,
+ * with a steeper model (GAM 2) 16.05; HOLD1 (HE) and the planner agree, survival now wins. So UPHOLDON is off by
+ * default and the hold is only valued for the why ("holding for mail 0.25"). The split between armour and weapon by
+ * the scroll's own floors of run ties MD's tuned rule (16.27) and beats it with a fight's turns counted (TIME 8:
+ * 16.57; the planner alone gave the armour +12 by depth 17 and the city's casters, whose bolts no armour stops, killed
+ * more). The planner's own commit (UPCOMMIT) kept cloth too long over its 12-floor horizon (15.44): HE's commit stays.
  */
 public final class ScrollPlan {
 	private ScrollPlan() { }
