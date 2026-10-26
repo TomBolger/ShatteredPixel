@@ -143,7 +143,7 @@ public final class Assist {
 	static final Map<Integer, Integer> talked = new HashMap<>();
 	static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
 	static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
-	static int actPos = -1, actCell = -1, actKind; private static float actTime = -1; private static Item actItem;
+	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; private static Item actItem;
 	static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
 	static float floorT0;
 	static int eatBand;
@@ -396,7 +396,7 @@ public final class Assist {
 		try {
 			Hero h = Dungeon.hero;
 			if (t == null || h == null || !h.isAlive()) return false;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
 			boolean aimingNow = Controls.aiming();
 			if (aimingNow) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 			if (!h.ready) return false;
@@ -443,7 +443,7 @@ public final class Assist {
 	public static void noted(Target t) {
 		try {
 			Hero h = Dungeon.hero; if (t == null || h == null) return;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
 			if (t.kind == WAIT && (SEARCH_ACT.equals(t.action) || (t.action == null && t.cell == h.pos))) noteSearch();
 			if (t.kind != USE && t.kind != WAIT && t.cell >= 0) noteTalk(t.cell);
 			if (t.item != null && (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action))) zapped.put(t.item, Actor.now());
@@ -573,6 +573,7 @@ public final class Assist {
 		// the last act did nothing (no time passed, nowhere moved): that target is no use for a while
 		if (actTime >= 0 && actPos == hp && Actor.now() == actTime && actCell >= 0 && actKind != USE && actKind != WAIT) {
 			bad.put(actCell, Actor.now() + 30);
+			if (actKind == ENEMY && actObj >= 0 && actObj != actCell && !adjacent(actObj, hp)) bad.put(actObj, Actor.now() + 5);   // (a walk towards a foe that did nothing: that foe not walked to for a few turns. K7: 300 such walks at one moment)
 			if (actKind == PICKUP && !keyAt(actCell)) { if (fight) combatHeld.add(actCell); else passed.add(actCell); }   // (a key: only the while above; in a fight, till it's over)
 		}
 		actTime = -1;
@@ -787,6 +788,7 @@ public final class Assist {
 	}
 
 	static Target front(Target t) {   // t_front: pinned, after those pinned before it
+		if ((t.kind == GO || t.kind == PICKUP) && t.cell >= 0 && t.cell != hp && bad.containsKey(t.cell)) return t;   // (a walk there did nothing a moment ago: not pinned again. K7: a boss dodge to a cell the game wouldn't walk to, offered hundreds of times with no time passing)
 		for (int j = h0; j < out.size(); j++) if (out.get(j).cell == t.cell && out.get(j).kind == t.kind && t.kind != USE) { del(j); break; }
 		if (out.size() >= CAP) out.remove(out.size() - 1);
 		t.key = 0; out.add(h0++, t);
@@ -1072,6 +1074,7 @@ public final class Assist {
 		}
 		return f;
 	}
+	static float cloakAt = -1; static int cloakPos = -1, cloakN;   // (the cloak offered with no time passing: not again this moment)
 	static float[] fireMem; static final int FIREMEM = optInt("FIREMEM", 8);
 	static boolean burning() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Burning")) return true; return false; }
 	static boolean fireAt(int c) { Blob f = L.blobs.get(Fire.class); return c >= 0 && c < LEN && L.heroFOV[c] && f != null && f.volume > 0 && f.cur != null && f.cur[c] > 0; }
@@ -1827,8 +1830,13 @@ public final class Assist {
 			Object ch = ck == null ? null : field(ck, "charge");
 			boolean on = H.buff(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.cloakStealth.class) != null || H.invisible > 0;
 			int hn = 0, close = INF; for (Mob m : mobs()) if (enemy(m) && hunting(m) && !(m instanceof NPC) && !(m instanceof Piranha)) { hn++; close = Math.min(close, walk(m.pos)); }
-			if (ck != null && !on && !ck.cursed && ch instanceof Integer && (Integer) ch > 0 && hn > 0 && close <= 4 && (ck.isEquipped(H) || H.hasTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.LIGHT_CLOAK)) && !declined(ck.getClass(), "STEALTH"))
+			// (it must turn on: magic-immune it does nothing, and an active one turns off; K7: 60 offers at one moment)
+			boolean can = ck != null && H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MagicImmune.class) == null && field(ck, "activeBuff") == null && ck.actions(H).contains("STEALTH");
+			if (can && !on && !ck.cursed && ch instanceof Integer && (Integer) ch > 0 && hn > 0 && close <= 4 && (ck.isEquipped(H) || H.hasTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.LIGHT_CLOAK)) && !declined(ck.getClass(), "STEALTH")
+					&& !(cloakAt == Actor.now() && cloakPos == hp && ++cloakN > 2)) {
+				if (cloakAt != Actor.now() || cloakPos != hp) { cloakAt = Actor.now(); cloakPos = hp; cloakN = 0; }
 				return use(ck, "STEALTH", -1, "cloak: a sure first blow");
+			}
 		}
 		if (seen) return ranged();
 		// nothing in view
