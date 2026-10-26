@@ -60,7 +60,7 @@ final class AsQuests {
 			if (b == null) b = AsBasics.restStairs();
 			if (b != null) return b;
 			b = AsBasics.crab(planA);
-			if (b == null) b = AsBasics.casterTactic(planA);
+			if (b == null && !kingFight()) b = AsBasics.casterTactic(planA);   // (the king's warlocks: AsBosses.king)
 			if (b == null) b = AsBasics.stuck(planA);
 			if (b == null) b = AsBasics.waterFood(planA);
 			if (b == null) b = AsBasics.piranha(planA);
@@ -94,6 +94,13 @@ final class AsQuests {
 		} catch (Throwable e) { lastError = e; return null; }
 	}
 
+	/** The Dwarf King alive on his floor (his minions are AsBosses.king's). */
+	static boolean kingFight() {
+		if (!AsBosses.ON || !AsBosses.KING2 || !(L instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CityBossLevel)) return false;
+		for (Mob m : mobs()) if (m instanceof DwarfKing && m.isAlive()) return true;
+		return false;
+	}
+
 	/** A tactic's move vetoed (Assist planList's hook): into the Great Crab's dead end. */
 	static boolean vetoMove(Target t) {
 		try { return AsBasics.crabVeto(t); } catch (Throwable e) { lastError = e; return false; }
@@ -120,9 +127,38 @@ final class AsQuests {
 		try {
 			if (ON && hk != null && "drink to learn".equals(hk.why) && graveOpen()) return true;   // (unknown potions kept for the barricade: one is the floor's Liquid Flame)
 			if (AsBosses.vetoAim(hk)) return true;
+			if (AsBosses.vetoAggression(hk)) return true;
+			if (ON && fire(hk) && heartAlive()) return true;   // (the rot garden: fire on the heart loses the seed, and the garden's grass carries it)
+			if (ON && holdInvis(hk)) return true;
 			return AsBasics.veto(hk);
 		} catch (Throwable e) { lastError = e; return false; }
 	}
+	/** Every rule's proposal (Rules' veto row, not only the hands'): fire with the rot heart alive, Aggression at a boss. */
+	static boolean vetoAll(Target t) {
+		try { return ON && t != null && ((fire(t) && heartAlive()) || AsBosses.vetoAggression(t)); } catch (Throwable e) { lastError = e; return false; }
+	}
+
+	/** A use that sets fire: Liquid Flame thrown, Fireblast zapped (or the staff's), a firebomb, a Firebloom seed. */
+	static boolean fire(Target hk) {
+		if (hk == null || hk.kind != USE || hk.item == null) return false;
+		Item i = hk.item;
+		if (i instanceof PotionOfLiquidFlame) return Item.AC_THROW.equals(hk.action);
+		if (i instanceof WandOfFireblast || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.bombs.Firebomb || i instanceof com.shatteredpixel.shatteredpixeldungeon.plants.Firebloom.Seed) return true;
+		if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff) return field(i, "wand") instanceof WandOfFireblast && com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff.AC_ZAP.equals(hk.action);
+		return false;
+	}
+	/** The Wandmaker's rot heart alive on this floor, seen. */
+	static boolean heartAlive() {
+		for (Mob m : mobs()) if (m instanceof RotHeart && m.isAlive() && (L.heroFOV[m.pos] || known[m.pos])) return true;
+		return false;
+	}
+	/** Invisibility kept for Tengu (strategy-reference 4.2): the last one not drunk to cross to a prize on 6-9. */
+	static boolean holdInvis(Target hk) {
+		if (hk == null || hk.kind != USE || !(hk.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility) || hk.why == null) return false;
+		if (Dungeon.depth < 6 || Dungeon.depth > 9 || hk.item.quantity() > 1) return false;
+		return hk.why.contains("the prize past");
+	}
+
 	/** The corpse dust quest on and the dust not in hand: the Wandmaker's floor (unknown potions kept for the barricade). */
 	static boolean graveOpen() {
 		if (!flag(Wandmaker.class, "spawned") || !flag(Wandmaker.class, "given") || Wandmaker.Quest.wand1 == null || !seenAt.containsKey(Wandmaker.class)) return false;

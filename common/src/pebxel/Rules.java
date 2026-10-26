@@ -61,6 +61,7 @@ final class Rules {
 		veto("food: a quest past its budget", c -> AsBasics.questOver(c.t)),
 		// the old shooter tactic against a caster (K6-base0: 38 of 47 deaths from depth 11 were bolts, waiting "round the corner")
 		veto("caster: the old corner", c -> AsBasics.casterVeto(c.t)),
+		veto("quests/bosses: fire by the rot heart, Aggression at a boss", c -> AsQuests.vetoAll(c.t)),
 		veto("caster: no waiting in its line", c -> AsBasics.waitInLine(c.t)),
 		// -- the brain's own steadiness ------------------------------------------------------------------------------
 		// a walk to the stairs, chosen last turn over the fight, kept on: re-weighed from scratch each step it went back
