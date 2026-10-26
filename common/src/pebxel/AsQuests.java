@@ -60,7 +60,7 @@ final class AsQuests {
 			if (b == null) b = AsBasics.restStairs();
 			if (b != null) return b;
 			b = AsBasics.crab(planA);
-			if (b == null) b = AsBasics.casterTactic(planA);
+			if (b == null && !kingFight()) b = AsBasics.casterTactic(planA);   // (the king's warlocks: AsBosses.king)
 			if (b == null) b = AsBasics.stuck(planA);
 			if (b == null) b = AsBasics.waterFood(planA);
 			if (b == null) b = AsBasics.piranha(planA);
@@ -91,6 +91,13 @@ final class AsQuests {
 		} catch (Throwable e) { lastError = e; return null; }
 	}
 
+	/** The Dwarf King alive on his floor (his minions are AsBosses.king's). */
+	static boolean kingFight() {
+		if (!AsBosses.ON || !AsBosses.KING2 || !(L instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CityBossLevel)) return false;
+		for (Mob m : mobs()) if (m instanceof DwarfKing && m.isAlive()) return true;
+		return false;
+	}
+
 	/** A tactic's move vetoed (Assist planList's hook): into the Great Crab's dead end. */
 	static boolean vetoMove(Target t) {
 		try { return AsBasics.crabVeto(t); } catch (Throwable e) { lastError = e; return false; }
@@ -117,6 +124,7 @@ final class AsQuests {
 		try {
 			if (ON && hk != null && "drink to learn".equals(hk.why) && graveOpen()) return true;   // (unknown potions kept for the barricade: one is the floor's Liquid Flame)
 			if (AsBosses.vetoAim(hk)) return true;
+			if (AsBosses.vetoAggression(hk)) return true;
 			return AsBasics.veto(hk);
 		} catch (Throwable e) { lastError = e; return false; }
 	}

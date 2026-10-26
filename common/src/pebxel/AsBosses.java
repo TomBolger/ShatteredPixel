@@ -131,7 +131,7 @@ final class AsBosses {
 	static Target tactics() {
 		if (!ON) return null;
 		int hp = Dungeon.hero.pos, LEN = L.length();
-		if (DBG && (L instanceof PrisonBossLevel || L instanceof CavesBossLevel)) dump();
+		if (DBG && (L instanceof PrisonBossLevel || L instanceof CavesBossLevel || L instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CityBossLevel)) dump();
 		if (PYLON && L instanceof CavesBossLevel) for (Mob m : mobs()) if (m instanceof DM300 && m.isAlive() && ((DM300) m).isSupercharged()) {   // (its own plan dodges: the dodge off the electrified floor and the walk to the pylon over it took turns, for ever)
 			Target t = dm300((DM300) m); if (t != null) return t; }
 		Target dg = dodge(); if (dg != null) return dg;
@@ -288,6 +288,13 @@ final class AsBosses {
 		return c instanceof Mob && L.heroFOV[c.pos] && Char.hasProp(c, Char.Property.BOSS) && c.isInvulnerable(Hero.class);
 	}
 
+	/** A Stone of Aggression at a boss (Yog's fists too): it no longer works on them (v4; strategy-v4 14). */
+	static boolean vetoAggression(Target hk) {
+		if (!ON || hk == null || hk.kind != USE || hk.cell < 0 || !(hk.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfAggression)) return false;
+		Char c = Actor.findChar(hk.cell);
+		return c instanceof Mob && Assist.boss(c);
+	}
+
 	static boolean nearSeat(int c) { return L.distance(c, seat()) <= 4; }
 	static Target wait(int c, String why) { Target t = new Target(c, WAIT, why); t.action = WAIT_ACT; return t; }
 
@@ -395,18 +402,78 @@ final class AsBosses {
 	static final Map<Integer, Float> darkSeen = new HashMap<>(); static final Set<Integer> gone = new HashSet<>();
 	static Level chargeL, pyL; static float chargeAt; static boolean wasCharged; static int litAt = -1, aim = -1;
 
-	/** The Dwarf King on his throne, immune behind his barrier (phase 2): only his minions' deaths wear it down
-	 *  (strategy-reference 4.4); the minions, never him. */
+	/** The Dwarf King (strategy-reference 4.4; DwarfKing): his minions first in every phase (in phase 2 he is immune
+	 *  and only their deaths wear his barrier down: DwarfKing.KingDamager; in 1 and 3 they are what kills). Beside the
+	 *  hero: the warlock first (its bolt ignores armour), then the weakest. None beside him and a warlock bolting him:
+	 *  to it, round the king's side when he's immune (the walk to a warlock beside the throne and the step back off
+	 *  the immune king took turns while it shot, the commonest death on depth 20). Nothing to strike: off the immune
+	 *  king's side, to a cell no warlock's bolt reaches (a minion between them), else where fewest foes touch. */
 	static Target king(DwarfKing dk) {
 		int hp = Dungeon.hero.pos;
-		if (!dk.isAlive() || !dk.isInvulnerable(Hero.class)) return null;
-		Mob o = weakestAdjacent(dk);
-		if (o != null) return new Target(o.pos, ENEMY, "boss: his minions first");
-		if (L.adjacent(dk.pos, hp)) {   // beside him with nothing else to hit: off his side
-			int c = stepOff(dk.pos, 2);
+		if (!dk.isAlive()) return null;
+		boolean immune = dk.isInvulnerable(Hero.class);
+		if (!immune && !KINGALL) return null;
+		Mob o = minionAdjacent(dk);
+		// (not immune: he summons for as long as he lives, so only the warlocks and monks before him: a hero who
+		// struck only the minions, the king beside him, killed ghouls for 400 turns till he died)
+		if (o != null && !immune && L.adjacent(dk.pos, hp) && !(o instanceof DwarfKing.DKWarlock || o instanceof DwarfKing.DKMonk) && enemy(dk) && !Dungeon.hero.isCharmedBy(dk))
+			return new Target(dk.pos, ENEMY, "boss: the king, his ghouls can wait");
+		if (o != null) return new Target(o.pos, ENEMY, immune ? "boss: his minions first" : "boss: his minions before the king");
+		if (Dungeon.hero.rooted) return null;
+		Mob wl = null; int wd = INF;
+		for (Mob m : mobs()) if (m instanceof DwarfKing.DKWarlock && enemy(m) && m.isAlive() && L.heroFOV[m.pos] && !m.isInvulnerable(Hero.class) && bolt(m.pos, hp) && L.distance(m.pos, hp) < wd) { wd = L.distance(m.pos, hp); wl = m; }
+		if (KINGWL && wl != null && (immune || !L.adjacent(dk.pos, hp))) {
+			int st = kingStep(wl.pos, immune ? dk.pos : -1);
+			if (st >= 0) return new Target(st, GO, "boss: to his warlock (its bolt ignores armour)");
+		}
+		if (immune && L.adjacent(dk.pos, hp)) {   // beside him with nothing else to hit: off his side
+			int c = stepOffKing(dk.pos);
 			if (c >= 0) return new Target(c, GO, "boss: off the immune king");
 		}
 		return null;
+	}
+	static final boolean KINGALL = opt("BKINGALL", true), KINGWL = opt("BKINGWL", true);
+
+	/** A shadow bolt from a to b: MAGIC_BOLT stops at the first one in its way (a minion between is a shield). */
+	static boolean bolt(int a, int b) { return new Ballistica(a, b, Ballistica.MAGIC_BOLT).collisionPos == b; }
+
+	/** The minion beside the hero to strike: a warlock first, then the weakest (never the king himself). */
+	static Mob minionAdjacent(DwarfKing dk) {
+		Mob best = null; int hp = Dungeon.hero.pos, bs = INF;
+		for (Mob m : mobs()) if (m != dk && enemy(m) && L.adjacent(m.pos, hp) && !m.isInvulnerable(Hero.class) && !Dungeon.hero.isCharmedBy(m) && m.state != m.PASSIVE) {
+			int sc = m.HP + (m instanceof DwarfKing.DKWarlock ? -1000 : m instanceof DwarfKing.DKMonk ? -500 : 0);
+			if (sc < bs) { bs = sc; best = m; } }
+		return best;
+	}
+
+	/** The first step to beside c, round the immune king's side (each cell beside him costs 6 more) and off the
+	 *  summoning circles and other blows' cells. */
+	static int kingStep(int c, int king) {
+		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
+		int[] cost = new int[N]; Arrays.fill(cost, INF); int[] first = new int[N];
+		PriorityQueue<int[]> q = new PriorityQueue<>((x, y) -> Integer.compare(x[0], y[0]));
+		cost[hp] = 0; first[hp] = -1; q.add(new int[]{0, hp});
+		int best = -1, bs = INF;
+		while (!q.isEmpty()) {
+			int[] e = q.poll(); int u = e[1]; if (e[0] > cost[u]) continue;
+			if (u != hp && L.adjacent(u, c) && cost[u] < bs) { bs = cost[u]; best = u; }
+			for (int k : PathFinder.NEIGHBOURS8) { int n = u + k;
+				if (n < 0 || n >= N || Math.abs(n % W - u % W) > 1 || !L.passable[n] || L.avoid[n] || !(known[n] || L.heroFOV[n]) || (seenChar(n) != null && n != hp)) continue;
+				int nc = cost[u] + 1 + (danger[n] ? 8 : 0) + (king >= 0 && L.adjacent(n, king) ? 6 : 0);
+				if (nc < cost[n]) { cost[n] = nc; first[n] = u == hp ? n : first[u]; q.add(new int[]{nc, n}); } }
+		}
+		return best >= 0 && bs < 40 ? first[best] : -1;
+	}
+
+	/** A free step off the immune king's side: out of his warlocks' bolts where it can be, fewest foes touching. */
+	static int stepOffKing(int king) {
+		int hp = Dungeon.hero.pos, best = -1, bs = INF;
+		for (int k : PathFinder.NEIGHBOURS8) { int n = hp + k;
+			if (n < 0 || n >= L.length() || !open[n] || seenChar(n) != null || danger[n] || L.adjacent(n, king)) continue;
+			int s = adjFoes(n) * 3;
+			for (Mob m : mobs()) if (m instanceof DwarfKing.DKWarlock && enemy(m) && m.isAlive() && bolt(m.pos, n)) s += 5;
+			if (s < bs) { bs = s; best = n; } }
+		return best >= 0 ? best : stepOff(king, 2);
 	}
 
 	/** Yog-Dzewa: immune while a fist lives, and a fist is immune within 4 of him: draw the fist off before striking it
@@ -457,7 +524,7 @@ final class AsBosses {
 		for (int y = 0; y < L.height(); y++) { sb.append("    ");
 			for (int x = 0; x < W; x++) { int c = x + y * W; int t = L.map[c];
 				Char who = Actor.findChar(c);
-				char ch = c == hp ? '@' : who instanceof DM300 ? 'D' : who instanceof Pylon ? (((Mob) who).alignment == Char.Alignment.ENEMY ? 'P' : 'p') : dz.length == LEN && dz[c] ? '!' : elec.length == LEN && elec[c] ? 'E' : t == Terrain.INACTIVE_TRAP ? '^' : t == Terrain.WATER ? '~' : !known[c] ? ' ' : t == Terrain.WALL || t == Terrain.WALL_DECO ? '#' : t == Terrain.DOOR ? '+' : t == Terrain.LOCKED_DOOR ? 'L' : L.passable[c] ? (dist[c] < INF ? '.' : ',') : '?';
+				char ch = c == hp ? '@' : who instanceof DM300 || who instanceof DwarfKing ? 'D' : who instanceof DwarfKing.DKWarlock ? 'W' : who instanceof DwarfKing.DKMonk ? 'M' : who instanceof DwarfKing.DKGhoul ? 'G' : who instanceof DwarfKing.DKGolem ? 'O' : who instanceof Pylon ? (((Mob) who).alignment == Char.Alignment.ENEMY ? 'P' : 'p') : dz.length == LEN && dz[c] ? '!' : elec.length == LEN && elec[c] ? 'E' : t == Terrain.INACTIVE_TRAP ? '^' : t == Terrain.WATER ? '~' : !known[c] ? ' ' : t == Terrain.WALL || t == Terrain.WALL_DECO ? '#' : t == Terrain.DOOR ? '+' : t == Terrain.LOCKED_DOOR ? 'L' : L.passable[c] ? (dist[c] < INF ? '.' : ',') : '?';
 				sb.append(ch); }
 			sb.append('\n'); }
 		System.out.print(sb);
