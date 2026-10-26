@@ -87,9 +87,16 @@ public final class WindowFit {
 		wins.put("armor ability info", () -> new WndInfoArmorAbility(HeroClass.CLERIC, new com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany()));
 		wins.put("journal entry (long)", () -> new WndJournalItem(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.get(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.JOURNAL), "A journal entry", LONG + " " + LONG));
 		wins.put("talent no button (long)", () -> new WndInfoTalent(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.RECALL_INSCRIPTION, 1, null));
+		more(wins, longItem);
 		int tall = 0;
+		java.util.List<String> fails = new java.util.ArrayList<>();
+		Window prev = null; String prevName = null;
 		for (Map.Entry<String, Supplier<Window>> e : wins.entrySet()) {
-			while (Ui.topWindow() != null) { Ui.topWindow().hide(); frame.run(); }
+			if (System.getenv("FITWIN") != null && !e.getKey().contains(System.getenv("FITWIN"))) continue;
+			if (prev != null) backTest(prevName, prev, oc, frame, fails);
+			prev = null;
+			for (int i = 0; i < 20 && Ui.topWindow() != null; i++) { Ui.topWindow().hide(); frame.run(); }
+			try {
 			Window made;
 			try { made = e.getValue().get(); } catch (Throwable t) { System.out.println("  fit: " + e.getKey() + ": not made here (" + t + ")"); continue; }
 			GameScene.show(made);
@@ -97,6 +104,7 @@ public final class WindowFit {
 			for (int i = 0; i < 6; i++) frame.run();
 			Window w = Ui.topWindow();
 			check(w != null, e.getKey() + ": shown");
+			prev = w; prevName = e.getKey();
 			String name = e.getKey() + " (" + w.getClass().getSimpleName() + ")";
 			if (w instanceof pebxel.ui.WatchWindow && ((pebxel.ui.WatchWindow) w).fixed) { System.out.println("  fit: " + name + ": fills the screen by design"); continue; }
 			Camera c = w.camera;
@@ -109,7 +117,8 @@ public final class WindowFit {
 			if (!Controls.tall(w)) {
 				check(pebxel.ui.Caps.clip(c) == null, name + ": fits, no caps");
 				check(c.y >= vt - 2 && c.y + c.screenHeight() <= vb + 2, name + ": fits, inside the view (" + c.y + ".." + (c.y + c.screenHeight()) + " of " + vt + ".." + vb + ")");
-				System.out.println("  fit: " + name + ": fits (" + (int) (c.screenHeight() / 2) + " px tall)");
+				usable(w, name, oc, frame);
+				System.out.println("  fit: " + name + ": fits (" + (int) (c.screenHeight() / 2) + " px tall, zoom " + c.zoom + ", " + (int) (c.screenWidth() / 2) + " wide)");
 				continue;
 			}
 			tall++;
@@ -130,9 +139,114 @@ public final class WindowFit {
 			}
 			int n = reach(w, name, oc, frame);
 			System.out.println("  fit: " + name + ": " + (int) (c.screenHeight() / 2) + " px tall, scrolls inside its frame, " + n + " buttons reached with Down");
+			} catch (AssertionError | RuntimeException x) { fails.add(e.getKey() + ": " + x.getMessage()); System.out.println("  FAIL " + e.getKey() + ": " + x.getMessage()); }
 		}
+		if (prev != null) backTest(prevName, prev, oc, frame, fails);
 		while (Ui.topWindow() != null) { Ui.topWindow().hide(); frame.run(); }
+		if (!fails.isEmpty()) throw new AssertionError(fails.size() + " windows fail: " + fails);
 		System.out.println("windows fit the screen or scroll inside a whole frame: ok (" + wins.size() + " kinds, " + tall + " tall, " + Screen.w + "px)");
+	}
+
+
+	/** The rest: every other window a player can meet (questgivers with their choices, shops, endings, notices, scroll and stone windows). */
+	static void more(LinkedHashMap<String, Supplier<Window>> wins, Item longItem) {
+		String P = "com.shatteredpixel.shatteredpixeldungeon.";
+		Item potion = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing();
+		Item wand = new com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfFireblast();
+		wand.identify();
+		wins.put("resurrect", () -> new WndResurrect(new com.shatteredpixel.shatteredpixeldungeon.items.Ankh()));
+		wins.put("info cell", () -> new WndInfoCell(Dungeon.hero.pos));
+		wins.put("info trap", () -> new WndInfoTrap(new com.shatteredpixel.shatteredpixeldungeon.levels.traps.BurningTrap().set(Dungeon.hero.pos)));
+		wins.put("info plant", () -> new WndInfoPlant(new com.shatteredpixel.shatteredpixeldungeon.plants.Firebloom()));
+		wins.put("info buff", () -> new WndInfoBuff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(Dungeon.hero, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Hunger.class)));
+		wins.put("badge", () -> new WndBadge(com.shatteredpixel.shatteredpixeldungeon.Badges.Badge.MONSTERS_SLAIN_1, true));
+		wins.put("score", WndScoreBreakdown::new);
+		wins.put("list", () -> new WndList(new String[]{"One thing to know", LONG}));
+		wins.put("upgrade", () -> new WndUpgrade(new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade(), Dungeon.hero.belongings.weapon, false));
+		wins.put("upgrade (long)", () -> new WndUpgrade(new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade(), longItem, true));
+		wins.put("shop buy", () -> { com.shatteredpixel.shatteredpixeldungeon.items.Heap h = new com.shatteredpixel.shatteredpixeldungeon.items.Heap(); h.type = com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.FOR_SALE; h.drop(wand); return new WndTradeItem(h); });
+		wins.put("shop buy (long)", () -> { com.shatteredpixel.shatteredpixeldungeon.items.Heap h = new com.shatteredpixel.shatteredpixeldungeon.items.Heap(); h.type = com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.FOR_SALE; h.drop(longItem); return new WndTradeItem(h); });
+		wins.put("shop sell", () -> new WndTradeItem(potion, null));
+		wins.put("shop sell (long)", () -> new WndTradeItem(longItem, null));
+		wins.put("energize", () -> new WndEnergizeItem(potion, null));
+		wins.put("hard notice", () -> new WndHardNotification(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.get(com.shatteredpixel.shatteredpixeldungeon.ui.Icons.WARNING), "A notice", LONG, "Fine", 3));
+		wins.put("error", () -> new WndError(LONG));
+		wins.put("options condensed", () -> new WndOptionsCondensed("A question", LONG, "One", "Two", "Three", "Four", "Five", "Six"));
+		wins.put("options (long labels)", () -> new WndOptions("A question", "Pick", "A fairly long choice that wraps over lines", "Another fairly long choice that wraps", "Short"));
+		wins.put("victory", WndVictoryCongrats::new);
+		wins.put("dailies", WndDailies::new);
+		wins.put("quick bag", () -> new WndQuickBag(Dungeon.hero.belongings.backpack));
+		wins.put("document", () -> new WndDocument(com.shatteredpixel.shatteredpixeldungeon.journal.Document.ADVENTURERS_GUIDE));
+		wins.put("imp reward", () -> new WndImpOld(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Imp(), new com.shatteredpixel.shatteredpixeldungeon.items.quest.DwarfToken()));
+		wins.put("imp talk", () -> new WndQuest(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Imp(), LONG));
+		wins.put("ghost talk", () -> new WndQuest(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost(), "Short."));
+		wins.put("wandmaker (long)", () -> new WndWandmaker(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Wandmaker(), new com.shatteredpixel.shatteredpixeldungeon.items.quest.Embers()));
+		wins.put("blacksmith (rich)", () -> {
+			com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith.Quest.favor = 2000;
+			com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith.Quest.freePickaxe = true;
+			com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith.Quest.smithRewards = null;
+			return new WndBlacksmith(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith(), Dungeon.hero);
+		});
+		wins.put("blacksmith smith", () -> {
+			com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith.Quest.generateRewards(false);
+			return new WndBlacksmith.WndSmith(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith(), Dungeon.hero);
+		});
+		wins.put("augment", () -> new com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfAugmentation().new WndAugment(Dungeon.hero.belongings.weapon));
+		wins.put("metamorph choose", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfMetamorphosis.WndMetamorphChoose());
+		wins.put("enchant select", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfEnchantment.WndEnchantSelect((com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon) Dungeon.hero.belongings.weapon, com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomCommon(), com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomUncommon(), com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomRare()));
+		wins.put("alchemize item", () -> new com.shatteredpixel.shatteredpixeldungeon.items.spells.Alchemize.WndAlchemizeItem(potion, null));
+		wins.put("catalyst", () -> new com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst.WndTrinket(new com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst()));
+		wins.put("monk abilities", () -> new WndMonkAbilities(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(Dungeon.hero, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MonkEnergy.class)));
+	}
+
+
+	/** Back closes the window (or, for a few that must be answered, does not: listed). */
+	static final java.util.Set<String> MUST_ANSWER = new java.util.HashSet<>(java.util.Arrays.asList("hard notice", "resurrect", "victory", "blacksmith smith", "enchant select", "catalyst", "augment"));
+	static void backTest(String key, Window w, Controls oc, Runnable frame, java.util.List<String> fails) {
+		if (Ui.topWindow() != w || MUST_ANSWER.contains(key)) return;
+		try { oc.button(Controls.BACK); for (int i = 0; i < 4; i++) frame.run(); } catch (RuntimeException x) { System.out.println("  fit: " + key + ": its Back runs the game's own cancel (" + x + ")"); }
+		if (Ui.topWindow() == w) { fails.add(key + ": Back does not close it"); System.out.println("  FAIL " + key + ": Back does not close it"); }
+	}
+
+	/** A window that fits: each of its buttons gets the focus by Down (and is whole on the screen, inside the circle on a round one, with a focus box drawn) and Up goes back. */
+	static void usable(Window w, String name, Controls oc, Runnable frame) {
+		if (w instanceof pebxel.ui.WatchWindow) return;   // (our own windows have their own tests)
+		java.util.List<Component> want = new java.util.ArrayList<>();
+		for (Ui.Part p : Controls.buttons(w)) if (p.g.camera() == w.camera) want.add((Component) p.g);
+		if (want.isEmpty()) return;
+		java.util.Set<Component> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (int i = 0; i <= want.size() + 1 && Ui.topWindow() == w; i++) {
+			frame.run();
+			Component f = oc.focused();
+			if (f != null && want.contains(f)) { seen.add(f); geom(w, f, name, oc, i == 0); }
+			oc.button(Controls.DOWN);
+		}
+		check(seen.size() == want.size(), name + ": every button gets the focus with Down (" + seen.size() + " of " + want.size() + ")");
+	}
+
+	/** The focused button inside the screen (a round one's circle), whole, its focus box drawn and inside too. */
+	static void geom(Window w, Component k, String name, Controls oc, boolean first) {
+		Camera c = w.camera;
+		float[] r = {(c.x + (k.left() - c.scroll.x) * c.zoom) / 2, (c.y + (k.top() - c.scroll.y) * c.zoom) / 2, 0, 0};
+		r[2] = r[0] + k.width() * c.zoom / 2; r[3] = r[1] + k.height() * c.zoom / 2;
+		inside(r, name + ": button " + label(k));
+		Object[] hl = oc.highlight();
+		if (k instanceof pebxel.ui.Focusable) return;   // (draws its own focus)
+		if (hl == null && first) return;   // (the Assistant would close it: no box until Up or Down, Controls.closeFirst)
+		check(hl != null && hl[0] == w, name + ": the focus box is drawn round " + label(k) + " (" + (hl == null ? "none" : hl[0].getClass().getSimpleName()) + ", focused " + (oc.focused() == k) + ")");
+		float[] q = (float[]) hl[1];
+		float[] b = {(c.x + (q[0] - c.scroll.x) * c.zoom) / 2, (c.y + (q[1] - c.scroll.y) * c.zoom) / 2, 0, 0};
+		b[2] = b[0] + q[2] * c.zoom / 2; b[3] = b[1] + q[3] * c.zoom / 2;
+		inside(b, name + ": focus box on " + label(k));
+	}
+
+	/** A rectangle (watch px) inside the screen, and on a round one inside its circle (a pixel's grace). */
+	static void inside(float[] r, String what) {
+		check(r[0] >= -1 && r[1] >= -1 && r[2] <= Screen.w + 1 && r[3] <= Screen.h + 1, what + " inside the screen (" + r[0] + "," + r[1] + ".." + r[2] + "," + r[3] + ")");
+		if (!Screen.round) return;
+		float cx = Screen.w / 2f, cy = Screen.h / 2f, rad = Screen.w / 2f + 3;
+		for (float x : new float[]{r[0], r[2]}) for (float y : new float[]{r[1], r[3]})
+			check((x - cx) * (x - cx) + (y - cy) * (y - cy) <= rad * rad, what + " inside the circle (corner " + x + "," + y + ")");
 	}
 
 	/** A tall window's buttons (on its own camera) each framed whole on the screen at some press of Down from its top,
@@ -148,7 +262,7 @@ public final class WindowFit {
 		for (int i = 0; i < 80 && seen.size() < want.size() && Ui.topWindow() == w; i++) {
 			frame.run();
 			Component f = oc.focused();
-			if (f != null && want.contains(f) && Controls.visible(w, f)) seen.add(f);
+			if (f != null && want.contains(f) && Controls.visible(w, f)) { if (seen.add(f)) geom(w, f, name, oc, i == 0); }
 			if (System.getenv("FITDBG") != null) System.out.println("    reach " + name + " i " + i + " focused " + (f == null ? null : label(f)) + " at " + (f == null ? 0 : w.camera.y + (f.top() - w.camera.scroll.y) * w.camera.zoom) + " cam " + w.camera.y + " visible " + (f != null && Controls.visible(w, f)) + " why " + Controls.windowWhy);
 			oc.button(Controls.DOWN);
 		}

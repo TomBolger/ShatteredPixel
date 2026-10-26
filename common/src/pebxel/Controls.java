@@ -317,6 +317,7 @@ public class Controls {
 
 	// ---- a close button for a finger on windows that fill the screen (no outside left to tap) ----
 	private CloseTag close;
+	private final java.util.Set<Component> shifted = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
 	private void closeTag(Window w) {
 		boolean need = w != null && !(w instanceof pebxel.ui.WatchWindow) && w.camera != null
@@ -332,6 +333,18 @@ public class Controls {
 		Camera c = w.camera;
 		int[][] spots = Screen.round ? new int[][]{{186, 40}, {50, 40}, {222, 118}, {14, 118}, {186, 196}, {50, 196}}
 				: new int[][]{{Screen.w - 24, 0}, {0, 0}, {Screen.w - 24, Screen.h - 24}, {0, Screen.h - 24}};
+		// a tall window's tag belongs to the window's top right corner and scrolls with it, out of the way of the text
+		// below the title (pinned to the screen it covered the end of a line wherever the text was scrolled to)
+		com.watabou.noosa.NinePatch chrome = pebxel.ui.Caps.chrome(w);
+		if (tall(w) && chrome != null && chrome.visible) {
+			float u = 24 * 2 / c.zoom, tx = chrome.x + chrome.width - chrome.marginRight() - u, ty = chrome.y + chrome.marginTop();
+			for (Ui.Part p : buttons(w)) {
+				Component b = (Component) p.g;
+				if (b.width() <= 26 * 2 / c.zoom && b.left() < tx + u && b.right() > tx && b.top() < ty + u && b.bottom() > ty && shifted.add(b)) b.setPos(tx - b.width(), b.top());
+			}
+			close.setRect(tx, ty, u, u);
+			return;
+		}
 		// (a spot over the window's frame moves inside it: the frame's edge is never drawn over, nor the tag cut off
 		// where a tall window's frame ends are held)
 		float[] in = innerRect(w);
@@ -340,6 +353,17 @@ public class Controls {
 			if (in != null && sp[0] < in[4] && sp[0] + 24 > in[5] && sp[1] < in[6] && sp[1] + 24 > in[7]
 					&& !(sp[0] >= in[0] && sp[0] + 24 <= in[2] && sp[1] >= in[1] && sp[1] + 24 <= in[3])) {
 				spots[i] = new int[]{(int) Math.max(Math.ceil(in[0]), Math.min(Math.floor(in[2]) - 24, sp[0])), (int) Math.max(Math.ceil(in[1]), Math.min(Math.floor(in[3]) - 24, sp[1]))};
+			}
+		}
+		// a small button of the window's own in the first corner (a title's shuffle or info icon) steps left of the tag, as
+		// the title's label already leaves that room (IconTitle.pebxelPad); the tag never sits over a title
+		{
+			int[] sp = spots[0];
+			for (Ui.Part p : buttons(w)) {
+				Component b = (Component) p.g;
+				float bx = c.x / 2f + (b.left() - c.scroll.x) * c.zoom / 2, by = c.y / 2f + (b.top() - c.scroll.y) * c.zoom / 2;
+				float bw = b.width() * c.zoom / 2, bh = b.height() * c.zoom / 2;
+				if (bw <= 26 && bx < sp[0] + 24 && bx + bw > sp[0] && by < sp[1] + 24 && by + bh > sp[1] && shifted.add(b)) b.setPos(b.left() - (bx + bw - sp[0]) * 2 / c.zoom, b.top());
 			}
 		}
 		int[] at = spots[0];
