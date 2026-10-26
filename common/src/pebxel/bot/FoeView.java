@@ -74,7 +74,7 @@ public final class FoeView {
 			f.ranged = false; f.burstEvery = 7; f.burstCharge = 2; f.burstReady = m.HP > 0 && Boolean.TRUE.equals(HeroView.field(m, "beamCharged"));
 		}
 		if (m instanceof Monk) f.reach = 0.75;   // (Monk.defenseSkill: focused, it parries a blow, focus back in 6-7 turns of its time (moving, sooner): the arena's monks lasted 1.4 times the old sums)
-		if (m instanceof Scorpio) { f.delay *= 2; f.reach = 0.7; }   // (Scorpio.getCloser: beside the hero it backs off, shooting from afar: the arena's scorpio shot half as often, was struck a third as often)
+		if (m instanceof Scorpio) f.reach = 0.7;   // (Scorpio.getCloser: beside the hero it backs off: struck less often. In an open room it shot half as often too, but in the games' corridors it shot as often as ever (M2-a: 9.9 health in 5 turns against the model's 4.3 with half the shots): its shots as they are)
 		if (m instanceof Spinner) { f.fleeHit = 0.5; f.fleeT = 7; f.hitDirect = 5 * Tune.FOEFX; }   // (Spinner.attackProc: half its bites poison for 7-8 (15 in all, Poison.act) and it flees till the poison is done)
 	}
 
