@@ -197,12 +197,61 @@ public final class WindowFit {
 		wins.put("enchant select", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfEnchantment.WndEnchantSelect((com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon) Dungeon.hero.belongings.weapon, com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomCommon(), com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomUncommon(), com.shatteredpixel.shatteredpixeldungeon.items.weapon.Weapon.Enchantment.randomRare()));
 		wins.put("alchemize item", () -> new com.shatteredpixel.shatteredpixeldungeon.items.spells.Alchemize.WndAlchemizeItem(potion, null));
 		wins.put("catalyst", () -> new com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst.WndTrinket(new com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst()));
+		// a Cleric with every spell (all talents, a subclass), the casting window and its info page
+		for (boolean info : new boolean[]{false, true})
+			wins.put("cleric spells" + (info ? " info" : ""), () -> {
+				com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero c = new com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero();
+				c.heroClass = HeroClass.CLERIC; c.lvl = 30;
+				com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.initClassTalents(c);
+				for (com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent t : com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.values()) for (java.util.LinkedHashMap<com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent, Integer> m : c.talents) m.put(t, 1);
+				c.subClass = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroSubClass.PRIEST;
+				return new WndClericSpells(new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome(), c, info);
+			});
+		// (the Scroll of Metamorphosis' replace choice, the Divination result, the Dried Rose's ghost, the Trinity's item choice, the
+		// enchanting scroll's glyph choice and cancel confirm, a scroll's cancel confirm, the journal's note choices)
+		wins.put("metamorph replace talent", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfMetamorphosis.WndMetamorphReplace(com.shatteredpixel.shatteredpixeldungeon.actors.hero.Talent.RECALL_INSCRIPTION, 2));
+		wins.put("divination", () -> {
+			java.util.ArrayList<Item> ided = new java.util.ArrayList<>();
+			ided.add(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing()); ided.add(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength());
+			ided.add(new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfIdentify()); ided.add(new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby()); ided.add(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation());
+			return (Window) make("items.scrolls.exotic.ScrollOfDivination$WndDivination", new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfDivination(), ided);
+		});
+		wins.put("ghost hero", () -> { com.shatteredpixel.shatteredpixeldungeon.items.artifacts.DriedRose r = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.DriedRose(); r.identify(); return (Window) make("items.artifacts.DriedRose$WndGhostHero", null, r); });
+		wins.put("trinity item type", () -> (Window) make("actors.hero.abilities.cleric.Trinity$WndItemtypeSelect", null, new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome(), com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.RecallInscription.INSTANCE));
+		wins.put("glyph select", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfEnchantment.WndGlyphSelect((com.shatteredpixel.shatteredpixeldungeon.items.armor.Armor) Dungeon.hero.belongings.armor, new com.shatteredpixel.shatteredpixeldungeon.items.armor.glyphs.Viscosity(), new com.shatteredpixel.shatteredpixeldungeon.items.armor.glyphs.Obfuscation(), new com.shatteredpixel.shatteredpixeldungeon.items.armor.glyphs.Thorns()));
+		wins.put("enchant cancel", () -> new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.exotic.ScrollOfEnchantment.WndConfirmCancel());
+		wins.put("scroll cancel", () -> (Window) make("items.scrolls.InventoryScroll$WndConfirmCancel", new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfIdentify()));
+		wins.put("note type", () -> (Window) make("ui.CustomNoteButton$WndNoteTypeSelect", new com.shatteredpixel.shatteredpixeldungeon.ui.CustomNoteButton()));
+		wins.put("note depth", () -> (Window) make("ui.CustomNoteButton$WndDepthSelect", new com.shatteredpixel.shatteredpixeldungeon.ui.CustomNoteButton()));
+		wins.put("note item", () -> (Window) make("ui.CustomNoteButton$WndItemtypeSelect", null));
 		wins.put("monk abilities", () -> new WndMonkAbilities(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff.affect(Dungeon.hero, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.MonkEnergy.class)));
 	}
 
 
+	/** A window of a private or inner class, by reflection: its constructor takes the outer object first when there is one. */
+	static Object make(String cls, Object outer, Object... args) {
+		try {
+			Class<?> c = Class.forName("com.shatteredpixel.shatteredpixeldungeon." + cls);
+			for (java.lang.reflect.Constructor<?> k : c.getDeclaredConstructors()) {
+				Class<?>[] pt = k.getParameterTypes();
+				int off = outer != null ? 1 : 0;
+				if (pt.length != args.length + off) continue;
+				boolean ok = true;
+				for (int i = 0; i < args.length; i++) if (!pt[i + off].isInstance(args[i])) ok = false;
+				if (!ok) continue;
+				k.setAccessible(true);
+				Object[] all = new Object[pt.length];
+				if (outer != null) all[0] = outer;
+				System.arraycopy(args, 0, all, off, args.length);
+				return k.newInstance(all);
+			}
+			throw new IllegalStateException("no constructor for " + cls);
+		} catch (java.lang.reflect.InvocationTargetException e) { throw new RuntimeException(e.getCause()); }
+		catch (ReflectiveOperationException e) { throw new RuntimeException(e); }
+	}
+
 	/** Back closes the window (or, for a few that must be answered, does not: listed). */
-	static final java.util.Set<String> MUST_ANSWER = new java.util.HashSet<>(java.util.Arrays.asList("hard notice", "resurrect", "victory", "blacksmith smith", "enchant select", "catalyst", "augment"));
+	static final java.util.Set<String> MUST_ANSWER = new java.util.HashSet<>(java.util.Arrays.asList("hard notice", "resurrect", "victory", "blacksmith smith", "enchant select", "catalyst", "augment", "glyph select", "enchant cancel", "scroll cancel", "metamorph replace talent"));
 	static void backTest(String key, Window w, Controls oc, Runnable frame, java.util.List<String> fails) {
 		if (Ui.topWindow() != w || MUST_ANSWER.contains(key)) return;
 		try { oc.button(Controls.BACK); for (int i = 0; i < 4; i++) frame.run(); } catch (RuntimeException x) { System.out.println("  fit: " + key + ": its Back runs the game's own cancel (" + x + ")"); }

@@ -1248,6 +1248,32 @@ index f4803d6..aa001b2 100644
  	
  	@Override
  	protected int tabHeight() {
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
+index 25cccf0..17539c2 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
+@@ -112,10 +112,17 @@ public class WndClericSpells extends Window {
+ 				spellBtns.add(spellBtn);
+ 			}
+ 
+-			int left = 2 + (WIDTH - spellBtns.size() * (BTN_SIZE + 4)) / 2;
+-			for (IconButton btn : spellBtns) {
+-				btn.setRect(left, top, BTN_SIZE, BTN_SIZE);
+-				left += btn.width() + 4;
++			//pebxel: a tier with more spells than fit across wraps to more rows (five a row), each row centred
++			int per = (WIDTH - 2) / (BTN_SIZE + 4);
++			for (int row = 0; row * per < spellBtns.size(); row++) {
++				if (row > 0) top += BTN_SIZE + 4;
++				int inRow = Math.min(per, spellBtns.size() - row * per);
++				int left = 2 + (WIDTH - inRow * (BTN_SIZE + 4)) / 2;
++				for (int k = 0; k < inRow; k++) {
++					IconButton btn = spellBtns.get(row * per + k);
++					btn.setRect(left, top, BTN_SIZE, BTN_SIZE);
++					left += btn.width() + 4;
++				}
+ 			}
+ 
+ 		}
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java
 index f4f2830..5048fac 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java
