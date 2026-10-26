@@ -54,6 +54,8 @@ public final class UpgradePlan {
 		return 1.2 * (dw.min(l) + dw.max(l)) / 2.0;
 	}
 
+	static boolean dup(List<Item> c, Item i) { for (Item x : c) if (x.getClass() == i.getClass() && HeroView.visLevel(x) == HeroView.visLevel(i) && x.levelKnown == i.levelKnown) return true; return false; }
+
 	/** The target for a scroll read now (null: hold). */
 	public static Item target(Hero h) {
 		int n = inHand(h), d = Dungeon.depth;
@@ -70,7 +72,13 @@ public final class UpgradePlan {
 		List<Item> cands = new ArrayList<>();
 		if (a0 != null && !(a0 instanceof ClassArmor)) cands.add(a0);
 		if (w0 != null && (w0 instanceof MeleeWeapon)) cands.add(w0);
-		for (Item i : h.belongings.backpack) if (GearValue.judged(i) && !(i.cursedKnown && i.cursed) && !(i.levelKnown && i.level() < 0)) cands.add(i);
+		double wb = GearValue.slotCost(h, true), ab = GearValue.slotCost(h, false);
+		for (Item i : h.belongings.backpack) if (GearValue.judged(i) && !(i.cursedKnown && i.cursed) && !(i.levelKnown && i.level() < 0) && !dup(cands, i)) {
+			// (MT: a pack piece only if the scroll makes it worth wearing at once: Sais upgraded twice in the pack, never worn, while mail stayed +4)
+			boolean wp = !(i instanceof Armor);
+			if (Tune.UPPACK && GearValue.one(h, i, wp, w0, a0, HeroView.visLevel(i) + n, Ench.of(i)) >= (wp ? wb : ab) * (1 - Tune.GEARNEED)) continue;
+			cands.add(i);
+		}
 		Item best = null; double bs = Double.MAX_VALUE, bNow = base; StringBuilder why = new StringBuilder();
 		for (Item c : cands) {
 			boolean arm = c instanceof Armor;

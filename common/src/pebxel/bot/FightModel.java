@@ -69,58 +69,97 @@ public final class FightModel {
 	}
 
 	/** The simulation. */
-	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed) {
+	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed) { return simulate(me0, foes0, healAt, runs, seed, 1e9); }
+
+	/** The next few turns of the fight as the hero stands now (FightCal's damage-rate check; BR's short looks ahead). */
+	public static Result next(Hero h, List<Mob> mobs, double turns) {
+		Fighter me = HeroView.of(h); List<Fighter> fs = new ArrayList<>(); for (Mob m : mobs) fs.add(FoeView.of(m, h));
+		return simulate(me, fs, 0, RUNS, seedFor(h), turns);
+	}
+
+	/** maxT: the turns simulated at most. */
+	public static Result simulate(Fighter me0, List<Fighter> foes0, double healAt, int runs, long seed, double maxT) {
+		Look.Plan p = new Look.Plan().healAt(healAt); p.sleepersDone = false;
 		Result r = new Result(); r.runs = runs;
-		if (foes0.isEmpty()) { r.pWin = 1; r.hpLeft = me0.hp; return r; }
-		SplittableRandom rnd = new SplittableRandom(seed);
+		core(me0, foes0, p, runs, seed, maxT, r, null);
+		return r;
+	}
+
+	/** Look's form (agent BR's options: first moves, then the policy): the one simulator for both (BR asked: MT's room
+	 *  beside the hero, the foes' quirks and effects count in his look ahead too). */
+	public static Look.Out play(Fighter me0, List<Fighter> foes, Look.Plan p, int runs, long seed) {
+		Look.Out o = new Look.Out();
+		core(p.me != null ? p.me : me0, foes, p, runs, seed, 1e9, null, o);
+		return o;
+	}
+
+	/**
+	 * The simulation, one loop: the hero's first moves (lose turns, drink, walk off: Look.Plan), then the policy (drink a
+	 * known Healing below p.healAt of health once the last one is done healing; strike the weakest beside it; shoot the
+	 * nearest coming; walk up to a sleeper, or with p.sleepersDone count the fight over), the foes at their own attack
+	 * delays as they arrive (distance / speed; at most me.slots of the walkers beside the hero at once), the foes' quirks
+	 * (Fighter). Fills r (FightModel's sums) and / or o (Look's).
+	 */
+	static void core(Fighter me, List<Fighter> foes0, Look.Plan p, int runs, long seed, double maxT, Result r, Look.Out o) {
 		int n = foes0.size();
-		// per foe: hit odds both ways, blow distributions (fixed for the fight)
-		double[] pH = new double[n], pF = new double[n], pR = new double[n];
-		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n]; Dist[] bZ = new Dist[n];
+		if (n == 0) { if (r != null) { r.pWin = 1; r.hpLeft = me.hp; } if (o != null) { o.pDone = 1; o.hpLeft = me.hp; } return; }
+		SplittableRandom rnd = new SplittableRandom(seed);
+		boolean fleeing = p.flee >= 0;
+		double[] pH = new double[n], pF = new double[n], pR = new double[n], chase = new double[n];
+		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n]; double[] pLow = new double[n], pHLow = new double[n], pZ = new double[n], pBurst = new double[n]; Dist[] bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes0.get(i);
-			pH[i] = f.blockAll ? 0 : Dist.hit(me0.acc, f.eva); bH[i] = Fighter.blow(me0.dmg, f);
-			pF[i] = Dist.hit(f.acc, me0.eva); bF[i] = Fighter.blow(f.dmg, me0);
-			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me0);
-			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me0); pLow[i] = Dist.hit(f.lowAcc, me0.eva); pHLow[i] = Dist.hit(me0.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
-			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me0.dr.plus(me0.dr));
-			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me0.eva); }
-			if (me0.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me0.rangedSure ? 1 : Dist.hit(me0.rangedAcc, f.eva); bR[i] = Fighter.blow(me0.rangedDmg, f); }
+			pH[i] = f.blockAll ? 0 : Dist.hit(me.acc, f.eva); bH[i] = Fighter.blow(me.dmg, f);
+			pF[i] = Dist.hit(f.acc, me.eva); bF[i] = Fighter.blow(f.dmg, me);
+			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me);
+			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me); pLow[i] = Dist.hit(f.lowAcc, me.eva); pHLow[i] = Dist.hit(me.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
+			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me.dr.plus(me.dr));
+			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me.eva); }
+			if (f.burstDmg != null) pBurst[i] = Dist.hit(2 * f.acc, me.eva);
+			if (me.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me.rangedSure ? 1 : Dist.hit(me.rangedAcc, f.eva); bR[i] = Fighter.blow(me.rangedDmg, f); }
+			// (BR) walking off: a faster one strikes every (its blow + the step it takes to catch up); a shooter keeps shooting
+			chase[i] = f.ranged ? f.delay / 0.6 : f.speed > me.speed * 1.01 ? f.delay + 1 / f.speed : 0;
 		}
-		// (MT) room beside the hero: at most me0.slots foes that walk up can be at it at once (a corridor: 2), the others
+		// (MT) room beside the hero: at most me.slots foes that walk up can be at it at once (a corridor: 2), the others
 		// queue and step in as one falls, in the order they'd come; shooters and sleepers take no room
 		Integer[] ord = new Integer[n]; for (int i = 0; i < n; i++) ord[i] = i;
 		final double[] arrOf = new double[n];
-		for (int i = 0; i < n; i++) { Fighter f = foes0.get(i); arrOf[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.ranged ? me0.speed : f.speed); }
+		for (int i = 0; i < n; i++) { Fighter f = foes0.get(i); arrOf[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : (f.dist - 1) / Math.max(0.1, f.ranged ? me.speed : f.speed); }
 		Arrays.sort(ord, (a, b) -> Double.compare(arrOf[a], arrOf[b]));
 		boolean[] queued = new boolean[n], held = new boolean[n]; double[] arrQ = new double[n];
 		boolean hurtable = false; for (int i = 0; i < n; i++) hurtable |= pH[i] > 0 || pR[i] > 0 || foes0.get(i).asleep;
-		double horizon = hurtable ? 100 : 30;   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
+		double horizon = Math.min(maxT, hurtable ? 100 : 30);   // (MT: 100 turns at most; 30 against what it can't hurt (the crab awake): what matters then is how fast it loses)
 		double[] losses = new double[runs];
-		int deaths = 0, wins = 0, used = 0; double tsum = 0, left = 0;
+		int deaths = 0, wins = 0, done = 0, used = 0; double tsum = 0, left = 0, leftO = 0;
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		for (int run = 0; run < runs; run++) {
-			int myHp = me0.hp, sh = me0.shield, heals = me0.heals, shots = me0.rangedShots, hl = me0.healLeft;
+			int myHp = me.hp, sh = me.shield, heals = me.heals, shots = fleeing ? 0 : me.rangedShots, hl = Math.max(me.healLeft, p.healing), usedR = 0;   // (the same buff, whichever gave it)
+			boolean drink = p.drink && heals > 0;
 			for (int i = 0; i < n; i++) {
 				Fighter f = foes0.get(i);
 				hp[i] = f.hp + f.shield; rage[i] = false; awake[i] = !f.asleep;
 				// arr: when it's beside the hero (a shooter stays put: the hero walks up to it); atk: when its blows start
-				arr[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : f.ranged ? (f.dist - 1) / Math.max(0.1, me0.speed) : (f.dist - 1) / Math.max(0.1, f.speed);
+				arr[i] = f.dist <= 1 ? 0 : f.asleep ? Double.MAX_VALUE : f.ranged ? (f.dist - 1) / Math.max(0.1, me.speed) : (f.dist - 1) / Math.max(0.1, f.speed);
 				atk[i] = f.ranged && !f.asleep ? 0 : arr[i];
 				next[i] = awake[i] ? atk[i] + f.delay * rnd.nextDouble() : Double.MAX_VALUE;   // (its turn falls somewhere in its first beat)
+				if (fleeing) next[i] = chase[i] > 0 && awake[i] ? (f.ranged ? 0 : arr[i]) + chase[i] * rnd.nextDouble() : Double.MAX_VALUE;
 			}
-			int room = me0.slots;
-			for (int oi = 0; oi < n; oi++) { int i = ord[oi]; Fighter f = foes0.get(i); queued[i] = false; held[i] = false;
+			int room = me.slots;
+			if (!fleeing) for (int oi = 0; oi < n; oi++) { int i = ord[oi]; Fighter f = foes0.get(i); queued[i] = false; held[i] = false;
 				if (f.ranged || f.asleep) continue;
 				if (room > 0) { room--; held[i] = true; } else { queued[i] = true; arrQ[i] = arr[i]; arr[i] = atk[i] = next[i] = Double.MAX_VALUE; } }
-			double t = 0, tH = 0; boolean dead = false; int alive = n;
-			for (int guard = 0; guard < 600 && alive > 0 && !dead && t < horizon; guard++) {   // (MT: a fight with one it can't hurt went 600 steps a run)
+			else for (int i = 0; i < n; i++) { queued[i] = false; held[i] = false; }
+			double t = 0, tH = 0; boolean dead = false, gone = false; int alive = n, lost = p.lose, steps = p.flee;
+			for (int guard = 0; guard < 600 && alive > 0 && !dead && !gone && t < horizon; guard++) {
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {
 					t = tH;
-					if (hl > 0) { int x = Math.max(1, Math.min(hl, Math.round(hl * 0.25f))); myHp = Math.min(me0.ht, myHp + x); hl -= x; }   // (MT: Healing heals a quarter of what's left a turn: Healing.healingThisTick)
-					if (heals > 0 && healAt > 0 && myHp < me0.ht * healAt) { heals--; used++; if (Tune.HEALTICK) hl += me0.healAmount; else myHp = Math.min(me0.ht, myHp + me0.healAmount); tH += 1; continue; }
+					if (hl > 0) { int x = Math.max(1, Math.min(hl, Math.round(hl * 0.25f))); myHp = Math.min(me.ht, myHp + x); hl -= x; }   // (Healing heals a quarter of what's left a turn: Healing.healingThisTick)
+					if (drink) { drink = false; heals--; usedR++; hl += me.healAmount; tH += 1; continue; }
+					if (lost > 0) { lost--; tH += 1; continue; }
+					if (steps >= 0) { if (steps-- == 0) { gone = true; break; } tH += 1 / Math.max(0.1, me.speed); continue; }
+					if (heals > 0 && p.healAt > 0 && hl == 0 && myHp < me.ht * p.healAt) { heals--; usedR++; if (Tune.HEALTICK) hl += me.healAmount; else myHp = Math.min(me.ht, myHp + me.healAmount); tH += 1; continue; }
 					// a target beside me (the weakest), else a shot at the nearest one coming, else wait for one / walk to a sleeper
 					int tg = -1, best = Integer.MAX_VALUE;
 					for (int i = 0; i < n; i++) if (hp[i] > 0 && t >= arr[i] - 1e-9 && hp[i] < best) { best = hp[i]; tg = i; }
@@ -133,7 +172,7 @@ public final class FightModel {
 							alive--; room = free(foes0, tg, room, queued, held, arrQ, arr, atk, next, t, rnd);
 							if (bDeath[tg] != null) { int d = bDeath[tg].draw(rnd.nextDouble()); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
 						}
-						tH += me0.delay;
+						tH += me.delay;
 						continue;
 					}
 					int ni = -1; double nd = Double.MAX_VALUE, na = Double.MAX_VALUE; int sl = -1;
@@ -146,34 +185,41 @@ public final class FightModel {
 						if (rnd.nextDouble() < pR[ni]) hp[ni] -= bR[ni].draw(rnd.nextDouble());
 						if (hp[ni] <= 0 && foes0.get(ni).rageHp > 0 && !rage[ni]) { rage[ni] = true; hp[ni] = foes0.get(ni).rageHp; }
 						if (hp[ni] <= 0) { alive--; room = free(foes0, ni, room, queued, held, arrQ, arr, atk, next, t, rnd); }
-						tH += me0.rangedDelay;
+						tH += me.rangedDelay;
 					} else if (na < Double.MAX_VALUE) tH = Math.max(na, t + 0.01);
+					else if (sl >= 0 && p.sleepersDone) { gone = true; break; }   // (BR: only sleepers left: the fight is over, they can be left be)
 					else if (sl >= 0) { arr[sl] = t + Math.max(0, foes0.get(sl).dist - 1); tH = arr[sl]; }   // (walk up to it: it sleeps on)
 					else tH = t + 1;
 				} else {
 					Fighter f = foes0.get(fi); t = ft;
-					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && t < arr[fi] - 1e-9;
-					if (t >= atk[fi] - 1e-9 && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
+					boolean lo = bLow[fi] != null && hp[fi] <= f.lowAt, zap = bZ[fi] != null && (t < arr[fi] - 1e-9 || fleeing);
+					boolean may = fleeing || t >= atk[fi] - 1e-9;
+					if (!zap && f.burstEvery > 0 && may && rnd.nextDouble() * f.burstEvery < 1) {   // (MT: the Eye's beam, an attack in so many: magic, past armour)
+						if (rnd.nextDouble() < pBurst[fi]) { int d = (int) Math.round(f.burstDmg.draw(rnd.nextDouble()) * me.taken); myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d); if (myHp <= 0) dead = true; }
+					} else if (may && rnd.nextDouble() < (zap ? pZ[fi] : lo ? pLow[fi] : pF[fi])) {
 						int d = (zap ? bZ[fi] : rage[fi] && bRage[fi] != null ? bRage[fi] : lo ? bLow[fi] : bF[fi]).draw(rnd.nextDouble());
-						if (me0.taken != 1) d = (int) Math.round(d * me0.taken);
+						if (!zap && f.hitDirect > 0) d += (int) Math.round(f.hitDirect);   // (MT: what its blow sets off past armour: fire, poison, bleeding)
+						if (me.taken != 1) d = (int) Math.round(d * me.taken);
 						myHp -= Math.max(0, d - sh); sh = Math.max(0, sh - d);
 						if (f.leech > 0) hp[fi] = Math.min(f.ht, hp[fi] + d);
 						if (myHp <= 0) dead = true;
 					}
-					next[fi] = t + f.delay;
+					next[fi] = t + (fleeing ? chase[fi] : f.delay);
 				}
 			}
 			if (dead) deaths++;
-			else if (alive == 0) wins++;
-			losses[run] = me0.hp - Math.max(0, myHp); tsum += t; left += Math.max(0, myHp);
+			else if (alive == 0) { wins++; done++; }
+			else if (gone) done++;
+			losses[run] = me.hp - Math.max(0, myHp); tsum += t; left += Math.max(0, myHp); leftO += dead ? 0 : Math.min(me.ht, myHp + hl); used += usedR;
 		}
-		Arrays.sort(losses);
-		double s = 0; for (double l : losses) s += l;
-		r.pDeath = deaths / (double) runs; r.pWin = wins / (double) runs; r.lossMean = s / runs; r.loss90 = losses[Math.min(runs - 1, (int) (runs * 0.9))];
-		r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs;
-		return r;
+		if (r != null) {
+			Arrays.sort(losses);
+			double s = 0; for (double l : losses) s += l;
+			r.pDeath = deaths / (double) runs; r.pWin = wins / (double) runs; r.lossMean = s / runs; r.loss90 = losses[Math.min(runs - 1, (int) (runs * 0.9))];
+			r.time = tsum / runs; r.hpLeft = left / runs; r.healsUsed = used / (double) runs;
+		}
+		if (o != null) { o.pDeath = deaths / (double) runs; o.pDone = done / (double) runs; o.hpLeft = leftO / runs; o.healsUsed = used / (double) runs; o.time = tsum / runs; }
 	}
-
 
 	/** A foe fell: its room beside the hero goes to the first one queued (it steps in now, or when it would have come). */
 	static int free(List<Fighter> fs, int dead, int room, boolean[] queued, boolean[] held, double[] arrQ, double[] arr, double[] atk, double[] next, double t, SplittableRandom rnd) {
@@ -222,7 +268,8 @@ public final class FightModel {
 		double best = r0.pDeath, bk = 0;
 		for (double k : HEALAT) {
 			Result r = simulate(me, fs, k, runs, sd);
-			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
+			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);
+			if (r0.pDeath >= 0.5 && r.healsUsed > 0) sc -= Tune.HOPE;   // (MT: a fight it likely loses: drinking buys turns the simulation doesn't use (a step away, the stairs, an ally): near-ties go to drinking)   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
 			if (sc < best - 1e-9) { best = sc; bk = k; }
 		}
 		return planC = bk;

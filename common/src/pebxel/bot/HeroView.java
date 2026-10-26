@@ -1,5 +1,6 @@
 package pebxel.bot;
 
+import java.util.*;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Barkskin;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
@@ -32,7 +33,40 @@ public final class HeroView {
 	public static int visLevel(Item i) {
 		if (i == null) return 0;
 		int bonus = i.buffedLvl() - i.level();
-		return (i.levelKnown ? i.level() : 0) + bonus;
+		return (i.levelKnown ? i.level() : Tune.UPSEEN ? upgraded(i) : 0) + bonus;
+	}
+
+	// (MT) the upgrades the player put into a piece whose level isn't known: a Scroll of Upgrade doesn't show the level
+	// (Item.upgrade), so the models saw an unknown piece at +0 however many scrolls went into it, and the next scroll
+	// and the gear sums never counted them. The player knows: one known scroll fewer, and the piece it was read on.
+	static final List<Item> upI = new ArrayList<>(); static final List<int[]> upN = new ArrayList<>();
+	static final List<Item> seenI = new ArrayList<>(); static final List<Integer> seenL = new ArrayList<>();
+	static int souWas = -1; static Hero upHero;
+	public static int upgraded(Item i) { for (int k = 0; k < upI.size(); k++) if (upI.get(k) == i) return upN.get(k)[0]; return 0; }
+
+	/** Each plan: a known Scroll of Upgrade gone since the last look, and a piece now one level up: that piece. */
+	public static void observe(Hero h) {
+		if (upHero != h) { upHero = h; upI.clear(); upN.clear(); seenI.clear(); seenL.clear(); souWas = -1; }
+		com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade s = h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
+		int sou = s != null && s.isKnown() ? s.quantity() : 0;
+		if (souWas >= 0 && sou < souWas) {
+			for (int k = 0; k < seenI.size(); k++) { Item i = seenI.get(k);
+				if (!i.levelKnown && i.level() == seenL.get(k) + 1) {   // (only the delta the reading made, as the player saw it read on that piece)
+					int u = -1; for (int j = 0; j < upI.size(); j++) if (upI.get(j) == i) u = j;
+					if (u < 0) { upI.add(i); upN.add(new int[]{ 1 }); } else upN.get(u)[0]++;
+					break;
+				} }
+		}
+		souWas = sou; seenI.clear(); seenL.clear();
+		for (Item i : h.belongings) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) { seenI.add(i); seenL.add(i.level()); }
+	}
+
+	static double ringTaken = 1;
+	/** Worn rings of this kind, every one with its level known (a ring's effect shows once it is). */
+	static boolean ringKnown(Hero h, Class<?> k) {
+		boolean any = false;
+		for (Item r : new Item[]{ h.belongings.ring(), h.belongings.misc() }) if (r != null && k.isInstance(r)) { if (!r.levelKnown) return false; any = true; }
+		return any;
 	}
 
 	/** The hero's base accuracy and evasion (Hero.attackSkill / defenseSkill fields: 10 / 5, +1 a level). */
@@ -103,8 +137,14 @@ public final class HeroView {
 		}
 		int bark = 0; try { bark = Barkskin.currentLevel(h); } catch (Throwable e) { }
 		if (bark > 0) f.dr = f.dr.plus(Dist.normal(0, bark));
+		if (Tune.RINGS && lvlPlus == 0) {   // (MT: the fight rings worn, once their level is known: Hero.attackSkill / defenseSkill / attackDelay, Char.damage)
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy.class)) acc *= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy.accuracyMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion.class)) eva *= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion.evasionMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfFuror.class)) f.delay /= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfFuror.attackSpeedMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfTenacity.class)) ringTaken = com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfTenacity.damageMultiplier(h);
+		}
 		f.acc = Math.max(1, Math.round(acc)); f.eva = Math.max(1, Math.round(eva));   // (Hero.attackSkill / defenseSkill round)
-		f.taken = we.taken * ag.taken;   // (MT: this had been inside the comment above: glyphs and curses never counted)
+		f.taken = we.taken * ag.taken * ringTaken; ringTaken = 1;   // (MT: this had been inside the comment above: glyphs and curses never counted)
 		// shots before contact: the spirit bow (MissileWeapon.adjacentAccFactor: 1.5 at range), a charged attack wand
 		SpiritBow bow = h.belongings.getItem(SpiritBow.class);
 		if (bow != null) {

@@ -1628,7 +1628,7 @@ public final class Assist {
 	/** Low, an enemy after the hero, no known Healing: the way up is a sure escape (enemies stay behind; strategy-reference 2.3).
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
 	static Target upstairs() {
-		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || !oPick("up", oLosing(OUP), H.HP * 100 < H.HT * 35)) return null;
+		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || !oPick("up", oLosing(OUP) || H.HP * 100 < H.HT * Tune.UPLOW, H.HP * 100 < H.HT * 35)) return null;   // (MT: or low: the model can't see what comes next, and the stairs are a sure way out)
 		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
 		if (Actor.now() - floorT0 < 3) return null;   // (MT: just come down: straight back up and down again took no time, for ever; starving, the food below)
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
@@ -1751,9 +1751,11 @@ public final class Assist {
 			Class<?>[] esc = { ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
+			if (!OFIGHT || H.HP * 100 < H.HT * Tune.GAMBLE) {   // (MT: the unknowns only when low: the model's 30% came at two thirds of health, 226 times in 120 games)
 			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
+			}
 		}
 		if (seen && CLOAK) {   // the Rogue: unseen, the next blow is a sure surprise one (attacking ends it: one charge, one blow)
 			com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = bag(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.class);
@@ -1776,6 +1778,7 @@ public final class Assist {
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
+			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
