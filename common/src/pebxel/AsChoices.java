@@ -39,7 +39,9 @@ public final class AsChoices {
 			if (n.endsWith("WndWandmaker")) return pickItem(bs, AsChoices::wandScore, "the Wandmaker's wand");
 			if (n.endsWith("WndBlacksmith$WndSmith")) return pickItem(bs, AsChoices::smithScore, "the smith's piece");
 			if (n.endsWith("WndBlacksmith$WndReforge")) return reforge(w, bs);
-			if (n.endsWith("TrinketCatalyst$WndTrinket")) { Ui.Part p = pickItem(bs, i -> AsEconomy.trinketWorth(i.getClass()) * 10 - (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst.RandomTrinket ? 1 : 0), "the trinket"); if (p != null) AsEconomy.trinket = itemOf(p.g).getClass().getSimpleName(); return p; }   // (strategy-v4 6: AsEconomy's order)
+			if (n.endsWith("TrinketCatalyst$WndTrinket")) { Ui.Part p = pickItem(bs, i -> AsEconomy.trinketWorth(i.getClass()) * 10 - (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst.RandomTrinket ? 1 : 0), "the trinket"); if (p != null) AsEconomy.trinket = itemOf(p.g).getClass().getSimpleName();
+				StringBuilder o = new StringBuilder(); for (Ui.Part q : bs) { Item i = itemOf(q.g); o.append(i == null ? "?" : i.getClass().getSimpleName() + ":" + AsEconomy.trinketWorth(i.getClass())).append(' '); } AsEconomy.log("trinkets offered " + o + "-> " + AsEconomy.trinket);
+				return p; }   // (strategy-v4 6: AsEconomy's order)
 			if (n.endsWith("WndEnergizeItem")) { for (Ui.Part p : bs) if (p.text.toLowerCase(Locale.ROOT).contains("energy") && !p.text.toLowerCase(Locale.ROOT).contains(" all ") && enabled(p.g)) { why = "energize one"; AsEconomy.energized++; return p; } return null; }
 			if (n.endsWith("WndBlacksmith")) {
 				String want = smithWants();

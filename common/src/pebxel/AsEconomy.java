@@ -44,7 +44,8 @@ import pebxel.Brain.Role;
  *                 him ({@link #shopVeto}: a Rules row);
  *   Lightning     never zapped when its arcs reach the hero (one in water arcs 2 cells; the hero beside the chain is
  *                 struck: WandOfLightning.arc) ({@link #lightningVeto});
- *   trinkets      the bot-safe ones (Salt Cube, Clover, Mossy Clump), never the Mimic Tooth or Cracked Spyglass
+ *   trinkets      strategy-v4's order (Parchment Scrap with the energy for it, Salt Cube, Cracked Spyglass for the bot's
+ *                 eyes, Clover, Mossy Clump), never the Mimic Tooth, Shard of Oblivion, Vial of Blood or Rat Skull
  *                 ({@link #trinketWorth}: AsChoices' pick, AsAlchemy's upgrades);
  *   Infusion      a Scroll of Upgrade kept for Magical Infusion with the pot on the floor, for an enchanted piece the
  *                 next upgrade could strip ({@link #infusionWanted}).
@@ -114,7 +115,7 @@ final class AsEconomy {
 	// =============================================================================================================
 
 	/** Seeds worth more on a dart than in a pot or a path (AsItems.tipped throws these), in that order. */
-	static final List<Class<? extends Plant.Seed>> TIP = Arrays.asList(Earthroot.Seed.class, Icecap.Seed.class, Blindweed.Seed.class, Sorrowmoss.Seed.class, Stormvine.Seed.class);
+	static final List<Class<? extends Plant.Seed>> TIP = new ArrayList<>(Arrays.asList(Earthroot.Seed.class, Icecap.Seed.class, Blindweed.Seed.class, Sorrowmoss.Seed.class, Stormvine.Seed.class));   // (a list Statics can reset)
 
 	static Target tipDarts() {
 		Hero h = Dungeon.hero; Dart d = null;
@@ -289,15 +290,17 @@ final class AsEconomy {
 	/** How good a trinket is for this bot (above 0: worth picking and upgrading; strategy-v4 section 6). Parchment
 	 *  Scrap first when the energy for its +1 is there now (at +2/+3 random gear is enchanted and, at +3, never cursed;
 	 *  it costs 45 to +3 and raises curses below +2), else the Salt Cube (halves hunger at +3: starving is a common
-	 *  death), the Clover, the Mossy Clump. The Cracked Spyglass's items are drawn at 10% and count as unseen until
-	 *  Thomas rules on them, so it gives the bot nothing yet. The 4th, random choice only when all three are avoided. */
+	 *  death), the Cracked Spyglass (its extra items are drawn at 10%: seen by the bot's eyes, Assist.botEyes, not by
+	 *  the assistant's: Thomas, 2026-10-25), the Clover, the Mossy Clump. The 4th, random choice only when all three
+	 *  are avoided. */
 	static int trinketWorth(Class<?> c) {
 		if (c == ParchmentScrap.class) return Dungeon.energy >= 16 ? 11 : 6;   // (choosing at the pot: the catalyst's 6, then 10 for +1)
 		if (c == SaltCube.class) return 10;
-		if (c == ThirteenLeafClover.class) return 9;
-		if (c == MossyClump.class) return 8;
+		if (c == CrackedSpyglass.class && Assist.botEyes) return 9;   // (+1.5 items a floor at +3)
+		if (c == ThirteenLeafClover.class) return 8;
+		if (c == MossyClump.class) return 7;
 		if (c == PetrifiedSeed.class) return 4;
-		if (c == CrackedSpyglass.class) return 2;   // (its items unseen: policy pending)
+		if (c == CrackedSpyglass.class) return 2;   // (the assistant's eyes: its faint items left to the player to spot)
 		if (c == WondrousResin.class) return anyWand() ? 2 : 1;
 		if (c == TrinketCatalyst.RandomTrinket.class) return 0;   // (above only the avoided ones)
 		if (c == FerretTuft.class) return -1;   // (foes dodge more too: the bot fights many at once)
@@ -365,7 +368,7 @@ final class AsEconomy {
 			if (b > lastBlessed && n == lastAnkhs) blesses++;
 		}
 		lastBlessed = b; lastAnkhs = n;
-		if (shopL != L) { shopL = L; shopSeen.clear(); }
+		if (shopL != L) { shopL = L; shopSeen.clear(); Waterskin ws = h.belongings.getItem(Waterskin.class); log("depth " + Dungeon.depth + " ankhs " + n + "/" + b + "b dew " + (ws == null ? "-" : Assist.field(ws, "volume")) + " energy " + Dungeon.energy + " gold " + Dungeon.gold); }
 		Set<Shopkeeper> now = new HashSet<>();
 		for (Mob m : L.mobs) if (m instanceof Shopkeeper && m.isAlive()) { now.add((Shopkeeper) m); if (L.heroFOV[m.pos]) shopSeen.add((Shopkeeper) m); if (warned((Shopkeeper) m) && shopWarned.add((Shopkeeper) m)) { warns++; log("shopkeeper warned on depth " + Dungeon.depth); } }
 		for (Iterator<Shopkeeper> it = shopSeen.iterator(); it.hasNext(); ) { Shopkeeper s = it.next(); if (!now.contains(s)) { fled++; it.remove(); log("shopkeeper fled on depth " + Dungeon.depth); } }

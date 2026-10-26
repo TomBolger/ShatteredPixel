@@ -90,6 +90,7 @@ public class AssistBot {
 	/** The headless app, set up once a JVM (DeterminismTest too), all classes loaded and our statics recorded. */
 	static void init() throws Exception {
 		v = System.getenv("V") != null;
+		Assist.botEyes = !"0".equals(System.getenv("BOTEYES"));   // (the bot perceives everything a frame shows, the spyglass's faint heaps too; BOTEYES=0: the assistant's eyes)
 		dir0 = ".pebxel-assistbot-" + ProcessHandle.current().pid() + System.getenv().getOrDefault("SAVETAG", "");
 		Game.version = "4.0.2"; Game.versionCode = 922;
 		Screen.set(System.getenv().getOrDefault("SCREEN", "emery"));
