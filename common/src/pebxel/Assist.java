@@ -397,7 +397,7 @@ public final class Assist {
 		try {
 			Hero h = Dungeon.hero;
 			if (t == null || h == null || !h.isAlive()) return false;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos; acts++;
 			boolean aimingNow = Controls.aiming();
 			if (aimingNow) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 			if (!h.ready) return false;
@@ -432,7 +432,7 @@ public final class Assist {
 			if (t.cell < 0) return false;
 			if ((t.kind == GO || t.kind == PICKUP || t.kind == ENEMY) && setupOk(Dungeon.level) && hp == h.pos) {   // (an ally on the only good way: swap places first)
 				int sw = swapStep(t.cell);
-				if (sw >= 0) { GameScene.handleCell(sw); return true; }
+				if (sw >= 0 && sw != swapFrom && Actor.now() != swapAt) { swapFrom = h.pos; swapAt = Actor.now(); GameScene.handleCell(sw); return true; }   // (once a moment, never back to the cell just left: the Rogue's clone swaps in no time)
 			}
 			noteTalk(t.cell);
 			if (anyDanger) clearPath(h);   // (the hero keeps its last walk to the same cell: one planned before a hazard was seen)
@@ -445,7 +445,7 @@ public final class Assist {
 	public static void noted(Target t) {
 		try {
 			Hero h = Dungeon.hero; if (t == null || h == null) return;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actObj = t.obj; actKind = t.kind; actItem = t.item; listActFrom = h.pos; acts++;
 			if (t.kind == WAIT && (SEARCH_ACT.equals(t.action) || (t.action == null && t.cell == h.pos))) noteSearch();
 			if (t.kind != USE && t.kind != WAIT && t.cell >= 0) noteTalk(t.cell);
 			if (t.item != null && (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action))) zapped.put(t.item, Actor.now());
@@ -694,6 +694,7 @@ public final class Assist {
 		for (int k = 0; k < 8; k++) { int n = hp + N8[k]; if (nb(hp, n) && d[n] + 1 == d[hp] && (best < 0 || swappable(mobAt(n))) && (seenChar(n) == null || swappable(mobAt(n)))) best = n; }
 		return best;
 	}
+	static int swapFrom = -1; static float swapAt = -1;
 	static Mob mobAt(int c) { Char ch = Actor.findChar(c); return ch instanceof Mob ? (Mob) ch : null; }
 
 	static void bfs() {
@@ -850,6 +851,15 @@ public final class Assist {
 		float now0 = Actor.now();
 		useBan.values().removeIf(t -> t < now0);
 		if (!useBan.isEmpty()) out.removeIf(t -> t.kind == USE && t.item != null && useBan.containsKey(System.identityHashCode(t.item) + ":" + t.action));
+		// the general zero-time guard: game time not moving over ZEROMAX decisions (walks that swap, step and come back
+		// in no time): plan A's walk is barred a while (K8 / WD: a clone swapped with back and forth, 2,500 decisions)
+		if (acts != zeroActs) { zeroActs = acts; if (now0 == zeroAt) zeroN++; else { zeroAt = now0; zeroN = 0; } }   // (only plans with an act between them count)
+		if (zeroN > ZEROMAX && !out.isEmpty()) {
+			Target z = out.get(0);
+			if ((z.kind == GO || z.kind == PICKUP) && z.cell >= 0 && z.cell != hp) { bad.put(z.cell, now0 + 30); if (z.obj >= 0 && z.obj != hp) bad.put(z.obj, now0 + 30); out.remove(0); }
+			else if (z.kind == ENEMY && z.cell >= 0) { bad.put(z.cell, now0 + 5); out.remove(0); }
+			zeroN = ZEROMAX / 2;
+		}
 		if (out.isEmpty()) return;
 		Target u = out.get(0);
 		if (u.kind == USE && u.item != null) {
@@ -873,6 +883,7 @@ public final class Assist {
 		oscHist.addLast(key); while (oscHist.size() > OSCN) oscHist.removeFirst();
 		if (n >= 2 && comObj < 0) { comObj = ao; comUntil = now + OSCT; comWhy = a.why; oscHist.clear(); }
 	}
+	static float zeroAt = -1; static int zeroN, acts, zeroActs; static final int ZEROMAX = optInt("ZEROMAX", 12);
 	static final Map<String, Float> useBan = new HashMap<>(); static String useKey, useActKey; static float useAt, useActAt = -1; static int usePos, useN;
 	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1, oscPos = -1; static float comUntil; static String comWhy = "";
 	static final int OSCN = optInt("OSCN", 40), OSCT = optInt("OSCT", 40);
