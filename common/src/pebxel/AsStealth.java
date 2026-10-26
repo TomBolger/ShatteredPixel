@@ -5,6 +5,7 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob;
 import com.shatteredpixel.shatteredpixeldungeon.items.Item;
+import java.util.*;
 import com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion;
 import com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility;
 import com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll;
@@ -92,6 +93,28 @@ final class AsStealth {
 		for (AsFire.Seen s : AsFire.seen.values()) if (AscensionChallenge.statModifier(s.m) >= 2 && AsFire.fireLine(s, hp)) cursed = true;   // (at whatever foe: ST-2, a Huntress shot a guard while the DM-100 behind it bolted her)
 		if (!cursed) return false;
 		return AsFire.outTarget() != null;
+	}
+
+	/** VETO: hurt (below HURT% of health), a walk whose first step goes from out of every shooter's line into one (a
+	 *  scorpio's too: it never comes, so AsFire lets the walk go): the floor's items wait; ST-3, scorpio deaths from 11-21
+	 *  were mostly walks on at a fifth of health or less, "explore", "pick up", "resume", into its spit. */
+	static final int HURT = optInt("STHURT", 50);
+	static final String NOHURT = "stealth: hurt, no step into a shooter's line";
+	static boolean hurtVeto(Cand c) {
+		if (!ON || HURT <= 0) return false;
+		Target t = c.t; Hero h = Dungeon.hero; if (t == null || t.cell < 0 || (t.kind != GO && t.kind != PICKUP) || h.rooted) return false;
+		if (h.HP * 100 >= h.HT * HURT || AsFire.own(t) || AsFire.stairsNear(t) || t.cell == h.pos) return false;
+		if (t.why != null && (t.why.startsWith("eye:") || t.why.startsWith("ascent") || t.why.startsWith("stealth") || t.why.startsWith("escape"))) return false;
+		AsFire.note(); if (AsFire.seen.isEmpty() || AsFire.fireAt(h.pos, false) > 0) return false;
+		int n = adjacent(t.cell, h.pos) ? t.cell : AsEyes.firstStep(t.cell); if (n < 0) return false;
+		return AsFire.fireAt(n, false) > 0;
+	}
+	static boolean hurtHoldWhen(Cand c) { return ON && c == Rules.planA && c.veto && c.note.contains(NOHURT); }
+	static Target hurtHold() {
+		boolean calm = true; for (Mob m : mobs()) if (hostile(m) && hunting(m) && !AsFire.shooter(m)) calm = false;
+		Target t = new Target(Dungeon.hero.pos, WAIT, calm && !starving() ? "stealth: hurt, rest out of its line first" : "stealth: hurt, wait out of its line");
+		t.action = calm && !starving() ? REST_ACT : WAIT_ACT; t.obj = -1; t.hint = 0.2;
+		return t;
 	}
 
 	/** PROPOSE: Rules' "drink rather than die" with the climb's curse counted (it isn't in the lookahead's numbers). */
