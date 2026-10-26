@@ -105,6 +105,7 @@ public final class ScrollPlan {
 		KindOfWeapon w0; Armor a0; boolean wSlot, aSlot; double shA, shW;
 		Item cA, cW;   // the committed pieces
 		double[] base;   // the base trajectory's load each floor (the anchor's reference)
+		double strong;   // 0: a plain hero's health for his level, 1: half again (MILD)
 		Armor[] armB; int[] armL; KindOfWeapon[] wpnB; int[] wpnL;   // the base trajectory (the other slot's, while one is valued)
 		final List<Object> ids = new ArrayList<>();
 		final Map<Long, Double> memo = new HashMap<>();
@@ -141,6 +142,7 @@ public final class ScrollPlan {
 		templates();
 		Ctx c = new Ctx(); c.h = h; c.key = key; c.d0 = Dungeon.depth; c.kh = kh; c.w0 = w; c.a0 = a;
 		c.K = Math.max(1, Math.min(HOR, 26 - c.d0));
+		c.strong = Math.max(0, Math.min(1, (h.HT / (20.0 + 5 * (h.lvl - 1)) - 1) / 0.5));
 		c.str = new int[c.K]; c.m = new double[c.K];
 		double r = rate();
 		for (int k = 0; k < c.K; k++) { c.str[k] = h.STR() + (int) Math.round(POSR * reg(c.d0, k)); c.m[k] = r * reg(c.d0, k); }
@@ -209,7 +211,8 @@ public final class ScrollPlan {
 		double L = load(c, k, a, al, w, wl);
 		if (!ANCHOR || c.base == null) return -(HZ0 + HZK * L);
 		int d = Math.max(1, Math.min(25, c.d0 + k));
-		double hz = (1 - SEMP[d - 1]) * Math.pow((L + D0) / (c.base[k] + D0), GAM);
+		double h0 = (1 - c.strong) * (1 - SEMP[d - 1]) + c.strong * (1 - SMILD[d - 1]);
+		double hz = h0 * Math.pow((L + D0) / (c.base[k] + D0), GAM);
 		return Math.log(1 - Math.min(0.9, hz));
 	}
 	static final boolean ANCHOR = Tune.on("UPANCHOR", true), SQ = Tune.on("UPSQ", false);
@@ -218,8 +221,12 @@ public final class ScrollPlan {
 	static final double GAM = Tune.get("UPGAM", 100) / 100, BOSSK = Tune.get("UPBOSSK", 100) / 100, TIME = Tune.get("UPTIME", 0) / 1000;
 	/** Each floor's survival as the bot plays now (MD-base2 and HE-final honest games, 192; the deep floors from the full
 	 *  games, a little lower): the anchor. */
-	static final double[] SEMP = { 0.95, 0.93, 0.90, 0.90, 0.83, 0.91, 0.87, 0.85, 0.85, 0.86,
-			0.85, 0.75, 0.70, 0.70, 0.75, 0.80, 0.72, 0.78, 0.80, 0.55, 0.85, 0.72, 0.55, 0.75, 0.60 };
+	/** The same with half again the health (the MILD training set-up: UP-a1, MD-base2, HE-final, MD-fin1 full games, 768):
+	 *  the hero's health against a plain hero's of his level says which applies (strong 0..1), nothing hidden. */
+	static final double[] SMILD = { 0.99, 0.99, 0.99, 0.99, 0.98, 0.99, 0.98, 0.97, 0.97, 0.98,
+			0.98, 0.96, 0.90, 0.87, 0.95, 0.88, 0.81, 0.86, 0.81, 0.65, 0.81, 0.72, 0.55, 0.60, 0.55 };
+	static final double[] SEMP = { 0.96, 0.91, 0.91, 0.91, 0.81, 0.92, 0.85, 0.84, 0.85, 0.86,
+			0.79, 0.65, 0.55, 0.56, 0.60, 0.70, 0.62, 0.68, 0.62, 0.50, 0.65, 0.55, 0.40, 0.45, 0.40 };
 	/** The armour slot's floor value: armour a at level l (between whole levels: the mix), the weapon on its base. */
 	static double lsA(Ctx c, int k, Armor a, double l) {
 		int f = (int) Math.floor(l); double x = l - f;
