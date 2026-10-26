@@ -108,6 +108,18 @@ final class Rules {
 				&& !Assist.declined(null, Assist.REST_ACT) && !AsBasics.veto(restTarget()), PREP, Rules::restTarget),
 		propose("boss next: read the upgrades", c -> stairsDown(c) && bossNext() && calm() && !Assist.blind() && upgrade() != null
 				&& !Assist.declined(ScrollOfUpgrade.class, Scroll.AC_READ) && upgradeOn() != null, PREP, Rules::upgradeTarget),
+		// -- items and economy (agent WB: AsEconomy) -------------------------------------------------------------------
+		// a shopkeeper harmed twice flees and his stock goes with him (Shopkeeper.processHarm): nothing that reaches him,
+		// bombs, gas, fire, a sprung trap, a bolt's path, an area scroll in his view (a rescue only before his warning)
+		veto("shop: nothing that reaches the shopkeeper", AsEconomy::shopVeto),
+		// Lightning arcs 2 cells from one in water and strikes the hero beside the chain (WandOfLightning.arc)
+		veto("lightning: no arc back to the hero", AsEconomy::lightningVeto),
+		// an Ankh held unblessed: the dew kept for its blessing (a revival in place, not WndResurrect's lost pack)
+		veto("ankh: the dew kept for the blessing", AsEconomy::dewVeto),
+		// an upgrade that could strip a good enchantment, with the pot on the floor and 12 energy: Magical Infusion
+		veto("infusion: the upgrade kept for the pot", AsEconomy::upgradeVeto),
+		// strategy-v4 rule 7: bombs do 30-90 on the climb past its multiplied armour; on the way down, emergencies only
+		veto("bombs: kept for the climb", AsEconomy::bombVeto),
 	};
 
 	// =============================================================================================================

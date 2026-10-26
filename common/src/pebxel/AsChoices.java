@@ -38,6 +38,9 @@ public final class AsChoices {
 			if (n.endsWith("WndSadGhost")) return pickItem(bs, AsChoices::ghostScore, "the Ghost's reward");
 			if (n.endsWith("WndWandmaker")) return pickItem(bs, AsChoices::wandScore, "the Wandmaker's wand");
 			if (n.endsWith("WndBlacksmith$WndSmith")) return pickItem(bs, AsChoices::smithScore, "the smith's piece");
+			if (n.endsWith("WndBlacksmith$WndReforge")) return reforge(w, bs);
+			if (n.endsWith("TrinketCatalyst$WndTrinket")) { Ui.Part p = pickItem(bs, i -> AsEconomy.trinketWorth(i.getClass()) * 10 - (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.trinkets.TrinketCatalyst.RandomTrinket ? 1 : 0), "the trinket"); if (p != null) AsEconomy.trinket = itemOf(p.g).getClass().getSimpleName(); return p; }   // (strategy-v4 6: AsEconomy's order)
+			if (n.endsWith("WndEnergizeItem")) { for (Ui.Part p : bs) if (p.text.toLowerCase(Locale.ROOT).contains("energy") && !p.text.toLowerCase(Locale.ROOT).contains(" all ") && enabled(p.g)) { why = "energize one"; AsEconomy.energized++; return p; } return null; }
 			if (n.endsWith("WndBlacksmith")) {
 				String want = smithWants();
 				for (Ui.Part p : bs) if (want != null && p.text.toLowerCase(Locale.ROOT).startsWith(want) && enabled(p.g)) { why = "the Blacksmith: " + want; return p; }
@@ -92,20 +95,58 @@ public final class AsChoices {
 	static int wandScore(Item i) {
 		int k = WANDS.indexOf(i.getClass()); int v = k < 0 ? 0 : 100 - k * 5;
 		Hero h = Dungeon.hero;
+		if (h.heroClass == HeroClass.MAGE) { AsItems.H = h; v = AsItems.staffRank(i.getClass()) * 20 + v / 10; }   // (the Mage: the wand wanted in the staff, AsItems' rank by subclass)
 		for (Item o : h.belongings) if (o != i && o.getClass() == i.getClass()) v -= 30;   // (one already: the other)
 		return v;
 	}
 
 	// ---- the Blacksmith (strategy-reference 5.3) ----
-	/** What his favour should buy next ("upgrade", "smith", "cash"), or null: nothing. */
+	/** What his favour should buy next ("reforge", "upgrade", "smith", "harden", "cash"), or null: nothing.
+	 *  (strategy-reference 5.3: reforge with duplicates (500), then upgrade a +0/+1 piece (1000), then smith (2000);
+	 *  a last 500 hardens an enchanted piece the upgrades could strip; the rest as gold) */
 	public static String smithWants() {
 		int f = Blacksmith.Quest.favor;
-		int up = 1000 + 1000 * Blacksmith.Quest.upgrades;
+		if (f <= 0) return null;
+		int up = 1000 + 1000 * Blacksmith.Quest.upgrades, ref = 500 + 1000 * Blacksmith.Quest.reforges, hard = 500 + 1000 * Blacksmith.Quest.hardens;
+		if (f >= ref && reforgePair() != null) return "reforge";
 		if (f >= up && upgradeTarget() != null) return "upgrade";
 		if (f >= 2000) return "smith";
-		if (f > 0 && f < 500) return "cash";
-		if (f > 0 && upgradeTarget() == null) return "cash";
-		return f > 0 && f < up ? "cash" : null;
+		if (f >= hard && hardenTarget() != null) return "harden";
+		return "cash";
+	}
+	/** Two identified, uncursed pieces of one kind (the worn one first): the reforge keeps the higher, +1. */
+	static Item[] reforgePair() {
+		Hero h = Dungeon.hero;
+		for (Item w : new Item[]{h.belongings.armor(), h.belongings.weapon()}) {
+			if (w == null || !w.isIdentified() || w.cursed || !w.isUpgradable()) continue;
+			for (Item o : h.belongings.backpack) if (o != w && o.getClass() == w.getClass() && o.isIdentified() && !o.cursed && o.isUpgradable()) return new Item[]{w, o};
+		}
+		return null;
+	}
+	static Item reforgePick(WndBag.ItemSelector sel) {
+		Item[] p = reforgePair(); if (p == null) return null;
+		Object wnd = Assist.field(sel, "this$0"); Object b1 = wnd == null ? null : Assist.field(wnd, "btnItem1");
+		boolean firstEmpty = !(b1 instanceof ItemButton) || ((ItemButton) b1).item() == null;
+		Item i = firstEmpty ? p[0] : p[1];
+		return sel.itemSelectable(i) ? i : null;
+	}
+	/** The reforge window: each slot filled (its selector answered by reforgePick), then Reforge; else back. */
+	static Ui.Part reforge(Window w, List<Ui.Part> bs) {
+		if (reforgePair() == null) return null;
+		Object b1 = Assist.field(w, "btnItem1"), b2 = Assist.field(w, "btnItem2"), go = Assist.field(w, "btnReforge");
+		Gizmo press = null;
+		if (b1 instanceof ItemButton && ((ItemButton) b1).item() == null) press = (Gizmo) b1;
+		else if (b2 instanceof ItemButton && ((ItemButton) b2).item() == null) press = (Gizmo) b2;
+		else if (go instanceof Gizmo && enabled((Gizmo) go)) press = (Gizmo) go;
+		if (press == null) return null;
+		for (Ui.Part p : bs) if (p.g == press || isIn(p.g, press)) { why = "the Blacksmith: reforge"; return p; }
+		return null;
+	}
+	static boolean isIn(Gizmo g, Gizmo in) { for (Gizmo p = g; p != null; p = p.parent) if (p == in) return true; return false; }
+	/** Hardening: the worn piece the upgrades go on, if it has a good enchantment or glyph to keep and is +2 or more. */
+	static Item hardenTarget() {
+		Item g = AsEconomy.infusionTarget(2);
+		return g != null && g.isIdentified() && !g.cursed ? g : null;
 	}
 	/** His upgrade takes an identified, uncursed item at +0 or +1: the worn armour, else the weapon. */
 	static Item upgradeTarget() {
