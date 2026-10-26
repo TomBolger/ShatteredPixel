@@ -26,6 +26,7 @@ public final class BotStats {
 
 	static final Map<String, Integer> lost = new TreeMap<>(), turnsBy = new TreeMap<>();
 	static String lastWhy = "";
+	static final boolean FOES = "1".equals(System.getenv("FOES"));
 	static int lastHP = -1, healed, restTurns, starveTurns, decisions, attacks, surprised;
 	static float lastT = -1; static String lastSrc = "other"; static boolean lastRest;
 	static final int[] lostAt = new int[27], turnsAt = new int[27];
@@ -63,6 +64,16 @@ public final class BotStats {
 			if (lastRest && dt > 0) restTurns += (int) dt;
 			Hunger hu = h.buff(Hunger.class); if (hu != null && hu.isStarving() && dt > 0) starveTurns += (int) dt;
 			if (dt > 0) { turnsAt[d] += (int) dt; turnsBy.merge(lastWhy, Math.round(dt), Integer::sum); }
+		}
+		if (AssistBot.v && FOES) {   // (FOES=1 with V=1: the enemies in sight each decision, d distance, * a clear bolt line to the hero)
+			StringBuilder sb = new StringBuilder("    foes");
+			for (Mob m : L.mobs) {
+				if (!m.isAlive() || m.alignment != Char.Alignment.ENEMY || !L.heroFOV[m.pos]) continue;
+				boolean line = new com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica(m.pos, h.pos, com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica.MAGIC_BOLT).collisionPos == h.pos;
+				sb.append(' ').append(m.getClass().getSimpleName()).append('@').append(m.pos).append(" d").append(L.distance(m.pos, h.pos)).append(line ? "*" : "").append(' ').append(m.state == m.HUNTING ? "H" : m.state == m.WANDERING ? "W" : m.state == m.SLEEPING ? "S" : "?").append(' ').append(m.HP).append('/').append(m.HT);
+			}
+			if (lastHP >= 0 && h.HP != lastHP) sb.append("  dHP ").append(h.HP - lastHP);
+			System.out.println(sb);
 		}
 		lastHP = h.HP; lastT = now;
 		if (t != null && t.kind == Assist.ENEMY && t.action == null && t.cell >= 0 && L.adjacent(t.cell, h.pos)) {

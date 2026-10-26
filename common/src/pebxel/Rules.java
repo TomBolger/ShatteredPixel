@@ -110,6 +110,16 @@ final class Rules {
 		propose("bolts: out of every line", AsBolts::manyLines, 0, AsBolts::outOfAll),
 		// a scorpio hunting backs off (Scorpio.getCloser): waiting round the corner for it waits for nothing
 		veto("bolts: no waiting for a scorpio", AsBolts::waitScorpio),
+		// -- lines of fire (agent CB: AsFire) -----------------------------------------------------------------------------
+		// (CB, BASE1 replays: 10 of 28 bolt deaths on the climb were the corner tactic's step out of a caster's line
+		// undone by the next plan, the caster out of sight and forgotten: a bolt every other turn; 11 of 28 were blows
+		// traded beside a melee foe while casters behind it bolted every turn.) The casters seen are remembered where
+		// they were; a walk's first step into a coming caster's line from out of every line is held back, and the hero
+		// waits there for it to come round; a wait or walk left in a line goes out of it; a fight in a line steps out.
+		veto(AsFire.NOSTEP, AsFire::stepVeto),
+		propose("fire: wait out of its line", AsFire::holdWhen, 0, AsFire::holdTarget),
+		propose("fire: out of its line", AsFire::outWhen, 0, AsFire::outTarget),
+		propose("fire: the fight out of its line", AsFire::fightWhen, 0, AsFire::fightTarget),
 		// -- monsters and rooms (agent WC: AsFoes) -------------------------------------------------------------------
 		// a ghoul knocked down gets up in a few turns while its partner is near (Ghoul.die, GhoulLifeLink): no waiting
 		// for the partner to come, no rest, till it's finished
