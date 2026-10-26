@@ -240,8 +240,11 @@ final class AsFire {
 			if (l) r += s.dmg; }
 		return r;
 	}
+	static final int GAP = optInt("FIREGAP", 0); static float fightAt = -99; static Level fightL;
 	static Target fightTarget() {
+		if (GAP > 0 && fightL == L && Actor.now() - fightAt < GAP && Actor.now() >= fightAt) return null;   // (a step out lately, the shooter stepped back into line: fight on a while, no dance)
 		int n = fightCell(); if (n < 0) return null;
+		fightAt = Actor.now(); fightL = L;
 		Hero h = Dungeon.hero; double f = fireAt(h.pos, false);
 		Target t = new Target(n, GO, "fire: the fight out of its line (" + Math.round(f) + " a turn, past armour)");
 		t.hint = 0.2 + Math.max(1, Brain.R) * Math.min(1, f * 3 / Math.max(1, h.HP)) * 0.5;
@@ -259,14 +262,15 @@ final class AsFire {
 	// =============================================================================================================
 	static final boolean ENGAGE = opt("FIREENGAGE", true);
 	static final int HIDEMAX = optInt("FIREHIDE", 6);
+	static final boolean DBGF = opt("FIREDBG", false);
 	static int engId = -1; static boolean engCharge; static float engAt = -99;
 	static Target engage() {
 		if (!ON || !ENGAGE) return null;
 		Hero h = Dungeon.hero; int hp = h.pos; if (h.rooted) return null;
 		note(); float now = Actor.now();
 		Seen c = null; int cw = INF;
-		for (Seen s : seen.values()) if (s.comes && s.at == now && fireLine(s, hp)) { int w = walk(s.pos); if (w < cw) { cw = w; c = s; } }
-		if (c == null) return null;
+		for (Seen s : seen.values()) if (s.comes && s.at == now && fireLine(s, hp)) { int w = walk(s.pos); if (c == null || w < cw) { cw = w; c = s; } }   // (one it can't walk to as well: hidden from, not charged)
+		if (c == null) { if (DBGF) { StringBuilder b = new StringBuilder("    FIRE none:"); for (Seen e : seen.values()) b.append(' ').append(e.m.getClass().getSimpleName()).append('@').append(e.pos).append(e.comes ? "c" : "").append(e.at == now ? "" : " old").append(fireLine(e, hp) ? "*" : ""); System.out.println(b); } return null; }
 		double here = fireAt(hp, false);
 		// hide: least bolts to a cell out of every line (Dijkstra over the known free cells, within HIDEMAX steps)
 		int N = L.length(), W = L.width(); double[] cost = new double[N]; int[] st = new int[N], first = new int[N];
@@ -282,6 +286,7 @@ final class AsFire {
 				double nc = cost[u] + f + 0.01;
 				if (nc < cost[v]) { cost[v] = nc; st[v] = st[u] + 1; first[v] = u == hp ? v : first[u]; q.add(new double[]{nc, v}); } } }
 		double cc = cw >= INF ? Double.MAX_VALUE : Math.max(0, cw - 2) * here;
+		if (DBGF) System.out.println("    FIRE engage " + c.m.getClass().getSimpleName() + "@" + c.pos + " walk " + cw + " here " + Math.round(here) + " hide " + hide + " cost " + Math.round(hc) + " charge " + Math.round(cc) + " seen " + fc.size());
 		boolean charge = hide < 0 || cc < hc;
 		if (engId == c.m.id() && now - engAt <= 3 && engCharge != charge) charge = engCharge ? !(hc < cc * 0.6) : !(cc < hc * 0.6);   // (kept unless the other way is much cheaper)
 		if (charge && cw > 12) return null;
