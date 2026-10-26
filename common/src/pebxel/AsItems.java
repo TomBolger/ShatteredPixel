@@ -151,8 +151,8 @@ final class AsItems {
 			if ((t = litBombs(planA)) != null) return t;
 			if ((t = crossing()) != null) return t;   // (a puzzle's crossing under way: its steps)
 			if (near.isEmpty()) return null;
-			PotionOfHealing ph = H.belongings.getItem(PotionOfHealing.class);
-			if (ph != null && ph.isKnown() && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
+			Item ph = Clues.healing();   // (known, or surely Healing by its clues: agent ID)
+			if (ph != null && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
 			if (dying && (t = escapes()) != null) return t;
 			if ((t = hasteRun()) != null) return t;
 			if ((t = plantStep()) != null) return t;
@@ -694,13 +694,13 @@ final class AsItems {
 
 	/** Can the remedy's buff take the hero over c (beyond the plain walk)? */
 	static boolean crossable(int c, int kind) {
-		if (c < 0 || c >= LEN || L.solid[c] || (!Assist.known[c] && !L.heroFOV[c])) return false;
+		if (c < 0 || c >= LEN || (L.solid[c] && !L.passable[c]) || (!Assist.known[c] && !L.heroFOV[c])) return false;   // (a door is solid and passable: Terrain.DOOR)
 		if (Actor.findChar(c) != null && c != hp && L.heroFOV[c]) return false;
 		if (kind == LEV) return L.passable[c] || L.avoid[c];
 		if (!L.passable[c] || L.avoid[c]) return false;
 		if (Assist.fireAt(c)) return false;
 		if (kind == PURE) return true;
-		if (kind == HASTE) return !Assist.foul(c) && !L.water[c];   // (the sentries' floor: their charge runs on the hero's turns, three steps a turn hasted)
+		if (kind == HASTE) return !Assist.foul(c);   // (the sentries' floor: their charge runs on the hero's turns, three steps a turn hasted)
 		return !Assist.foul(c);   // INVIS: water
 	}
 	/** The walk over crossable cells from a to b (steps; first step in out[0]), or INF. */
@@ -768,9 +768,9 @@ final class AsItems {
 			if (p == null && on == null) { Item b = Clues.believed(KINDPOT[kind], Clues.PUZ); if (b instanceof Potion) { p = (Potion) b; bw = " (" + Clues.about(b) + ")"; } }
 			if (on == null && (p == null || !ok(p, Potion.AC_DRINK))) continue;
 			for (Heap h : L.heaps.valueList()) {
-				if (!prize(h) || (Assist.walk(h.pos) < Assist.INF && !Assist.danger[h.pos])) continue;
+				if (!prize(h) || (Assist.walk(h.pos) < Assist.INF && !Assist.danger[h.pos] && !(kind == HASTE && (sentryWay(h.pos) || Clues.inPuzzle(h.pos, PotionOfHaste.class))))) continue;   // (the sentries' prize: its cell is off their floor, the way to it isn't)
 				if (kind == INVIS && !(Assist.fishSeen || wetWay(h.pos))) continue;
-				if (kind == HASTE && !sentryWay(h.pos)) continue;
+				if (kind == HASTE && !sentryWay(h.pos) && !Clues.inPuzzle(h.pos, PotionOfHaste.class)) continue;
 				if (kind == PURE && !gasWay(h.pos)) continue;
 				int w = crossWalk(hp, h.pos, kind, null);
 				boolean back = Assist.walk(h.pos) < Assist.INF;   // (the far side joins the floor: no need to come back over)

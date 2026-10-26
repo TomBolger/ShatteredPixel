@@ -279,9 +279,16 @@ public final class Clues {
 				for (int n : new int[]{ dc - W, dc + W, dc - 1, dc + 1 }) { if (n < 0 || n >= L.length()) continue; Point q = L.cellToPoint(n);
 					if (q.x >= r.left && q.x <= r.right && q.y >= r.top && q.y <= r.bottom) continue;
 					int w = Assist.walk(n); if (w < bd && !Assist.danger[n] && L.passable[n] && !L.water[n]) { bd = w; p.stand = n; } } }
+			if (DBG) { StringBuilder sb = new StringBuilder(); for (Map.Entry<Room, Room.Door> d : r.connected.entrySet()) sb.append(' ').append(d.getValue() == null ? "null" : (d.getValue().x + d.getValue().y * W) + ":t" + L.map[d.getValue().x + d.getValue().y * W] + ":" + d.getValue().type); System.out.println("CLUE puzzle " + p.what + " rect " + r.left + "," + r.top + "-" + r.right + "," + r.bottom + " doors" + sb + " stand " + p.stand); }
 			out.add(p);
 		}
 		return out;
+	}
+	/** Is c inside a puzzle room seen on this floor that needs this kind? */
+	static boolean inPuzzle(int c, Class<?> kind) {
+		if (fl != L) return false; Point q = L.cellToPoint(c);
+		for (Map.Entry<Room, Identify.Among> e : puzzles.entrySet()) if (e.getValue().kind == kind && e.getKey().inside(q)) return true;
+		return false;
 	}
 	static boolean drinkKind(Class<?> k) { return k == PotionOfInvisibility.class || k == PotionOfLevitation.class || k == PotionOfPurity.class || k == PotionOfHaste.class; }
 	static Class<? extends Buff> buffFor(Class<?> k) { return k == PotionOfInvisibility.class ? Invisibility.class : k == PotionOfLevitation.class ? Levitation.class : k == PotionOfPurity.class ? BlobImmunity.class : k == PotionOfHaste.class ? Haste.class : null; }

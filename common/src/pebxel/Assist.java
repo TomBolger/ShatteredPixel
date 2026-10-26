@@ -1630,7 +1630,7 @@ public final class Assist {
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
 	static Target upstairs() {
 		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || !oPick("up", oLosing(OUP) || H.HP * 100 < H.HT * Tune.UPLOW, H.HP * 100 < H.HT * 35)) return null;   // (MT: or low: the model can't see what comes next, and the stairs are a sure way out)
-		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
+		if (Clues.healing() != null) return null;   // (a known Healing, or one surely Healing by its clues: agent ID)
 		if (Actor.now() - floorT0 < 3) return null;   // (MT: just come down: straight back up and down again took no time, for ever; starving, the food below)
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
 		int near = INF; boolean hunted = false;
