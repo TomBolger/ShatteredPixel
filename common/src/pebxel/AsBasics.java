@@ -514,14 +514,8 @@ final class AsBasics {
 		// gas or fire remembered where it was last seen, behind a door shut since: it never clears, and the only way on
 		// stays shut for good (K6-b1: 800 searches in a shop, the corridor's toxic gas remembered). Gone by now.
 		if (hazAge()) return null;
-		// an ally (the Dried Rose's ghost, a summon) standing in the only way on: the plan walls it off like any
-		// character, but the hero swaps places with an ally he walks into (Char.interact): K6, a ghost in a corridor
-		// kept a hero searching one spot 300 times
-		for (Mob m : mobs()) if (m.isAlive() && m.alignment == Char.Alignment.ALLY && L.heroFOV[m.pos] && dist[m.pos] >= INF && !Char.hasProp(m, Char.Property.IMMOVABLE)) {
-			if (adjacent(m.pos, hp)) return new Target(m.pos, GO, "stuck: swap places with the ally in the way");
-			int b = -1, bd = INF; for (int k : PathFinder.NEIGHBOURS8) { int n = m.pos + k; if (n >= 0 && n < L.length() && dist[n] > 0 && dist[n] < bd && open[n]) { bd = dist[n]; b = n; } }
-			if (b >= 0) return new Target(b, GO, "stuck: to the ally in the way");
-		}
+		// (an ally in the only way on: the plan walks through it now, swapping places: Assist.swappable / swapStep, K8.
+		// K6's swap here fired for any ally in view, and the Rogue's clone, swapped for free, was swapped with for ever)
 		if (Dungeon.branch != 0) {
 			for (com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr : L.transitions) if (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_ENTRANCE && known[tr.cell()])
 				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;
@@ -651,13 +645,14 @@ final class AsBasics {
 		if (!FOOD || planA == null || !shortOfFood() || Dungeon.bossLevel()) return null;
 		String w = planA.why;
 		if (!(w.startsWith("look") || w.equals("grass") || w.startsWith("search") || w.startsWith("dead end"))) return null;
-		int st = L.exit();
+		boolean amulet = Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null;
+		int st = amulet ? L.entrance() : L.exit();   // (with the Amulet the way on is up: K8, "on down" from 24 and "up" from 25 for 4,000 decisions)
 		if (st < 0 || st >= L.length() || !known[st] || walk(st) >= INF || L.map[st] == Terrain.LOCKED_EXIT) return null;
 		if (w.startsWith("look") && !w.contains("grass") && FLOORFOOD && !foodHere) return null;   // (the floor's food not found yet: it is somewhere unexplored)
 		if (w.startsWith("look") && !w.contains("grass")) {   // (a room left unexplored may hold food: only a far one is given up)
 			int near = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < near && unseenBy(c)) near = dist[c];
 			if (near <= 12) return null;
 		}
-		return new Target(st, st == Dungeon.hero.pos ? PICKUP : GO, "short of food: on down");
+		return new Target(st, st == Dungeon.hero.pos ? PICKUP : GO, amulet ? "short of food: on up" : "short of food: on down");
 	}
 }

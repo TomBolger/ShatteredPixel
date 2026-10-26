@@ -125,6 +125,7 @@ public final class Assist {
 	static int ovrC = -1;                  // the player's choice: -1 none, WAY: only the way, else an objective cell
 	static final int WAY = -2;
 	static int ovrDir = -1;                // its way (pang 0..63)
+	static int ovrKeyC = -1, ovrBest, ovrStale; static float ovrAt = -1; static final int OVRSTALE = optInt("OVRSTALE", 12);   // (the choice's progress: the nearest it came, offers since)
 	static boolean ovrObj, ovrUnseen;      // chosen from the list (an objective) / it was unseen when chosen
 	static int wayOn = -1;                 // the player's way ran out: tgt2 offers the next click that way, once
 	static boolean grassSkip, planAGrass; private static int grassKey;
@@ -147,7 +148,7 @@ public final class Assist {
 	static float floorT0;
 	static int eatBand;
 	// mind reading: the list as it was last taken
-	static int mindPos = -1; private static Level mindFloor;
+	static int mindPos = -1, listActFrom = -1; private static Level mindFloor;
 	static int[] mindObj = new int[0], mindWalk = new int[0];
 	// the last plan
 	static List<Target> last = new ArrayList<>();
@@ -395,7 +396,7 @@ public final class Assist {
 		try {
 			Hero h = Dungeon.hero;
 			if (t == null || h == null || !h.isAlive()) return false;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
 			boolean aimingNow = Controls.aiming();
 			if (aimingNow) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 			if (!h.ready) return false;
@@ -427,6 +428,10 @@ public final class Assist {
 					break;
 			}
 			if (t.cell < 0) return false;
+			if ((t.kind == GO || t.kind == PICKUP || t.kind == ENEMY) && setupOk(Dungeon.level) && hp == h.pos) {   // (an ally on the only good way: swap places first)
+				int sw = swapStep(t.cell);
+				if (sw >= 0) { GameScene.handleCell(sw); return true; }
+			}
 			noteTalk(t.cell);
 			if (anyDanger) clearPath(h);   // (the hero keeps its last walk to the same cell: one planned before a hazard was seen)
 			GameScene.handleCell(t.cell);
@@ -438,7 +443,7 @@ public final class Assist {
 	public static void noted(Target t) {
 		try {
 			Hero h = Dungeon.hero; if (t == null || h == null) return;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item; listActFrom = h.pos;
 			if (t.kind == WAIT && (SEARCH_ACT.equals(t.action) || (t.action == null && t.cell == h.pos))) noteSearch();
 			if (t.kind != USE && t.kind != WAIT && t.cell >= 0) noteTalk(t.cell);
 			if (t.item != null && (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action))) zapped.put(t.item, Actor.now());
@@ -521,7 +526,7 @@ public final class Assist {
 
 	static void ensureFloor(Level l) {
 		if (floor == l && srchFrom != null && srchFrom.length == l.length()) return;
-		floor = l; goal = -1; passed.clear(); skippedHeaps.clear(); declined.clear(); demoted.clear(); planned.clear(); upgradeHeld = false; ovrC = -1; wayOn = -1; grassSkip = false;
+		floor = l; goal = -1; passed.clear(); skippedHeaps.clear(); declined.clear(); demoted.clear(); planned.clear(); upgradeHeld = false; ovrC = -1; ovrKeyC = -1; wayOn = -1; grassSkip = false;
 		vetoId = -1; vetoStand = -1; resumeCell = -1; stepBackWaited = false; ambGoal = -1; ambId = -1; waitId = -1; lastPos = -1; from = -1;
 		srchFrom = new boolean[l.length()]; checked = new boolean[l.length()]; fishSeen = false; fishAt = -99; talked.clear(); bad.clear();
 		huntMem.clear(); mobLast.clear();
@@ -646,9 +651,45 @@ public final class Assist {
 	/** The hazards, the characters in sight (in the way), the walk. */
 	static void walls(boolean water) {
 		hazards(water);
-		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.pos != hp) pass[m.pos] = false;
+		for (Mob m : mobs()) if (L.heroFOV[m.pos] && m.pos != hp && !swappable(m)) pass[m.pos] = false;   // (an ally the hero swaps places with is no wall: K8)
 		bfs();
 	}
+
+	/** An ally the hero swaps places with when he walks into it (Char.interact: the Dried Rose's ghost, a summon, the
+	 *  Rogue's clone): not one that can't move or is held, nor one too large for the hero's cell. K6: the plan walled
+	 *  allies off like foes, and a ghost in a corridor stalled the hero for hundreds of turns. */
+	static boolean swappable(Mob m) {
+		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || m instanceof NPC || Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
+		if (H.rooted || H.paralysed > 0 || m.rooted || m.paralysed > 0 || !L.passable[m.pos]) return false;
+		if (Char.hasProp(m, Char.Property.LARGE) && !L.openSpace[hp]) return false;
+		for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
+		for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
+		return true;
+	}
+
+	/** The walk to c goes through an ally that the game's own walk (Hero.getCloser: every character in sight a wall)
+	 *  won't take: the ally beside the hero on the plan's way, to swap places with first; else -1. */
+	static int swapStep(int c) {
+		if (c < 0 || c >= LEN || adjacent(c, hp) || c == hp || dist[c] >= INF) return -1;
+		boolean ally = false;
+		for (Mob m : mobs()) if (L.heroFOV[m.pos] && swappable(m)) ally = true;
+		if (!ally) return -1;
+		boolean[] p = new boolean[LEN];
+		for (int i = 0; i < LEN; i++) p[i] = L.passable[i] && (L.visited[i] || L.mapped[i]);
+		boolean[] pc = p.clone();
+		for (Mob m : mobs()) if (m.pos >= 0 && m.pos < LEN && H.fieldOfView != null && H.fieldOfView[m.pos]) pc[m.pos] = false;
+		List<Integer> g = gamePath(hp, c, pc);
+		// the plan's walk, over the cells pass allows (allies too), from c back: the best of the hero's neighbours
+		int[] d = new int[LEN]; Arrays.fill(d, INF); int[] q = new int[LEN]; int qh = 0, qt = 0; d[c] = 0; q[qt++] = c;
+		while (qh < qt) { int a = q[qh++], nd = d[a] + 1;
+			for (int k = 0; k < 8; k++) { int n = a + N8[k]; if (!nb(a, n) || d[n] <= nd || !(pass[n] || n == hp)) continue; d[n] = nd; q[qt++] = n; } }
+		if (d[hp] >= INF) return -1;
+		if (g != null && g.size() <= d[hp] + 2) return -1;   // (the game's own way round is as good)
+		int best = -1;   // (the next step on the plan's way: the ally to swap with, or a free cell short of it, a step at a time)
+		for (int k = 0; k < 8; k++) { int n = hp + N8[k]; if (nb(hp, n) && d[n] + 1 == d[hp] && (best < 0 || swappable(mobAt(n))) && (seenChar(n) == null || swappable(mobAt(n)))) best = n; }
+		return best;
+	}
+	static Mob mobAt(int c) { Char ch = Actor.findChar(c); return ch instanceof Mob ? (Mob) ch : null; }
 
 	static void bfs() {
 		Arrays.fill(dist, INF);
@@ -1297,7 +1338,14 @@ public final class Assist {
 				int c = ovrC;
 				boolean useCell = !L.passable[c] || L.map[c] == Terrain.ALCHEMY;
 				boolean met = ovrObj && (ovrUnseen ? !unseenBy(c) : useCell && walk(c) <= 1) && seenHeap(c) == null && seenChar(c) == null;
-				if (met || walk(c) >= INF) ovrC = WAY;
+				if (ovrObj && seenChar(c) != null && walk(c) <= 1 && (talked.getOrDefault(seenChar(c).id(), 0) > 0 || !(seenChar(c) instanceof NPC))) met = true;   // (a character chosen, reached: talked to; else it never is "met")
+				// obedience never loops: a choice the hero gets no nearer to over OVRSTALE offers (the list's other entries
+				// done meanwhile, a walk that does nothing) is given up (K6: "your choice" offered 628 times in one game)
+				float ovrNow = ovrAt; ovrAt = Actor.now();
+				if (c != ovrKeyC) { ovrKeyC = c; ovrBest = walk(c); ovrStale = 0; }
+				else if (walk(c) < ovrBest) { ovrBest = walk(c); ovrStale = 0; }
+				else if (Actor.now() != ovrNow && ++ovrStale > OVRSTALE) { ovrC = -1; demoted.put(c, Actor.now() + DEMOTE); met = true; }
+				if (met || walk(c) >= INF) { if (ovrC != -1) ovrC = WAY; }
 				else { why[0] = "your choice"; return c; }
 			}
 			for (Mob m : mobs()) {   // the quest people
@@ -1566,7 +1614,12 @@ public final class Assist {
 	static void mind() {
 		if (mode() == 0) return;
 		boolean up = false; int pr = -1;
-		if (mindFloor == L && mindPos != hp) {
+		// (only a walk the player made himself (the d-pad, a tap) is read: one the list's entry made was no wish of
+		// its own. K6: the bot's every walk to a quest's step or a pinned use read as wanting whatever it passed
+		// nearer, "your choice" set on it, and the two took turns for 1,000+ turns)
+		boolean own = !(listActFrom == mindPos && listActFrom >= 0);
+		if (H.ready) listActFrom = -1;   // (the act's walk over: what moves the hero from here is the player's)
+		if (mindFloor == L && mindPos != hp && own) {
 			for (int j = 0; j < mindObj.length; j++) {
 				int c = mindObj[j]; int g = mindWalk[j] - (c >= 0 && c < LEN ? walk(c) : INF);
 				if (j == 0 && c < 0) break;
