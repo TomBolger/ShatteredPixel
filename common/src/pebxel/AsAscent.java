@@ -69,6 +69,7 @@ final class AsAscent {
 		float st = stacks();
 		if (h.rooted) return null;   // (held fast: the usual rules, a fight or a wait)
 		boolean entKnown = ent >= 0 && ent < L.length() && known[ent] && walk(ent) < INF;
+		if (entKnown && ent != hp && seenChar(ent) != null) return null;   // (someone on the stairs: the usual rules; K7-d, a succubus there, "up" for ever)
 		int w = entKnown ? (ent == hp ? 0 : walk(ent)) : INF;
 		double hs = h.speed();
 		// the foes in sight: one beside the hero is fought (or left by the stairs beside him); one that will reach him
@@ -199,7 +200,14 @@ final class AsAscent {
 	static boolean down(Brain.Cand c) {
 		if (!on() || Dungeon.depth >= 26) return false;
 		Target t = c.t; int ex = L.exit();
-		return (t.kind == GO || t.kind == PICKUP) && ex >= 0 && (t.obj == ex || t.cell == ex) && !t.why.startsWith("escape");
+		if (t.kind != GO && t.kind != PICKUP || t.why.startsWith("escape")) return false;
+		if (ex >= 0 && (t.obj == ex || t.cell == ex)) return true;
+		return downAt(t.cell) || downAt(t.obj);   // (a way down of more than one cell: the Dwarf King's floor's whole stairway; K7-d, fleeing fire onto it went back down to 21 for ever)
+	}
+	static boolean downAt(int c) {
+		if (c < 0 || c >= L.length()) return false;
+		com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr = L.getTransition(c);
+		return tr != null && tr.inside(c) && (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.REGULAR_EXIT || tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_EXIT);
 	}
 
 	static void reset() { why.clear(); }
