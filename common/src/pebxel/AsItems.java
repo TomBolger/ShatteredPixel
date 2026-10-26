@@ -151,8 +151,8 @@ final class AsItems {
 			if ((t = litBombs(planA)) != null) return t;
 			if ((t = crossing()) != null) return t;   // (a puzzle's crossing under way: its steps)
 			if (near.isEmpty()) return null;
-			PotionOfHealing ph = H.belongings.getItem(PotionOfHealing.class);
-			if (ph != null && ph.isKnown() && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
+			Item ph = Clues.healing();   // (known, or surely Healing by its clues: agent ID)
+			if (ph != null && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
 			if (dying && (t = escapes()) != null) return t;
 			if ((t = hasteRun()) != null) return t;
 			if ((t = plantStep()) != null) return t;
@@ -525,7 +525,8 @@ final class AsItems {
 	 *  goes off at once: any group. */
 	static Target bombs() {
 		Item best = null; int bc = -1, bn = 0;
-		for (Item i : H.belongings.backpack) {
+		boolean spend = Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null && AsEconomy.bombSpendOk();   // (the climb's are AsAscent's; going down, emergencies only: AsEconomy)
+		if (spend) for (Item i : H.belongings.backpack) {
 			if (!(i instanceof Bomb) || i instanceof Noisemaker || i instanceof RegrowthBomb || i instanceof WoollyBomb || i instanceof SmokeBomb) continue;
 			if (!ok(i, "LIGHTTHROW")) continue;
 			int r = bombRange(i); if (i instanceof ShrapnelBomb) continue;   // (its 8 cells in sight: it hits the hero too, almost always)
@@ -687,20 +688,21 @@ final class AsItems {
 	// magical fire, a barricade)
 	// =============================================================================================================
 
-	static final int LEV = 1, INVIS = 2, PURE = 3;
+	static final int LEV = 1, INVIS = 2, PURE = 3, HASTE = 4;   // (HASTE: the sentry room's own potion, SentryRoom.paint; invisibility doesn't hide from a sentry: Sentry.act)
 	static final class Cross { int heap, home, kind, tries; Level l; float until; }
 	static final Set<Integer> done = new HashSet<>();   // prizes given up on this floor
 	static Cross cross;
 
 	/** Can the remedy's buff take the hero over c (beyond the plain walk)? */
 	static boolean crossable(int c, int kind) {
-		if (c < 0 || c >= LEN || L.solid[c] || (!Assist.known[c] && !L.heroFOV[c])) return false;
+		if (c < 0 || c >= LEN || (L.solid[c] && !L.passable[c]) || (!Assist.known[c] && !L.heroFOV[c])) return false;   // (a door is solid and passable: Terrain.DOOR)
 		if (Actor.findChar(c) != null && c != hp && L.heroFOV[c]) return false;
 		if (kind == LEV) return L.passable[c] || L.avoid[c];
 		if (!L.passable[c] || L.avoid[c]) return false;
 		if (Assist.fireAt(c)) return false;
 		if (kind == PURE) return true;
-		return !Assist.foul(c);   // INVIS: water and the sentries' floor
+		if (kind == HASTE) return !Assist.foul(c);   // (the sentries' floor: their charge runs on the hero's turns, three steps a turn hasted)
+		return !Assist.foul(c);   // INVIS: water
 	}
 	/** The walk over crossable cells from a to b (steps; first step in out[0]), or INF. */
 	static int crossWalk(int a, int b, int kind, int[] first) {
@@ -721,7 +723,9 @@ final class AsItems {
 		return true;
 	}
 	static final class Notes { static int keys(com.shatteredpixel.shatteredpixeldungeon.items.keys.Key k) { return com.shatteredpixel.shatteredpixeldungeon.journal.Notes.keyCount(k); } }
-	static Buff buffOf(int kind) { return kind == LEV ? H.buff(Levitation.class) : kind == INVIS ? H.buff(Invisibility.class) : H.buff(BlobImmunity.class); }
+	static Buff buffOf(int kind) { return kind == LEV ? H.buff(Levitation.class) : kind == INVIS ? H.buff(Invisibility.class) : kind == HASTE ? H.buff(Haste.class) : H.buff(BlobImmunity.class); }
+	@SuppressWarnings("unchecked") static final Class<? extends Potion>[] KINDPOT = new Class[]{ null, PotionOfLevitation.class, PotionOfInvisibility.class, PotionOfPurity.class, PotionOfHaste.class };
+	static String kindWord(int k) { return k == LEV ? "levitating" : k == INVIS ? "invisible" : k == HASTE ? "hasted" : "purity"; }
 	static float left(Buff b) { return b instanceof FlavourBuff ? ((FlavourBuff) b).cooldown() : b != null ? 5 : 0; }
 
 	/** A crossing under way: the next step to the prize (one cell at a time: Assist's own walk keeps off the danger),
@@ -744,7 +748,7 @@ final class AsItems {
 		if (b != null && c.kind == LEV && goal == c.heap && w + 2 > t && !hasWayBack(c)) { c.heap = -1; }   // (not enough time left to get back: home)
 		int step = w == 1 ? goal : f[0];
 		if (Assist.bad.containsKey(step) || H.rooted) { if (c.heap >= 0) done.add(c.heap); cross = null; return null; }   // (the step did nothing when tried: given up)
-		Target r = new Target(step, step == c.heap ? Assist.PICKUP : Assist.GO, IT + "puzzle: " + (goal == c.heap ? "to the prize" : "back") + " (" + (c.kind == LEV ? "levitating" : c.kind == INVIS ? "invisible" : "purity") + ")");
+		Target r = new Target(step, step == c.heap ? Assist.PICKUP : Assist.GO, IT + "puzzle: " + (goal == c.heap ? "to the prize" : "back") + " (" + kindWord(c.kind) + ")");
 		r.obj = step; return r;
 	}
 	static boolean hasWayBack(Cross c) { return Assist.walk(c.heap) < Assist.INF; }
@@ -758,23 +762,31 @@ final class AsItems {
 		if ((t = barricade()) != null) return t;
 		if ((t = grab()) != null) return t;
 		if (hpf < 0.6f) return null;
-		for (int kind = LEV; kind <= PURE; kind++) {
-			Potion p = kind == LEV ? has(PotionOfLevitation.class) : kind == INVIS ? has(PotionOfInvisibility.class) : has(PotionOfPurity.class);
-			if (p == null || !ok(p, Potion.AC_DRINK)) continue;
+		for (int kind = LEV; kind <= HASTE; kind++) {
+			// the potion: a known one, else the unknown one believed it (Clues: the floor's puzzle room puts one about), or
+			// its effect on already (a test drink at the room's door that turned out to be it)
+			Potion p = has(KINDPOT[kind]); Buff on = buffOf(kind); String bw = "";
+			if (p == null && on == null) { Item b = Clues.believed(KINDPOT[kind], Clues.PUZ); if (b instanceof Potion) { p = (Potion) b; bw = " (" + Clues.about(b) + ")"; } }
+			if (on == null && (p == null || !ok(p, Potion.AC_DRINK))) continue;
 			for (Heap h : L.heaps.valueList()) {
-				if (!prize(h) || (Assist.walk(h.pos) < Assist.INF && !Assist.danger[h.pos])) continue;
-				if (kind == INVIS && !(Assist.fishSeen || Assist.sentryZone[h.pos] || wetWay(h.pos))) continue;
+				if (!prize(h) || (Assist.walk(h.pos) < Assist.INF && !Assist.danger[h.pos] && !(kind == HASTE && (sentryWay(h.pos) || Clues.inPuzzle(h.pos, PotionOfHaste.class))))) continue;   // (the sentries' prize: its cell is off their floor, the way to it isn't)
+				if (kind == INVIS && !(Assist.fishSeen || wetWay(h.pos))) continue;
+				if (kind == HASTE && !sentryWay(h.pos) && !Clues.inPuzzle(h.pos, PotionOfHaste.class)) continue;
 				if (kind == PURE && !gasWay(h.pos)) continue;
 				int w = crossWalk(hp, h.pos, kind, null);
 				boolean back = Assist.walk(h.pos) < Assist.INF;   // (the far side joins the floor: no need to come back over)
-				int budget = kind == PURE ? 18 : 19;
-				if (w >= Assist.INF || (back ? w : 2 * w + 1) > budget || w > 12) continue;
+				int budget = kind == PURE ? 18 : kind == HASTE ? 40 : 19;
+				if (on != null) budget = Math.min(budget, (int) (left(on) * (kind == HASTE ? 3 : 1)) - 1);
+				if (w >= Assist.INF || (back ? w : 2 * w + 1) > budget || w > (kind == HASTE ? 16 : 12)) continue;
 				cross = new Cross(); cross.heap = h.pos; cross.home = hp; cross.kind = kind; cross.l = L; cross.until = Actor.now() + 40;
-				return use(p, Potion.AC_DRINK, -1, (kind == LEV ? "levitation" : kind == INVIS ? "invisibility" : "purity") + ": the prize past the " + (kind == LEV ? "traps / chasm" : kind == INVIS ? "piranhas / sentries" : "gas"));
+				String what = kind == LEV ? "traps / chasm" : kind == INVIS ? "piranhas" : kind == HASTE ? "sentries" : "gas";
+				if (on != null) return crossing();
+				return use(p, Potion.AC_DRINK, -1, (kind == LEV ? "levitation" : kind == INVIS ? "invisibility" : kind == HASTE ? "haste" : "purity") + ": the prize past the " + what + bw);
 			}
 		}
 		return null;
 	}
+	static boolean sentryWay(int c) { if (Assist.sentryZone[c]) return true; for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && Assist.sentryZone[n]) return true; } return false; }
 	static boolean wetWay(int c) { for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && L.water[n]) return true; } return L.water[c]; }
 	static boolean gasWay(int c) { if (Assist.foul(c)) return true; for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && Assist.foul(n)) return true; } return false; }
 
@@ -789,6 +801,8 @@ final class AsItems {
 			Item i = has(c); if (i == null) continue;
 			return use(i, i instanceof Bomb ? "LIGHTTHROW" : Item.AC_THROW, best, "magical fire: put it out with " + c.getSimpleName());
 		}
+		Item b = Clues.believed(PotionOfFrost.class, Clues.PUZ);   // (the room puts a Frost on its floor: the colour believed it, thrown)
+		if (b != null && ok(b, Item.AC_THROW)) { Clues.thrown(b.getClass()); return use(b, Item.AC_THROW, best, "magical fire: put it out with the likely Frost (" + Clues.about(b) + ")"); }
 		return null;
 	}
 
@@ -809,11 +823,12 @@ final class AsItems {
 		if (aim < 0) return null;
 		if (!L.flamable[hp] && !fireReaches(aim, 1) || bd >= 3) {
 			PotionOfLiquidFlame lf = has(PotionOfLiquidFlame.class); if (lf != null && !L.flamable[hp]) return use(lf, Item.AC_THROW, aim, "barricade: burn it");
+			Item blf = Clues.believed(PotionOfLiquidFlame.class, Clues.PUZ);   // (the storage room puts a Liquid Flame on its floor: the colour believed it)
+			if (lf == null && blf != null && !L.flamable[hp] && ok(blf, Item.AC_THROW)) { Clues.thrown(blf.getClass()); return use(blf, Item.AC_THROW, aim, "barricade: burn it with the likely Liquid Flame (" + Clues.about(blf) + ")"); }
 			Item fb = wand(WandOfFireblast.class); if (fb != null && fireOk()) return use(fb, zapAct(fb), aim, "barricade: burn it");
 			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, aim, "barricade: burn it");
 		}
-		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd >= 3) return use(i, "LIGHTTHROW", aim, "barricade: blow it up");
-		return null;
+		return null;   // (no plain Bomb on a barricade: bombs are kept for the climb, AsEconomy.bombSpendOk)
 	}
 
 	/** Telekinetic Grab: a prize in sight the hero can't walk to (across water with piranhas, a chasm, fire). */
@@ -1000,6 +1015,7 @@ final class AsItems {
 				for (Object g : new ArrayList<>((List<?>) mem)) if (g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) {
 					Object it = Assist.field(g, "val$item"); if (!(it instanceof Item)) continue;
 					Item i = (Item) it; Class<?> k = likeliest(i); if (k == null) return null;
+					if (!(i instanceof ExoticPotion) && !(i instanceof ExoticScroll)) Clues.guess(i.getClass(), k);   // (wrong, it rules the kind out: Clues)
 					if (i instanceof ExoticPotion) k = ExoticPotion.regToExo.get(k); else if (i instanceof ExoticScroll) k = ExoticScroll.regToExo.get(k);
 					java.lang.reflect.Field f = StoneOfIntuition.class.getDeclaredField("curGuess"); f.setAccessible(true); f.set(null, k);
 					return new Ui.Part((com.watabou.noosa.Gizmo) g, "guess", true);

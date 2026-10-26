@@ -58,6 +58,9 @@ public class Gallery {
 		st("heroes", 6, "heroes", "");
 		st("bossbar", 2, "boss", "Goo");
 		st("windows", 1, "windows", "");
+		// the Cracked Spyglass's hidden heaps (drawn at 10% by Shattered), every other one hidden, on each region's floors
+		st("ghosts-sewers", 2, "ghosts", ""); st("ghosts-prison", 7, "ghosts", ""); st("ghosts-caves", 12, "ghosts", "");
+		st("ghosts-city", 17, "ghosts", ""); st("ghosts-halls", 22, "ghosts", "");
 	}
 	static void st(String name, int depth, String kind, String arg) { STAGES.put(name, new Object[]{depth, kind, arg}); }
 
@@ -110,6 +113,7 @@ public class Gallery {
 			case "boss": steps.add(() -> lineup(arg.split(" "), 2));
 				steps.add(() -> { for (Mob m : Dungeon.level.mobs) if (m.properties().contains(com.shatteredpixel.shatteredpixeldungeon.actors.Char.Property.BOSS)) com.shatteredpixel.shatteredpixeldungeon.ui.BossHealthBar.assignBoss(m); }); break;
 			case "items": steps.add(Gallery::items); break;
+			case "ghosts": steps.add(Gallery::ghosts); break;
 			case "gas": steps.add(Gallery::gas); break;
 			case "plants": steps.add(Gallery::plants); break;
 			case "buffs": steps.add(Gallery::buffs); break;
@@ -234,6 +238,17 @@ public class Gallery {
 				if (it instanceof com.shatteredpixel.shatteredpixeldungeon.items.Gold) it.quantity(50);
 				Dungeon.level.drop(it, cells.get(i)).sprite.drop();
 			} catch (Throwable e) { System.out.println("item " + ITEMS[i] + ": " + e); }
+		}
+	}
+
+	/** Items round the hero, every other one a hidden heap as the Cracked Spyglass makes (Heap.hidden: 10% alpha). */
+	static void ghosts() {
+		List<Integer> cells = spots(0, 12);
+		for (int i = 0; i < 12 && i < cells.size(); i++) {
+			try {
+				com.shatteredpixel.shatteredpixeldungeon.items.Heap hp = Dungeon.level.drop((Item) make(I + ITEMS[i % 12]), cells.get(i));
+				if (i % 2 == 0) { hp.hidden = true; hp.sprite.link(hp); }
+			} catch (Throwable e) { System.out.println("ghost " + i + ": " + e); }
 		}
 	}
 

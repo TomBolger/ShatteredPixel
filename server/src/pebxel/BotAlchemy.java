@@ -23,9 +23,9 @@ public final class BotAlchemy {
 	static final Set<String> made = new TreeSet<>();
 	static List<Item> plan; static int planDepth = -1, visits, lastVisitDepth = -1;
 	static Item want; static Object lastScene;   // what the selector that's open should be answered with
-	static String planOut; static int makes;
+	static String planOut; static int makes, planIdx, energizes;
 
-	static void newGame() { made.clear(); plan = null; want = null; visits = 0; lastVisitDepth = -1; }
+	static void newGame() { made.clear(); plan = null; want = null; visits = 0; lastVisitDepth = -1; AsEconomy.newGame(); }
 
 	/** A recipe the pack can make now (ingredients, in order), or null. */
 	static List<Item> findPlan() {
@@ -77,8 +77,13 @@ public final class BotAlchemy {
 		Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
 		Object[] combines = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "combines");
 		if (inputs == null || combines == null) return new BotWindows.Answer(null, null, "alchemy: can't see its slots");
-		if (sc != lastScene) { lastScene = sc; makes = 0; plan = null; planDepth = -1; }
-		if (plan == null && planDepth != Dungeon.depth) { plan = Cheat.ON ? findPlan() : AsAlchemy.plan(); if (!Cheat.ON && plan != null) planOut = AsAlchemy.planOut; planDepth = Dungeon.depth; if (plan != null) visits++; }   // (honest games: AsAlchemy's pick, the energy there is)
+		if (sc != lastScene) { lastScene = sc; makes = 0; plan = null; planDepth = -1; energizes = 0; }
+		// honest games: known junk energized first (the "+" by the energy: a bag, the item's window, then the bag again: BotWindows)
+		if (!Cheat.ON && energizes < 8 && plan == null && filledInputs(inputs) == 0 && AsAlchemy.energizePick() != null) {
+			Object add = WatchDriver.get(sc, "energyAdd");
+			if (add instanceof Gizmo && ((Gizmo) add).visible) { energizes++; return new BotWindows.Answer((Gizmo) add, null, "alchemy: energize " + BotItems.kind(AsAlchemy.energizePick())); }
+		}
+		if (plan == null && planDepth != Dungeon.depth) { plan = Cheat.ON ? findPlan() : AsAlchemy.plan(); planIdx = Cheat.ON ? 0 : AsAlchemy.planIdx; if (!Cheat.ON && plan != null) planOut = AsAlchemy.planOut; planDepth = Dungeon.depth; if (plan != null) visits++; }   // (honest games: AsAlchemy's pick, the energy there is)
 		if (plan == null) return new BotWindows.Answer(null, null, "alchemy: nothing to make: leave");
 		int filled = 0;
 		for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
@@ -89,15 +94,17 @@ public final class BotAlchemy {
 				if (slot instanceof Gizmo) return new BotWindows.Answer((Gizmo) slot, null, "alchemy: put in " + BotItems.kind(want));
 			}
 		}
-		Object b = WatchDriver.get(combines[0], "button");
+		Object b = WatchDriver.get(combines[Math.max(0, Math.min(planIdx, combines.length - 1))], "button");
 		if (b instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RedButton && ((com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) b).active) {
-			made.add(planOut); plan = null; planDepth = -2;   // (made: next time, a new plan from what's left)
-			if (++makes >= 3) planDepth = Dungeon.depth;   // (three a visit at most)
+			made.add(planOut); AsEconomy.brewed(planOut); plan = null; planDepth = -2;   // (made: next time, a new plan from what's left)
+			if (++makes >= 8) planDepth = Dungeon.depth;   // (eight a visit at most: a trinket and its upgrades, stones)
 			return new BotWindows.Answer((Gizmo) b, null, "alchemy: make " + planOut);
 		}
 		plan = null;
 		return new BotWindows.Answer(null, null, "alchemy: no recipe after all: leave");
 	}
+
+	static int filledInputs(Object[] inputs) { int n = 0; for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) n++; return n; }
 
 	static String summary() { return String.join(",", made); }
 }

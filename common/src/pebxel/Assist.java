@@ -581,7 +581,8 @@ public final class Assist {
 		od = ovrC != -1 ? ovrDir : -1;
 		if (grassSkip && H.exp + H.lvl * 101 != grassKey) grassSkip = false;
 		zero = false; h0 = 0;
-		if (OIDENT || OSHOP) Identify.observe(H);
+		if (OIDENT || OSHOP || Clues.ON) Identify.observe(H);
+		Clues.observe();   // (agent ID: the clues seen to what the unknown potions and scrolls are)
 	}
 
 	static List<Mob> mobs() { return new ArrayList<>(L.mobs); }
@@ -593,13 +594,20 @@ public final class Assist {
 		if (m instanceof CrystalMimic) return Notes.keyCount(new CrystalKey(Dungeon.depth)) > 0;
 		return true;
 	}
+	/** Whose eyes the decision code uses (Thomas, 2026-10-25): the bot's (AssistBot: everything a frame shows, faint
+	 *  things included, as a perfect player studying every frame) or the assistant's (the watch: only what's comfortably
+	 *  visible there). First user: the Cracked Spyglass's extra heaps, drawn at 10% (Heap.hidden): the bot's to find,
+	 *  the player's own to spot. */
+	public static boolean botEyes = false;
+	/** Has the hero seen heap h, as these eyes perceive it? */
+	static boolean sees(Heap h) { return h != null && h.seen && (!h.hidden || botEyes); }
 	/** The heap on c, if the hero has seen it. */
-	static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return h != null && h.seen ? h : null; }
+	static Heap seenHeap(int c) { Heap h = L.heaps.get(c); return sees(h) ? h : null; }
 	/** A key of this floor lying on c, as seen (iron: a locked door; golden: a chest; crystal: the crystal door or
 	 *  chest; worn: the boss's exit). */
 	static boolean keyAt(int c) {
 		Level l = Dungeon.level; Heap h = l == null || c < 0 ? null : l.heaps.get(c);
-		if (h == null || !h.seen || h.type != Heap.Type.HEAP) return false;
+		if (!sees(h) || h.type != Heap.Type.HEAP) return false;
 		for (Item i : h.items) if (i instanceof Key && ((Key) i).depth == Dungeon.depth) return true;
 		return false;
 	}
@@ -775,7 +783,7 @@ public final class Assist {
 			if (itemsOn()) { Target ur = Brain.offer("urgent", AsAbilities.urgent(first)); if (ur != null) front(ur); }   // (talents and abilities that can't wait for the hands: a death save, a meal or an opener before the blows)
 			if (itemsOn()) { Target ui = Brain.offer("items!", AsItems.urgent(first)); if (ui != null) front(ui); }   // (the fight's consumables, before the hands' plain throw or zap: AsItems)
 			if (itemsOn()) { Target hk = Brain.hands(first); if (hk != null && !AsQuests.veto(hk)) front(hk); }   // (AsQuests.veto: the food budget)
-			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first)), Brain.offer("items", AsItems.suggest(first)), Brain.offer("ascent", AsAscent.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
+			if (itemsOn()) for (Target sk : new Target[]{Brain.offer("artifacts", AsArtifacts.suggest(first)), Brain.offer("abilities", AsAbilities.suggest(first)), Brain.offer("quests", AsQuests.suggest(first)), Brain.offer("foes", AsFoes.suggest(first)), Brain.offer("bosses+", AsBosses.suggest(first)), Brain.offer("items", AsItems.suggest(first)), Brain.offer("econ", AsEconomy.suggest(first)), Brain.offer("ascent", AsAscent.suggest(first))}) if (sk != null) front(sk);   // (the skills' own files: artifacts and rings, talents and abilities, quests, bosses)
 			boolean pinned = h0 > 0 && !(Item.AC_THROW.equals(out.get(0).action) || Wand.AC_ZAP.equals(out.get(0).action) || SpiritBow.AC_SHOOT.equals(out.get(0).action) || SPELL_GL.equals(out.get(0).action));
 			if (!pinned) h0 = 0;
 			Target e = Brain.offer("escape", escape());
@@ -893,7 +901,7 @@ public final class Assist {
 		ms.sort(Comparator.comparingInt((Mob m) -> (line(hp, m.pos) ? 0 : 100) + (m.state == m.HUNTING ? 0 : 50) + distance(hp, m.pos)));
 		for (Mob m : ms) if (out.size() < CAP) { Target t = new Target(m.pos, ENEMY, line(hp, m.pos) ? "in line" : "enemy"); out.add(t); }
 		for (Mob m : mobs()) if (out.size() < CAP && L.heroFOV[m.pos] && m.alignment != Char.Alignment.ENEMY && !hiddenMimic(m) && !has(m.pos)) out.add(new Target(m.pos, GO, "char"));
-		for (Heap hh : L.heaps.valueList()) if (out.size() < CAP && L.heroFOV[hh.pos] && !has(hh.pos)) out.add(new Target(hh.pos, GO, "heap"));
+		for (Heap hh : L.heaps.valueList()) if (out.size() < CAP && L.heroFOV[hh.pos] && sees(hh) && !has(hh.pos)) out.add(new Target(hh.pos, GO, "heap"));
 		if (out.size() < CAP && !has(hp)) out.add(new Target(hp, GO, "self"));
 		return out;
 	}
@@ -1111,7 +1119,7 @@ public final class Assist {
 	static boolean heapOk(Heap h) { return heapOk(h, false); }
 	/** skippedToo: one the player passed over counts (the list's tail), else it doesn't (plan A, the floor left). */
 	static boolean heapOk(Heap h, boolean skippedToo) {
-		if (h == null || h.isEmpty() || !h.seen) return false;
+		if (h == null || h.isEmpty() || !sees(h)) return false;
 		int c = h.pos;
 		if (c < 0 || c >= LEN || risky(h) || h.type == Heap.Type.FOR_SALE || !known[c] || L.avoid[c] || passed.contains(c) || (!skippedToo && (skippedHeaps.contains(c) || combatHeld.contains(c))) || bad.containsKey(c) || (danger[c] && c != hp) || (fishRelaxed && wet(c) && c != hp)) return false;
 		if (h.type == Heap.Type.LOCKED_CHEST && Notes.keyCount(new GoldenKey(Dungeon.depth)) <= 0) return false;
@@ -1342,7 +1350,7 @@ public final class Assist {
 			}
 			if (way) { if (st == hp) kind[0] = PICKUP; why[0] = amulet ? "up" : "stairs"; return st; }
 			if (st > 0 && L.map[st] == Terrain.LOCKED_EXIT) {   // the boss's key
-				for (Heap h : L.heaps.valueList()) if (h.seen && h.type == Heap.Type.HEAP && h.peek() instanceof WornKey && known[h.pos] && walk(h.pos) < INF) { kind[0] = PICKUP; why[0] = "the key"; return h.pos; }
+				for (Heap h : L.heaps.valueList()) if (sees(h) && h.type == Heap.Type.HEAP && h.peek() instanceof WornKey && known[h.pos] && walk(h.pos) < INF) { kind[0] = PICKUP; why[0] = "the key"; return h.pos; }
 			}
 			if (fish) { fish = false; fishRelaxed = true; waterChosen = Actor.now(); walls(false); continue; }   // only water left, piranhas about: into it all the same (to explore or leave, not for loot)
 			break;
@@ -1629,7 +1637,7 @@ public final class Assist {
 	 *  Only from depth 2, not on a boss floor, not with the Amulet, and only when the stairs are nearer than the danger. */
 	static Target upstairs() {
 		if (Dungeon.depth <= 1 || Dungeon.bossLevel() || bag(Amulet.class) != null || !oPick("up", oLosing(OUP) || H.HP * 100 < H.HT * Tune.UPLOW, H.HP * 100 < H.HT * 35)) return null;   // (MT: or low: the model can't see what comes next, and the stairs are a sure way out)
-		PotionOfHealing heal = bag(PotionOfHealing.class); if (heal != null && heal.isKnown()) return null;
+		if (Clues.healing() != null) return null;   // (a known Healing, or one surely Healing by its clues: agent ID)
 		if (Actor.now() - floorT0 < 3) return null;   // (MT: just come down: straight back up and down again took no time, for ever; starving, the food below)
 		int ent = L.entrance(); if (L.locked || ent < 0 || ent >= LEN || !known[ent] || dist[ent] >= INF || dist[ent] > 8 || bad.containsKey(ent)) return null;
 		int near = INF; boolean hunted = false;
@@ -1741,10 +1749,11 @@ public final class Assist {
 			}
 			if (f != null) return use(f, Food.AC_EAT, -1, "starving: eat");
 		}
-		PotionOfHealing heal = bag(PotionOfHealing.class); boolean pot = heal != null && heal.isKnown();
+		Item heal = Clues.healing(); boolean pot = heal != null;   // (a known Healing, or one surely Healing by its clues: a fly's drop. Agent ID)
+		String hw = heal != null && !known(heal) ? " (" + Clues.about(heal) + ")" : "";
 		boolean bossSeenNow = false; for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) bossSeenNow = true;
-		if (oPick("heal", pot && H.HP * 100 < H.HT * Tune.HEALMAX && oHeal(adj, hard), seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0))) return use(heal, Potion.AC_DRINK, -1, "low: heal");
-		if (!seen && threatNear && H.HP * 100 < H.HT * HEALPCT && pot && !declined(PotionOfHealing.class, Potion.AC_DRINK)) return use(heal, Potion.AC_DRINK, -1, "low, it's coming: heal");   // (waiting for one seen coming: healed first)
+		if (oPick("heal", pot && H.HP * 100 < H.HT * Tune.HEALMAX && oHeal(adj, hard), seen && H.HP * 100 < H.HT * (bossSeenNow ? HEALBOSS : HEALPCT) && pot && (adj || hard > 0))) return use(heal, Potion.AC_DRINK, -1, "low: heal" + hw);
+		if (!seen && threatNear && H.HP * 100 < H.HT * HEALPCT && pot && !declined(heal.getClass(), Potion.AC_DRINK)) return use(heal, Potion.AC_DRINK, -1, "low, it's coming: heal" + hw);   // (waiting for one seen coming: healed first)
 		Waterskin ws = bag(Waterskin.class);
 		if (adj && H.HP * 4 < H.HT && !pot && ws != null && ws.actions(H).contains("DRINK")) return use(ws, "DRINK", -1, "low: waterskin");
 		if (adj && !pot && oPick("esc", oLosing(OESC), H.HP * 4 < H.HT)) {   // dying beside one: a known way out first
@@ -1752,7 +1761,7 @@ public final class Assist {
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
 			if (!OFIGHT || H.HP * 100 < H.HT * Tune.GAMBLE) {   // (MT: the unknowns only when low: the model's 30% came at two thirds of health, 226 times in 120 games)
-			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
+			if (OIDENT || Clues.ON) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble" + (Clues.ON ? " (" + Clues.about(g) + ")" : "")); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
 			}
@@ -1798,7 +1807,8 @@ public final class Assist {
 			ScrollOfMagicMapping mm = bag(ScrollOfMagicMapping.class);
 			if (mm != null && mm.isKnown() && (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 > 250 && !declined(ScrollOfMagicMapping.class, Scroll.AC_READ)) return use(mm, Scroll.AC_READ, -1, "magic mapping");
 			// read unknown scrolls to learn them while it's safe, early on a floor (mapping is worth most then)
-			if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
+			if (Clues.ON) { Target t = Clues.testScroll(threatNear, (L.exit() <= 0 || !known[L.exit()]) && Actor.now() - floorT0 < 400); if (t != null) return t; }   // (agent ID: only a read of use whatever it is)
+			else if (H.HP * 5 >= H.HT * 4 && !starving() && !threatNear && (L.exit() <= 0 || !known[L.exit()]))
 				for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i) && !declined(i.getClass(), Scroll.AC_READ)) return use(i, Scroll.AC_READ, -1, "read to learn");
 		}
 		int ent = L.entrance(), ex = L.exit();
@@ -1806,7 +1816,8 @@ public final class Assist {
 			Sungrass.Seed s = bag(Sungrass.Seed.class); if (s != null) return use(s, "PLANT", -1, "sungrass");
 		}
 		boolean left = floorLeft();
-		if (H.HP * 2 >= H.HT && !starving() && !left && !threatNear) {   // drink unknown potions to learn them at the floor's end, safely
+		if (Clues.ON) { Target t = Clues.testPotion(threatNear, left); if (t != null) return t; }   // (agent ID: at the floor's end, at a puzzle's door, never a likely Healing)
+		else if (H.HP * 2 >= H.HT && !starving() && !left && !threatNear) {   // drink unknown potions to learn them at the floor's end, safely
 			boolean scr = false, burn = false;
 			for (Item i : H.belongings.backpack) scr |= i instanceof Scroll;
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
