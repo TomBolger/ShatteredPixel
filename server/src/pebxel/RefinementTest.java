@@ -717,6 +717,88 @@ public final class RefinementTest {
         System.out.println("items: the staff imbued (known uncursed only), unknown potions kept unknown, Corruption's sum, a bomb on held foes, trap ranks, no fire on grass: ok");
     }
 
+    /** The clues (agent ID: Clues, Identify): a bat's potion is Healing and drunk as one; a pool room on the floor makes
+     *  a potion colour lying there likelier Invisibility; no unknown scroll read with nothing to gain (one is, with a
+     *  cursed armour on); a prize past a chasm taken with the potion believed Levitation. */
+    @SuppressWarnings("unchecked")
+    static void clues() throws Exception {
+        com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; Hero h = Dungeon.hero;
+        Gallery.calm(); h.HP = h.HT = 100; WatchSettings.assist(2); WatchSettings.itemAssist(true); Assist.reset();
+        Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); L.updateFieldOfView(h, L.heroFOV);
+        h.belongings.backpack.items.clear();
+        Field hf = com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.class.getDeclaredField("handler"); hf.setAccessible(true);
+        Field sf = com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.class.getDeclaredField("handler"); sf.setAccessible(true);
+        Set<Class<?>> pk = (Set<Class<?>>) ((com.shatteredpixel.shatteredpixeldungeon.items.ItemStatusHandler<?>) hf.get(null)).known();
+        Set<Class<?>> sk = (Set<Class<?>>) ((com.shatteredpixel.shatteredpixeldungeon.items.ItemStatusHandler<?>) sf.get(null)).known();
+        Set<Class<?>> pk0 = new HashSet<>(pk), sk0 = new HashSet<>(sk);
+        Class<?> HEAL = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class, INV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility.class,
+                MV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfMindVision.class, LEV = com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation.class;
+        pk.remove(HEAL); pk.remove(INV); pk.remove(MV); pk.remove(LEV);
+        try {
+            int[] wd = walks(L, h.pos); int c1 = -1;
+            for (int c = 0; c < wd.length; c++) if (wd[c] == 1 && L.heaps.get(c) == null && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) == null) { c1 = c; break; }
+            check(c1 >= 0, "a cell beside the hero");
+            // 1. a bat killed beside the hero drops a potion: Healing, drunk as one when low
+            com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Bat bat = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Bat(); bat.pos = c1; bat.state = bat.HUNTING; GameScene.add(bat);
+            L.updateFieldOfView(h, L.heroFOV);
+            hands();
+            gone(bat);
+            com.shatteredpixel.shatteredpixeldungeon.items.Heap hp = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing(), c1); hp.seen = true;
+            hands();
+            double ph = pebxel.bot.Identify.p(HEAL, HEAL);
+            check(ph >= 0.9, "a bat's potion is believed Healing: " + ph);
+            hp.destroy();
+            Item mine = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing(); h.belongings.backpack.items.add(mine);
+            check(Clues.healing() == mine && Clues.about(mine).contains("bat"), "the bat's potion is the Healing to drink, the why says so: " + Clues.about(mine));
+            h.HP = Math.max(2, h.HT / 6); com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Gnoll r = brute(c1);
+            Assist.Target t = hands();
+            check(t != null && t.item == mine && t.why.contains("bat"), "low beside a strong gnoll: the bat's potion drunk as Healing: " + t);
+            gone(r); h.HP = 100; h.belongings.backpack.items.clear();
+            // 2. a pool room seen: a colour lying on this floor likelier Invisibility, one never seen less
+            Assist.reset(); hands();
+            double i0 = pebxel.bot.Identify.p(INV, INV), m0 = pebxel.bot.Identify.p(MV, INV);
+            int c2 = -1; for (int c = 0; c < wd.length; c++) if (wd[c] >= 2 && wd[c] <= 5 && L.heaps.get(c) == null && L.heroFOV[c]) { c2 = c; break; }
+            check(c2 >= 0, "a cell in sight for a potion");
+            com.shatteredpixel.shatteredpixeldungeon.items.Heap hi = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfInvisibility(), c2); hi.seen = true;
+            hands();
+            Clues.room(new com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.PoolRoom()); Clues.explored(false);
+            double i1 = pebxel.bot.Identify.p(INV, INV), m1 = pebxel.bot.Identify.p(MV, INV);
+            check(i1 > i0 * 1.5 && i1 > 0.5 && m1 < m0, String.format("a pool room on the floor: the colour lying there Invisibility %.2f -> %.2f, one not seen %.2f -> %.2f", i0, i1, m0, m1));
+            hi.destroy();
+            // 3. an unknown scroll: not read with nothing to gain; read with a cursed armour worn (Remove Curse)
+            sk.add(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
+            sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfRemoveCurse.class); sk.remove(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby.class);
+            for (Item i : h.belongings) i.identify();
+            com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby lu = new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfLullaby(); h.belongings.backpack.items.add(lu);
+            Assist.reset(); t = hands();
+            check(t == null || t.item != lu, "an unknown scroll isn't read with nothing to gain: " + t);
+            Armor a0 = h.belongings.armor; Armor ca = new LeatherArmor(); ca.cursed = true; ca.cursedKnown = true; h.belongings.armor = ca;
+            t = hands();
+            check(t != null && t.item == lu && Scroll().equals(t.action), "a cursed armour worn: the unknown scroll is read (it may be Remove Curse): " + t);
+            h.belongings.armor = a0; h.belongings.backpack.items.clear();
+            // 4. a prize past a chasm, the potion believed Levitation (no known one): drunk for it
+            int c3 = -1;
+            for (int c = 0; c < wd.length && c3 < 0; c++) if (wd[c] == 3 && L.heroFOV[c] && L.heaps.get(c) == null) { boolean ok = true;
+                for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int n = c + k; if (n < 0 || n >= L.length() || !L.passable[n] || L.heaps.get(n) != null || n == h.pos || wd[n] < 1 || L.map[n] != L.map[c]) ok = false; }
+                if (ok) c3 = c; }
+            if (c3 >= 0) {
+                int[] keep = new int[8]; int j = 0;
+                for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { keep[j++] = L.map[c3 + k]; com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c3 + k, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.CHASM); GameScene.updateMap(c3 + k); }
+                com.shatteredpixel.shatteredpixeldungeon.items.Heap hz = L.drop(new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy(), c3); hz.seen = true;
+                Item lp = new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfLevitation(); h.belongings.backpack.items.add(lp);
+                double[] like = new double[12]; Arrays.fill(like, 0.02); like[pebxel.bot.Identify.pos(pebxel.bot.Identify.POT, LEV)] = 1; pebxel.bot.Identify.like(LEV, like, "the traps room on this floor");
+                L.updateFieldOfView(h, L.heroFOV);
+                t = it(false);
+                check(t != null && t.item == lp && t.why.contains("prize past the traps") && t.why.contains("likely Levitation"), "a prize past a chasm: the believed Levitation drunk for it: " + t);
+                hz.destroy(); j = 0; for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(c3 + k, keep[j++]); GameScene.updateMap(c3 + k); }
+                AsItems.cross = null; h.belongings.backpack.items.clear();
+            } else System.out.println("clues: no open 3x3 for the chasm check (skipped)");
+        } finally { pk.clear(); pk.addAll(pk0); sk.clear(); sk.addAll(sk0); }
+        Gallery.calm(); Assist.reset();
+        System.out.println("clues: a bat's potion drunk as Healing, a pool room's Invisibility, no scroll read for nothing (one for a curse), a believed Levitation for a prize: ok");
+    }
+    static String Scroll() { return com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.AC_READ; }
+
     /** The talents and abilities (AsAbilities): a meal talent eats before a fight, a Duelist's charged ability on a
      *  strong foe, Berserk when low beside one, the King's Crown put on. */
     static void abilities() throws Exception {
@@ -910,6 +992,7 @@ public final class RefinementTest {
         chestFromBeside();
         abilities();
         items();
+        clues();
 
         Link link = new Link(new Assets()); Controls controls = new Controls(); Touches touches = new Touches();
         pebxel.ui.WndWatchMenu menu = new pebxel.ui.WndWatchMenu(); GameScene.show(menu);

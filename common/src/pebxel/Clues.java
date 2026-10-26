@@ -78,12 +78,12 @@ public final class Clues {
 	// ---- per floor ----
 	static Level fl;
 	static final Set<Item> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-	static final Map<Mob, Integer> lastMobs = new IdentityHashMap<>();
+	static final Map<Mob, Integer> lastMobs = new LinkedHashMap<>();   // (in the order seen: an identity order would differ JVM to JVM)
 	static final List<int[]> deaths = new ArrayList<>();   // {cell, time}
 	static final List<Class<?>> deathCls = new ArrayList<>();
 	static final Set<Room> roomsSeen = Collections.newSetFromMap(new IdentityHashMap<>());
 	/** The floor's rooms whose potion it guarantees: room -> its kind and evidence. */
-	static final Map<Room, Identify.Among> puzzles = new IdentityHashMap<>();
+	static final Map<Room, Identify.Among> puzzles = new LinkedHashMap<>();
 	static final List<Identify.Among> floorAmong = new ArrayList<>();
 	// ---- per game ----
 	static final Map<Integer, Set<Class<?>>> floorPots = new HashMap<>();
@@ -108,6 +108,7 @@ public final class Clues {
 		for (Map.Entry<Mob, Integer> e : lastMobs.entrySet()) { Mob m = e.getKey();
 			if (!m.isAlive() || !L.mobs.contains(m)) { deaths.add(new int[]{ e.getValue(), (int) now }); deathCls.add(m.getClass()); } }
 		for (int k = deaths.size() - 1; k >= 0; k--) if (now - deaths.get(k)[1] > 3) { deaths.remove(k); deathCls.remove(k); }
+		if (DBG) System.out.println("CLUE observe t" + now + " last " + lastMobs.size() + " deaths " + deaths.size());
 		lastMobs.clear();
 		for (Mob m : L.mobs) if (m.isAlive() && m.pos >= 0 && m.pos < L.length() && L.heroFOV[m.pos] && m.invisible <= 0) lastMobs.put(m, m.pos);
 		// the rooms seen: puzzles, the shop, the library
@@ -163,17 +164,21 @@ public final class Clues {
 	static Set<Class<?>> shopPots, shopScr, libScr; static Room shopRoom, libRoom;
 
 	/** An unknown potion or scroll seen lying for the first time (its label shows). */
+	static final boolean DBG = System.getenv("CLUEDBG") != null;
 	static void item(Class<?> label, Heap h) {
 		boolean pot = Potion.class.isAssignableFrom(label);
-		// a foe's drop: one just killed on or beside the cell
-		for (int k = 0; k < deaths.size(); k++) if (L.distance(deaths.get(k)[0], h.pos) <= 1 && h.type == Heap.Type.HEAP) {
-			double[] like = drop(deathCls.get(k), pot);
-			if (like != null) {
-				if (wealth()) for (int i = 0; i < 12; i++) like[i] = 0.8 * like[i] + 0.2;   // (the ring's own drop: the plain rates)
-				Identify.like(label, like, "a " + name(deathCls.get(k)) + " dropped it"); clues++;
-			}
-			return;
+		if (DBG) System.out.println("CLUE item " + label.getSimpleName() + " at " + h.pos + " deaths " + deaths.size() + (deaths.isEmpty() ? "" : " first at " + deaths.get(0)[0]));
+		// a foe's drop: one just killed on or beside the cell (of those, the latest whose drop says something: a rat
+		// beside the bat drops no potion)
+		int bk = -1; boolean dropped = false;
+		for (int k = 0; k < deaths.size(); k++) if (L.distance(deaths.get(k)[0], h.pos) <= 1 && h.type == Heap.Type.HEAP) { dropped = true; if (drop(deathCls.get(k), pot) != null && (bk < 0 || deaths.get(k)[1] >= deaths.get(bk)[1])) bk = k; }
+		if (bk >= 0) {
+			double[] like = drop(deathCls.get(bk), pot);
+			if (wealth()) for (int i = 0; i < 12; i++) like[i] = 0.8 * like[i] + 0.2;   // (the ring's own drop: the plain rates)
+			Identify.like(label, like, "a " + name(deathCls.get(bk)) + " dropped it"); clues++;
+			if (DBG) System.out.println("CLUE " + label.getSimpleName() + ": a " + name(deathCls.get(bk)) + " dropped it");
 		}
+		if (dropped) return;
 		Room r = roomAt(h.pos);
 		if (h.type == Heap.Type.FOR_SALE) {
 			if (r == shopRoom && r != null) { if (pot && shopPots != null) shopPots.add(label); else if (!pot && shopScr != null) shopScr.add(label); Identify.changed(); }
@@ -304,7 +309,8 @@ public final class Clues {
 			for (Puzzle p : pz) if (p.kind == c) x -= drinkKind(c) ? 1.5 : 2;   // (the floor's prize potion: better drunk at its door, or thrown at it)
 			v += r[k] * x;
 		}
-		return v + 1.5 + 0.5 * Math.min(2, i.quantity() - 1);   // (knowing it: each copy after)
+		double mx = 0; for (double q : r) mx = Math.max(mx, q);
+		return v + (1 - mx) * (1.5 + 0.5 * Math.min(2, i.quantity() - 1));   // (knowing it, each copy after: worth as much as it was in doubt)
 	}
 
 	/** The hands' drink-test: at the floor's end, safe and well; at a puzzle room's door when one waits. */
@@ -376,7 +382,8 @@ public final class Clues {
 			v += r[k] * x;
 		}
 		if (why != null) why.append(up != null ? "an upgrade target ready" : "no upgrade target").append(cursedWorn ? ", a cursed item worn" : "").append(unid ? ", unknown things" : "").append(early ? ", early on the floor" : "");
-		return v + 0.8 + 0.4 * Math.min(2, s.quantity() - 1);
+		double mx = 0; for (double q : r) mx = Math.max(mx, q);
+		return v + (1 - mx) * (0.6 + 0.3 * Math.min(2, s.quantity() - 1));
 	}
 
 	/** The hands' read-test: only a read that is of use whatever the scroll is, in calm. */
