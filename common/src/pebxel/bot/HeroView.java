@@ -61,6 +61,14 @@ public final class HeroView {
 		for (Item i : h.belongings) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) { seenI.add(i); seenL.add(i.level()); }
 	}
 
+	static double ringTaken = 1;
+	/** Worn rings of this kind, every one with its level known (a ring's effect shows once it is). */
+	static boolean ringKnown(Hero h, Class<?> k) {
+		boolean any = false;
+		for (Item r : new Item[]{ h.belongings.ring(), h.belongings.misc() }) if (r != null && k.isInstance(r)) { if (!r.levelKnown) return false; any = true; }
+		return any;
+	}
+
 	/** The hero's base accuracy and evasion (Hero.attackSkill / defenseSkill fields: 10 / 5, +1 a level). */
 	public static int baseAcc(Hero h) { Object v = field(h, "attackSkill"); return v instanceof Integer ? (Integer) v : 9 + h.lvl; }
 	public static int baseEva(Hero h) { Object v = field(h, "defenseSkill"); return v instanceof Integer ? (Integer) v : 4 + h.lvl; }
@@ -129,8 +137,14 @@ public final class HeroView {
 		}
 		int bark = 0; try { bark = Barkskin.currentLevel(h); } catch (Throwable e) { }
 		if (bark > 0) f.dr = f.dr.plus(Dist.normal(0, bark));
+		if (Tune.RINGS && lvlPlus == 0) {   // (MT: the fight rings worn, once their level is known: Hero.attackSkill / defenseSkill / attackDelay, Char.damage)
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy.class)) acc *= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfAccuracy.accuracyMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion.class)) eva *= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion.evasionMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfFuror.class)) f.delay /= com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfFuror.attackSpeedMultiplier(h);
+			if (ringKnown(h, com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfTenacity.class)) ringTaken = com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfTenacity.damageMultiplier(h);
+		}
 		f.acc = Math.max(1, Math.round(acc)); f.eva = Math.max(1, Math.round(eva));   // (Hero.attackSkill / defenseSkill round)
-		f.taken = we.taken * ag.taken;   // (MT: this had been inside the comment above: glyphs and curses never counted)
+		f.taken = we.taken * ag.taken * ringTaken; ringTaken = 1;   // (MT: this had been inside the comment above: glyphs and curses never counted)
 		// shots before contact: the spirit bow (MissileWeapon.adjacentAccFactor: 1.5 at range), a charged attack wand
 		SpiritBow bow = h.belongings.getItem(SpiritBow.class);
 		if (bow != null) {
