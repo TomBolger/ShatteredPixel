@@ -1079,6 +1079,7 @@ final class AsItems {
 	static Class<?> likeliest(Item i) {
 		if (i instanceof ExoticPotion) { Class<?> r = ExoticPotion.exoToReg.get(i.getClass()); if (r == null) return null; Set<?> unk = Potion.getUnknown(); Class<?> b = null; double bp = -1; for (Object o : unk) { double p = Identify.p(r, (Class<?>) o); if (p > bp) { bp = p; b = (Class<?>) o; } } return b; }
 		if (i instanceof ExoticScroll) { Class<?> r = ExoticScroll.exoToReg.get(i.getClass()); if (r == null) return null; Set<?> unk = Scroll.getUnknown(); Class<?> b = null; double bp = -1; for (Object o : unk) { double p = Identify.p(r, (Class<?>) o); if (p > bp) { bp = p; b = (Class<?>) o; } } return b; }
+		if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring) { Class<?> b = null; for (Object o : com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring.getUnknown()) if (b == null || ((Class<?>) o).getName().compareTo(b.getName()) < 0) b = (Class<?>) o; return b; }   // (no odds for rings: the first unknown; before, a scroll's kind came back for one and no guess was found)
 		Set<?> unk = i instanceof Potion ? Potion.getUnknown() : Scroll.getUnknown(); Class<?> b = null; double bp = -1;
 		for (Object o : unk) { Class<?> k = (Class<?>) o; double p = Identify.p(i.getClass(), k); if (p > bp) { bp = p; b = k; } }
 		return b;

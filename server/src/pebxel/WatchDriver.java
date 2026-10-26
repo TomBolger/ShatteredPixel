@@ -35,6 +35,8 @@ public final class WatchDriver {
 		sim = new WatchSim(new java.io.File("."), new Assets());
 		controls = new Controls();
 		link.planner = controls::plan;
+		Controls.deferPlans = !"0".equals(System.getenv("DEFER"));
+		Controls.slowLogMs = Integer.parseInt(System.getenv().getOrDefault("SLOWLIST", "0"));
 	}
 
 	/** One frame as WatchSession runs it, with the watch model applying every message. */
@@ -53,6 +55,7 @@ public final class WatchDriver {
 			sim.advance(Game.elapsed);
 			link.frame(Game.elapsed);
 			for (byte[] m : link.take(MAXMSG)) { bytes += m.length; sim.receive(m); }
+			controls.idle();   // (as WatchSession: a list put off is made once the frame is sent)
 		} catch (Throwable t) {
 			linkErrors++;
 			if (linkErrors < 5) { System.out.println("LINK ERROR:"); t.printStackTrace(System.out); }
@@ -305,6 +308,51 @@ public final class WatchDriver {
 		return true;
 	}
 
+	// ---- PLAYER=human: a simulated player, mostly Select, now and then the 2nd or 3rd choice, a tap now and then ----
+	static final int HUMANPCT = Integer.parseInt(System.getenv().getOrDefault("HUMANPCT", "15")), TAPPCT = Integer.parseInt(System.getenv().getOrDefault("TAPPCT", "2"));
+	Random human = new Random(1);
+	long otherChoices, humanTaps, windowDowns, windowsSeen, windowCloses;
+	/** What the player passed over (Downs past plan A), and whether it comes back as plan A: insisting (Obey). */
+	final Obey obey = new Obey();
+	void checkInsist() { List<Assist.Target> ps = plan(); if (!ps.isEmpty() && ps.size() == targets().size()) obey.look(ps.get(0)); }
+	/** The simulated human's press for this decision: Select on plan A mostly; HUMANPCT% the 2nd or 3rd entry (Down once
+	 *  or twice first); TAPPCT% a tap on a cell nearby on the screen instead. */
+	boolean humanPlayer(Assist.Target t) {
+		checkInsist();
+		List<Integer> ts = targets(); List<Assist.Target> ps = plan();
+		int roll = human.nextInt(100);
+		if (roll < TAPPCT && Dungeon.hero != null) {
+			int[] d = Controls.walk(Dungeon.level, Dungeon.hero.pos); List<Integer> cs = new ArrayList<>();
+			for (int c = 0; c < d.length; c++) if (d[c] >= 3 && d[c] <= 6 && Controls.onScreen(c) && Dungeon.level.heaps.get(c) == null && com.shatteredpixel.shatteredpixeldungeon.actors.Actor.findChar(c) == null) cs.add(c);
+			if (!cs.isEmpty() && tap(cs.get(human.nextInt(cs.size())))) { humanTaps++; decisions++; return true; }
+		}
+		if (roll < TAPPCT + HUMANPCT && ts.size() > 1) {
+			int k = Math.min(ts.size() - 1, 1 + human.nextInt(2));
+			if (ps.size() == ts.size() && k > 0) obey.passed(ps.get(0), ps.get(k));
+			for (int i = 0; i < k; i++) { press(Controls.DOWN); downs++; }
+			otherChoices++; decisions++;
+			press(Controls.SELECT);
+			return true;
+		}
+		return selectOnly(t);
+	}
+	/** A window or screen as the player answers it: Select (the frame starts on the Assistant's pick); the human now
+	 *  and then Downs once or twice first (HUMANPCT%). */
+	Object lastPlayerWnd; int wndNoTurn;
+	void playerWindow(Window w, boolean humanMode) {
+		Object m = w != null ? w : Game.scene();
+		if (m != lastPlayerWnd) { lastPlayerWnd = m; windowsSeen++; wndNoTurn++;
+			String k = m.getClass().getName().replaceAll(".*\\.", "");
+			if (VW || windowKinds.add(k)) System.out.println("  PLAYER WINDOW " + k + ": " + (Controls.windowWhy.isEmpty() ? "(first button)" : Controls.windowWhy) + " buttons " + Controls.buttons((Group) m).size()); }
+		if (humanMode && human.nextInt(100) < HUMANPCT && !(w instanceof pebxel.ui.WndWatchBag)) { int k = 1 + human.nextInt(2); for (int i = 0; i < k; i++) press(Controls.DOWN); windowDowns += k; }
+		if (Controls.windowWhy.startsWith("nothing") || Controls.windowWhy.equals("read")) windowCloses++;
+		press(Controls.SELECT);
+	}
+	final Set<String> windowKinds = new TreeSet<>();
+	String playerSummary() {
+		return String.format("windows %d downs %d closes %d otherchoices %d taps %d ", windowsSeen, windowDowns, windowCloses, otherChoices, humanTaps) + obey.line();
+	}
+
 	/** A tap on the cell, as the watch's touch screen sends it (aimed at the map's camera). False: not on the screen. */
 	boolean tap(int cell) {
 		Camera c = Camera.main;
@@ -339,7 +387,7 @@ public final class WatchDriver {
 		if (j == 0) planA++; else if (j > 0) inList++; else { notInList++; missKinds.merge(t.kind + ":" + t.why.replaceAll("[^A-Za-z ]", "").trim().replace(' ', '_'), 1, Integer::sum); }
 		if (VW) System.out.println("    watch list " + plan() + " target " + target() + "; bot " + t + " at " + j);
 		if (j >= 0) {
-			if (t.kind == Assist.USE && t.on != null) BotAlchemy.want = t.on;   // (the bag it opens: the bot's pick, as the Assistant framed it)
+			if (t.kind == Assist.USE && t.on != null) AsWindows.want = t.on;   // (the bag it opens: the bot's pick, as the Assistant framed it)
 			if (listTo(j)) return true;
 		}
 		Assist.noted(t);
@@ -495,7 +543,7 @@ public final class WatchDriver {
 	}
 
 	String summary() {
-		return (peakAt.isEmpty() ? "" : "peakat " + peakAt.replace(' ', '_').replace(':', '-').replace(',', '.').replace('=', '-') + " ") + String.format("talents %d presses %d taps %d notoffered %d frames %d bytes %d watchpeak %d linkerrors %d frameerrors %d unknown %s fallbacks %s",
+		return String.format("watchplans %d avg %.2f ms max %.1f ms over16 %d over33 %d ", Controls.plans, Controls.planNs / 1e6 / Math.max(1, Controls.plans), Controls.planMaxNs / 1e6, Controls.slowPlans, Controls.slowerPlans) + (peakAt.isEmpty() ? "" : "peakat " + peakAt.replace(' ', '_').replace(':', '-').replace(',', '.').replace('=', '-') + " ") + String.format("talents %d presses %d taps %d notoffered %d frames %d bytes %d watchpeak %d linkerrors %d frameerrors %d unknown %s fallbacks %s",
 				talentsSpent, presses, taps, notOffered, frames, bytes, peak, linkErrors, frameErrors, link.unknown, fallbacks) + " waitslost " + waitsLost + " notofferedwhy " + notOfferedWhy.entrySet().stream().map(e -> e.getKey() + "/" + e.getValue()).collect(java.util.stream.Collectors.joining(","));
 	}
 }

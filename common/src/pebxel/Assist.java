@@ -83,6 +83,8 @@ public final class Assist {
 		public String why = "";
 		/** A proposer's own view of what this is worth, in floors next to carrying on (Brain: NaN none). */
 		public double hint = Double.NaN;
+		/** The skill that proposed it (Brain.offer's name: tests, obedience), or null. */
+		public String src;
 		/** USE: how many of the item there were when offered (a use the player made himself is no pass). */
 		int qty = -1;
 		int key;
@@ -143,7 +145,7 @@ public final class Assist {
 	static final Map<Integer, Integer> talked = new HashMap<>();
 	static final Map<Integer, Float> bad = new HashMap<>();   // targets that did nothing when acted on (until when)
 	static Set<Item> pack = Collections.newSetFromMap(new IdentityHashMap<>());
-	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; private static Item actItem;
+	static int actPos = -1, actCell = -1, actObj = -1, actKind; private static float actTime = -1; static Item actItem;
 	static int doorSpot = -1; private static float doorUntil;   // tactics: the spot waited at
 	static float floorT0;
 	static int eatBand;
@@ -266,8 +268,11 @@ public final class Assist {
 	public static List<Target> plan(boolean aiming, IntPredicate onScreen) {
 		try {
 			if (Dungeon.hero == null || Dungeon.level == null || !Dungeon.hero.isAlive()) return new ArrayList<>();
+			long t0 = System.nanoTime();
 			setup(onScreen);
+			long t1 = System.nanoTime(), b0 = Brain.nanos;
 			List<Target> r = aiming ? aimList() : planList();
+			setupNs = t1 - t0; listNs = System.nanoTime() - t1; brainNs = Brain.nanos - b0;
 			last = r;
 			return r;
 		} catch (Throwable e) {
@@ -275,6 +280,10 @@ public final class Assist {
 			try { return fallback(aiming); } catch (Throwable e2) { return new ArrayList<>(); }
 		}
 	}
+
+	/** The last plan's cost (Controls' slow-list log): the set-up, the list, the brain's share of the list. */
+	static long setupNs, listNs, brainNs;
+	public static String timing() { return String.format("setup %.1f list %.1f (brain %.1f) ms", setupNs / 1e6, listNs / 1e6, brainNs / 1e6); }
 
 	/** The player chose t while planA was entry 0 (call before act; nothing happens when t is plan A). */
 	public static void chose(Target t, Target planA) {
@@ -326,6 +335,7 @@ public final class Assist {
 
 	static void pass(Target e, int went, int from) {
 		Level l = Dungeon.level; Hero h = Dungeon.hero;
+		AsObey.passed(e, went, from);
 		if (e.kind == USE && e.item != null) decline(e.item.getClass(), e.action);
 		if (e.kind == WAIT && REST_ACT.equals(e.action)) decline(null, REST_ACT);
 		if (e.kind == WAIT && e.why.startsWith("hold") && went != from) holdOff = true;   // (walked off instead of holding: the player's call)
@@ -848,10 +858,11 @@ public final class Assist {
 			out.add(out.remove(0));
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
-		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
-		if (mode() != 0) AsPacing.after(out);   // (agent MD: a wait that has not paid, given up)
-		if (mode() != 0) AsEscape.after(out);   // (agent HE: a known way out, used before it's too late)
+		if (mode() != 0) { untagged(out); AsHealth.after(out); tag(out, "health"); }   // (agent EG: the health policy, a last pass over plan A)
+		if (mode() != 0) { untagged(out); AsPacing.after(out); tag(out, "pacing"); }   // (agent MD: a wait that has not paid, given up)
+		if (mode() != 0) { untagged(out); AsEscape.after(out); tag(out, "escape"); }   // (agent HE: a known way out, used before it's too late)
 		if (mode() != 0) commit();
+		if (mode() != 0) AsObey.gate(out);   // (agent DS: what the player passed over isn't plan A again, whoever proposes it)
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
 		mind();
@@ -864,6 +875,11 @@ public final class Assist {
 	/** Two walks that take turns (K8: "quest: back to the Wandmaker" from one cell, "pick up" from the other, to and
 	 *  fro): the hero back on the same cell with the same plan A three times in OSCN decisions is a dither; that plan
 	 *  A is then kept first till it is reached (or OSCT turns), as long as no foe is in sight. */
+	/** Target.src for the entries a last pass adds (tests: which skill proposed plan A). */
+	static final Set<Target> was = Collections.newSetFromMap(new IdentityHashMap<>());
+	static void untagged(List<Target> l) { was.clear(); was.addAll(l); }
+	static void tag(List<Target> l, String src) { for (Target t : l) if (t.src == null && !was.contains(t)) t.src = src; }
+
 	static void commit() {
 		// an item use that did nothing (no time passed, the hero where he was: magic-immune, a staff that won't zap...)
 		// offered a third time at one moment is held back 20 turns (K8: the staff "zap point blank" with no time
@@ -1299,7 +1315,7 @@ public final class Assist {
 	static String dk(Class<?> c, String a) { return (c == null ? "-" : c.getSimpleName()) + ":" + a; }
 	static void decline(Class<?> c, String a) {
 		String k = dk(c, a); declined.remove(k); declined.put(k, situation(c, a));
-		while (declined.size() > 8) declined.remove(declined.keySet().iterator().next());
+		while (declined.size() > 32) declined.remove(declined.keySet().iterator().next());   // (8 forgot a pass over after a few more: offered again)
 		if (c == ScrollOfUpgrade.class) upgradeHeld = true;
 	}
 	/** Passed over on this floor, and nothing has changed since (more of the item came, or, for resting, the hero is
@@ -1314,7 +1330,7 @@ public final class Assist {
 		Hero h = Dungeon.hero; if (h == null) return 0;
 		if (c == null) return REST_ACT.equals(a) ? (h.HT - h.HP) * 4 / Math.max(1, h.HT) : 0;
 		int n = 0; for (Item i : h.belongings) if (i.getClass() == c) n += i.quantity();
-		return n;
+		return n * 16 + AsObey.need(c, a);   // (a drink or a meal: offered again once he is worse off)
 	}
 
 	// =============================================================================================================

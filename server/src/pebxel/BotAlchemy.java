@@ -22,10 +22,10 @@ public final class BotAlchemy {
 
 	static final Set<String> made = new TreeSet<>();
 	static List<Item> plan; static int planDepth = -1, visits, lastVisitDepth = -1;
-	static Item want; static Object lastScene;   // what the selector that's open should be answered with
+	static Object lastScene;   // what the selector that's open should be answered with
 	static String planOut; static int makes, planIdx, energizes;
 
-	static void newGame() { made.clear(); plan = null; want = null; visits = 0; lastVisitDepth = -1; AsEconomy.newGame(); }
+	static void newGame() { made.clear(); plan = null; AsWindows.newGame(); visits = 0; lastVisitDepth = -1; AsEconomy.newGame(); }
 
 	/** A recipe the pack can make now (ingredients, in order), or null. */
 	static List<Item> findPlan() {
@@ -73,6 +73,7 @@ public final class BotAlchemy {
 	/** In the alchemy screen: the button to press (or null: leave). */
 	static BotWindows.Answer scene(com.watabou.noosa.Scene sc) {
 		lastVisitDepth = Dungeon.depth;
+		if (!Cheat.ON) { AsWindows.Pick p = AsWindows.decideScene(sc); if (AsWindows.made.size() > made.size()) made.addAll(AsWindows.made); visits = AsWindows.alchemyVisits; return new BotWindows.Answer(p.g, p.item, p.why); }   // (honest games: the Assistant's steps, as the watch frames them)
 		AsAlchemy.used();
 		Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
 		Object[] combines = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "combines");
@@ -89,9 +90,9 @@ public final class BotAlchemy {
 		for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
 		if (filled < plan.size()) {
 			for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") == null) {
-				want = plan.get(filled);
+				AsWindows.want = plan.get(filled);
 				Object slot = WatchDriver.get(in, "slot");
-				if (slot instanceof Gizmo) return new BotWindows.Answer((Gizmo) slot, null, "alchemy: put in " + BotItems.kind(want));
+				if (slot instanceof Gizmo) return new BotWindows.Answer((Gizmo) slot, null, "alchemy: put in " + BotItems.kind(AsWindows.want));
 			}
 		}
 		Object b = WatchDriver.get(combines[Math.max(0, Math.min(planIdx, combines.length - 1))], "button");

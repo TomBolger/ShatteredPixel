@@ -1,5 +1,7 @@
 package pebxel.bot;
 
+import java.util.*;
+
 import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
@@ -19,8 +21,19 @@ public final class FoeView {
 
 	static final int SAMPLES = 600;
 
+	/** (DS: the phone's budget) A foe's damage and armour rolls, 1,200 a foe a list, were a quarter of a list's cost:
+	 *  kept for the same foe in the same state (its id, health, buffs, AI state; not bosses, whose rolls turn on their
+	 *  phases), the floor's last 64. The same seed draws the same rolls, so a kept one is the one it would draw again. */
+	static final Map<String, Dist[]> ROLLS = new LinkedHashMap<String, Dist[]>(128, 0.75f, true) { @Override protected boolean removeEldestEntry(Map.Entry<String, Dist[]> e) { return size() > 64; } };
+	static Object rollsFloor;
+	static String rollKey(Mob m) {
+		if (rollsFloor != com.shatteredpixel.shatteredpixeldungeon.Dungeon.level) { rollsFloor = com.shatteredpixel.shatteredpixeldungeon.Dungeon.level; ROLLS.clear(); }
+		int b = 1; for (com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Buff x : m.buffs()) b = b * 31 + x.getClass().getName().hashCode();
+		return m.id() + ":" + m.HP + "/" + m.HT + ":" + b + ":" + (m.state == null ? "" : m.state.getClass().getSimpleName()) + ":" + m.alignment;
+	}
+
 	public static Fighter of(Mob m, Hero h) {
-		Fighter f = new Fighter();
+		Fighter f = new Fighter(); Dist[] rolls;
 		f.name = m.getClass().getSimpleName();
 		f.hp = m.HP; f.ht = m.HT; f.shield = m.shielding();
 		f.boss = Char.hasProp(m, Char.Property.BOSS) || Char.hasProp(m, Char.Property.MINIBOSS);
@@ -40,7 +53,8 @@ public final class FoeView {
 			f.dr = Dist.normal(0, 2);
 			if (!low && (!pumped || Tune.KINDS)) { f.lowAt = m.HT / 2; f.lowAcc = 15; f.lowEva = (int) (m.defenseSkill * 1.5); f.lowDmg = Dist.normal(1, 12); }
 			if (Tune.KINDS) { f.pump = 0.2; f.pumpNow = pumped; f.hitDirect = 1.2 * Tune.FOEFX; }   // (M2: Goo.doAttack pumps up 1 turn in 5 (2 when low): the Assist's tactic steps out of reach and lets it waste the blast; its ooze, a third of its blows, ~1 a turn till washed)
-		} else {
+		} else if (!f.boss && (rolls = ROLLS.get(rollKey(m))) != null) { f.dmg = rolls[0]; f.dr = rolls[1]; }   // (the same foe as it stood at the last list: its rolls as worked out then)
+		else {
 			int[] v = new int[SAMPLES];
 			Random.pushGenerator(0x5eed + m.getClass().getName().hashCode());
 			try {
@@ -51,6 +65,7 @@ public final class FoeView {
 			} catch (Throwable e) {
 				f.dmg = Dist.normal(1, 4 + com.shatteredpixel.shatteredpixeldungeon.Dungeon.depth); f.dr = Dist.point(0);
 			} finally { Random.popGenerator(); }
+			if (!f.boss) ROLLS.put(rollKey(m), new Dist[]{f.dmg, f.dr});
 		}
 		special(f, m.getClass().getSimpleName(), m.HT);
 		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;

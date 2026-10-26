@@ -89,6 +89,7 @@ class WatchSession extends Thread {
 		Link link = new Link(new Assets());
 		Controls controls = new Controls();
 		link.planner = controls::plan;
+		Controls.deferPlans = true;
 		pacer = new Pacer(link, bytes -> service.send(bytes, ok -> pacer.done(ok)));
 		ahead = new Ahead(link, pacer);
 
@@ -187,6 +188,8 @@ class WatchSession extends Thread {
 			if (!hold) {
 				try { ahead.after(() -> { app.frame(); controls.frame(); }, !away, roundNs); }
 				catch (Throwable t) { android.util.Log.e("PebxelWatch", "frame ahead failed", t); Crashes.note(c, t); }
+				try { controls.idle(); }   // (a list put off while the frame went out: made in the time before the next)
+				catch (Throwable t) { android.util.Log.e("PebxelWatch", "idle failed", t); Crashes.note(c, t); }
 			}
 			next += frameNs;
 			long sleep = next - System.nanoTime();

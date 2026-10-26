@@ -153,22 +153,8 @@ public final class BotItems {
 	}
 
 	/** The answer to an item selector: worn things first (upgrades, curses, enchants), then the backpack, then null. */
-	static Item answerSelector(WndBag.ItemSelector sel) {
-		Hero h = Dungeon.hero; if (h == null) return null;
-		List<Item> worn = new ArrayList<>();
-		if (h.belongings.weapon() != null) worn.add(h.belongings.weapon());
-		if (h.belongings.armor() != null) worn.add(h.belongings.armor());
-		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
-		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
-		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
-		try {
-			if (BotAlchemy.want != null) { Item w = BotAlchemy.want; BotAlchemy.want = null; if (sel.itemSelectable(w) && h.belongings.contains(w)) return w; }
-			for (Item i : worn) if (sel.itemSelectable(i)) return i;
-			for (Item i : h.belongings.backpack) if (!(i instanceof Bag) && sel.itemSelectable(i)) return i;
-			for (Item i : h.belongings) if (sel.itemSelectable(i)) return i;
-		} catch (Throwable e) { }
-		return null;
-	}
+	/** (now AsWindows.selectorPick: the Assistant's own pick, the same on the watch) */
+	static Item answerSelector(WndBag.ItemSelector sel) { return AsWindows.selectorPick(sel); }
 
 	static String workedSummary() {
 		StringBuilder sb = new StringBuilder();
