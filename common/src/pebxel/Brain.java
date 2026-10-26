@@ -143,6 +143,7 @@ final class Brain {
 		try {
 			judge0();
 		} catch (Throwable e) { Assist.lastError = e; }
+		try { if (ON && DITHER) steady(); } catch (Throwable e) { Assist.lastError = e; }
 		long dt = System.nanoTime() - t0 + beginNanos; nanos += dt;
 		if (DBG && dt > 20_000_000L) System.out.println("  BRAIN slow " + dt / 1000000 + " ms (begin " + beginNanos / 1000000 + ") d" + Dungeon.depth); maxNanos = Math.max(maxNanos, dt); if (dt > 20_000_000L) slow++;
 	}
@@ -277,6 +278,71 @@ final class Brain {
 		cs.add(k);
 	}
 
+	// =============================================================================================================
+	// (M2, the coordinator's ask) steadiness across decisions: several skills propose competing moves, and plan A has
+	// gone back and forth between them (K7's, WD's loops; the Dwarf King's two tactics, M2-c). Two guards, each logged
+	// (DITHER / ZEROTIME lines) so the owners can fix the cause:
+	//   dithering: over the last BDITHERN decisions plan A took turns among 2-3 targets, the hero on 3 cells or fewer,
+	//     no foe's health down and his own not up: one of them is kept as plan A for BDITHERK decisions (a boss's or a
+	//     fight's tactic first, else the latest), while it stays in the list;
+	//   zero time: BZEROT decisions with the same plan A and the game's clock not moving: that one is put last.
+	// =============================================================================================================
+	static final boolean DITHER = Assist.opt("BDITHER", true);
+	static int acted, lastActed = -1, commitCell = -1; static final Set<String> ditherKeys = new HashSet<>(); static final Map<Integer, Integer> lastFoeHp = new HashMap<>();
+	static final int DN = Assist.optInt("BDITHERN", 6), DK = Assist.optInt("BDITHERK", 5), ZT = Assist.optInt("BZEROT", 8);
+	static final ArrayDeque<String> hKeys = new ArrayDeque<>(); static final ArrayDeque<Integer> hPos = new ArrayDeque<>(); static final ArrayDeque<Integer> hFoe = new ArrayDeque<>(), hHp = new ArrayDeque<>(); static final ArrayDeque<Float> hT = new ArrayDeque<>();
+	static String commitKey; static int commitLeft, zeroSame; static String zeroKey, zeroVeto; static int zeroVetoLeft; static int dithers, zeros; static int hDepth = -1;
+	static String key(Target t) { String w = t.why == null ? "" : t.why; int c = w.indexOf(" ["); if (c > 0) w = w.substring(0, c); return t.kind + "@" + t.cell + ":" + w; }
+	static boolean tactic(String k) { String w = k.substring(k.indexOf(':') + 1); return w.startsWith("boss") || w.startsWith("tactic") || w.startsWith("fight"); }
+	static void steady() {
+		List<Target> out = Assist.out; if (out.isEmpty()) return;
+		Hero h = H; float now = Actor.now();
+		if (Dungeon.depth != hDepth) { hDepth = Dungeon.depth; hKeys.clear(); hPos.clear(); hFoe.clear(); hHp.clear(); hT.clear(); commitLeft = 0; zeroSame = 0; zeroVetoLeft = 0; }
+		boolean fresh = acted != lastActed;   // (a re-plan with nothing done since (the watch's list redrawn, a Down) isn't a decision of its own)
+		// the zero-time veto in force: that plan A put last
+		if (zeroVetoLeft > 0) { if (fresh) zeroVetoLeft--; if (out.size() > 1 && key(out.get(0)).equals(zeroVeto)) { Target t = out.remove(0); out.add(t); } }
+		// a commitment in force: its target kept first while it's in the list
+		if (commitLeft > 0) {
+			if (fresh) commitLeft--; Target c = null; for (Target t : out) if (key(t).equals(commitKey)) { c = t; break; }
+			if (c != null && out.get(0) != c) { out.remove(c); out.add(0, c); }
+			else if (c == null && commitCell == h.pos) {   // (the kept one's cell reached: the others it took turns with put last, the hero stays)
+				List<Target> rest = new ArrayList<>(); for (Target t : out) if (ditherKeys.contains(key(t))) rest.add(t);
+				if (rest.size() < out.size()) { out.removeAll(rest); out.addAll(rest); }
+			} else if (c == null) commitLeft = 0;
+		}
+		if (!fresh) return;
+		lastActed = acted;
+		String k = key(out.get(0));
+		int foe = 0;   // (the damage dealt since the last decision: health off each foe in sight, a kill its last health; new foes coming don't hide it)
+		Map<Integer, Integer> now2 = new HashMap<>(); for (Mob m : Assist.mobs()) if (Assist.enemy(m)) { int v = m.HP + m.shielding(); now2.put(m.id(), v); Integer p0 = lastFoeHp.get(m.id()); if (p0 != null && p0 > v) foe += p0 - v; }
+		for (Map.Entry<Integer, Integer> e : lastFoeHp.entrySet()) if (!now2.containsKey(e.getKey())) { com.shatteredpixel.shatteredpixeldungeon.actors.Actor a = Actor.findById(e.getKey()); if (!(a instanceof Mob) || !((Mob) a).isAlive()) foe += e.getValue(); }
+		lastFoeHp.clear(); lastFoeHp.putAll(now2);
+		hKeys.addLast(k); hPos.addLast(h.pos); hFoe.addLast(foe); hHp.addLast(h.HP); hT.addLast(now);
+		while (hKeys.size() > Math.max(DN, ZT)) { hKeys.removeFirst(); hPos.removeFirst(); hFoe.removeFirst(); hHp.removeFirst(); hT.removeFirst(); }
+		// zero time: the same plan A, the clock still
+		if (k.equals(zeroKey) && hT.size() >= 2 && now == ((ArrayDeque<Float>) hT).toArray(new Float[0])[hT.size() - 2]) zeroSame++; else { zeroSame = 0; zeroKey = k; }
+		if (zeroSame >= ZT && out.size() > 1) {
+			zeros++; System.out.println("ZEROTIME d" + Dungeon.depth + " t" + (int) now + " " + ZT + " decisions on '" + k + "' with no time passing: put last (next: " + key(out.get(1)) + ")");
+			zeroVeto = k; zeroVetoLeft = DK; zeroSame = 0; Target t = out.remove(0); out.add(t); return;
+		}
+		if (commitLeft > 0 || hKeys.size() < DN) return;
+		// dithering over the last DN decisions
+		String[] ks = hKeys.toArray(new String[0]); Integer[] ps = hPos.toArray(new Integer[0]), fo = hFoe.toArray(new Integer[0]), hp = hHp.toArray(new Integer[0]);
+		int from = ks.length - DN; Set<String> kset = new LinkedHashSet<>(); Set<Integer> pset = new HashSet<>(); int switches = 0;
+		for (int i = from; i < ks.length; i++) { kset.add(ks[i]); pset.add(ps[i]); if (i > from && !ks[i].equals(ks[i - 1])) switches++; }
+		int dealt = 0; for (int i = from + 1; i < ks.length; i++) dealt += fo[i];
+		boolean progress = dealt > 0 || hp[ks.length - 1] > hp[from];
+		if (kset.size() < 2 || kset.size() > 3 || pset.size() > 3 || switches < DN - 2 || progress) return;
+		String pick = null; for (String x : kset) if (tactic(x)) pick = x;
+		if (pick == null) pick = ks[ks.length - 1];
+		dithers++; System.out.println("DITHER d" + Dungeon.depth + " t" + (int) now + " plan A took turns among " + kset + " on " + pset.size() + " cells, no progress: kept '" + pick + "' for " + DK);
+		commitKey = pick; commitLeft = DK; ditherKeys.clear(); ditherKeys.addAll(kset); ditherKeys.remove(pick);
+		try { commitCell = Integer.parseInt(pick.substring(pick.indexOf('@') + 1, pick.indexOf(':'))); } catch (Throwable e) { commitCell = -1; }
+		Target c = null; for (Target t : out) if (key(t).equals(pick)) { c = t; break; }
+		if (c != null && out.get(0) != c) { out.remove(c); out.add(0, c); }
+		hKeys.clear(); hPos.clear(); hFoe.clear(); hHp.clear(); hT.clear();
+	}
+
 	static boolean has(List<Cand> cs, Role r) { for (Cand c : cs) if (c.role == r) return true; return false; }
 	/** Stairs known, a short walk off, no foe nearer to them than the hero. */
 	static boolean stairsOk(int s) {
@@ -372,9 +438,9 @@ final class Brain {
 
 	/** The game's tally (AssistBot prints it with the result). */
 	static String stats() {
-		String s = String.format("skips %d decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", skips, decisions, fights, overrides,
+		String s = String.format("dithers %d zerotime %d skips %d decisions %d fights %d overrides %d (agree %.1f%%) vetoes %d ms avg %.2f max %.1f slow %d by %s rows {%s} planA %s", dithers, zeros, skips, decisions, fights, overrides,
 				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
-		skips = 0;
+		skips = 0; lastFoeHp.clear(); dithers = zeros = 0; hDepth = -1; commitLeft = 0; zeroVetoLeft = 0; zeroSame = 0; zeroKey = null;
 		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset(); lastDepth = fledFrom = -1; fledAt = -999; lastPlanRole = null;
 		return s;
 	}

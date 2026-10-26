@@ -395,7 +395,7 @@ public final class Assist {
 		try {
 			Hero h = Dungeon.hero;
 			if (t == null || h == null || !h.isAlive()) return false;
-			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item;
+			actPos = h.pos; actTime = Actor.now(); actCell = t.cell; actKind = t.kind; actItem = t.item; Brain.acted++;   // (M2: the brain's steadiness counts plans acted on, not re-plans)
 			boolean aimingNow = Controls.aiming();
 			if (aimingNow) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 			if (!h.ready) return false;
