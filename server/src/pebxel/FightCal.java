@@ -21,7 +21,7 @@ final class FightCal {
 	static boolean active; static int hp0, minHp, quiet, depth, heals0; static FightModel.Result pred; static String names;
 	static Set<Integer> ids = new HashSet<>(); static Map<Integer, Integer> mobHp = new HashMap<>(); static boolean blows;
 
-	static void newGame() { active = false; ids.clear(); mobHp.clear(); }
+	static void newGame() { rT = -1; active = false; ids.clear(); mobHp.clear(); }
 
 	static List<Mob> engaged(Hero h) {
 		List<Mob> out = new ArrayList<>();
@@ -41,6 +41,7 @@ final class FightCal {
 		Hero h = Dungeon.hero; if (h == null) return;
 		if (active && Dungeon.depth != depth) end(false);
 		List<Mob> ms = engaged(h);
+		rate(h, ms);
 		if (!active) {
 			if (ms.isEmpty()) return;
 			active = true; hp0 = h.HP; minHp = h.HP; quiet = 0; depth = Dungeon.depth; heals0 = heals(h); ids.clear(); mobHp.clear(); blows = false;
@@ -56,8 +57,26 @@ final class FightCal {
 		if (ms.isEmpty()) { if (++quiet >= 3) end(false); } else quiet = 0;
 	}
 
+	// (MT) the damage rate: at a decision in a fight, the model's mean loss over the next RATE turns against the health
+	// actually lost by then (no potion drunk between; deaths count the health there was). One check open at a time.
+	static final double RATE = 5; static float rT = -1; static int rHp, rHeals, rDepth; static double rPred, rPd; static String rNames;
+	static void rate(Hero h, List<Mob> ms) {
+		float now = com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now();
+		if (rT >= 0 && (now - rT >= RATE || !h.isAlive() || Dungeon.depth != rDepth)) {
+			if (heals(h) >= rHeals && Dungeon.depth == rDepth)
+				System.out.printf(Locale.ROOT, "FIGHTRATE depth %d hp %d pred %.1f pd %.3f real %d mobs %s%n", rDepth, rHp, rPred, rPd, rHp - Math.max(0, h.HP), rNames);
+			rT = -1;
+		}
+		if (rT < 0 && !ms.isEmpty() && h.isAlive()) {
+			FightModel.Result r = FightModel.next(h, ms, RATE);
+			rT = now; rHp = h.HP; rHeals = heals(h); rDepth = Dungeon.depth; rPred = r.lossMean; rPd = r.pDeath;
+			StringBuilder sb = new StringBuilder(); for (Mob m : ms) sb.append(m.getClass().getSimpleName()).append('@').append(Dungeon.level.distance(m.pos, h.pos)).append(','); rNames = sb.toString();
+		}
+	}
+
 	/** The fight ends (died: the hero is dead). */
 	static void end(boolean died) {
+		if (ON && died && rT >= 0) { System.out.printf(Locale.ROOT, "FIGHTRATE depth %d hp %d pred %.1f pd %.3f real %d mobs %s%n", rDepth, rHp, rPred, rPd, rHp, rNames); rT = -1; }
 		if (!ON || !active) return;
 		active = false;
 		if (!died && !blows) return;   // (no blow either way: no fight, it was only in sight)

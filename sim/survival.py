@@ -10,7 +10,7 @@ for p in sys.argv[1:]:
         if m: g.append((int(m[5]), m[3].split(" (")[0].split(" at ")[0][:14]))
     if not g: continue
     n = len(g); lo = min(d for d, _ in g); hi = max(d for d, _ in g)
-    start = lo if lo > 3 else 1
+    hm = re.search(r'head(\d+)', os.path.basename(p)); start = int(hm[1]) if hm else 1
     curve = " ".join(f"{d}:{sum(1 for x, _ in g if x >= d) / n:.2f}" for d in range(start, hi + 1))
     print(f"{os.path.basename(p)[:-4]:14} n {n:4d} mean {sum(d for d, _ in g) / n:5.2f} cleared {sum(d - start for d, _ in g) / n:5.2f} | {curve}")
     ends = collections.Counter(((d - 1) // 5 + 1, e) for d, e in g)

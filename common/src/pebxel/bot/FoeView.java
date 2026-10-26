@@ -52,6 +52,9 @@ public final class FoeView {
 		}
 		special(f, m.getClass().getSimpleName(), m.HT);
 		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;
+		if (Tune.FOES) effects(f, f.name);
+		if (Tune.FOES && m instanceof Ghoul) for (Mob o : com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.mobs)   // (MT: a ghoul gets up again while its pair is near: Ghoul.die)
+			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }
 		if (Tune.FOES && m instanceof GnollTrickster) f.dmg = f.dmg.shift(4);   // (MT: each dart that lands poisons, more each time: GnollTrickster.attackProc, ~4 a hit early on)
 		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; }   // (already raging: its shield is in shielding())
@@ -69,6 +72,19 @@ public final class FoeView {
 			case "Warlock": f.zapDmg = Dist.normal(12, 18); break;
 			case "Eye": f.zapDmg = Dist.normal(30, 50); break;
 			case "Brute": case "ArmoredBrute": f.rageHp = ht / 2 + 4; f.rageDmg = Dist.normal(15, 40); break;   // (BruteRage: it fights on, shielded, at 15-40)
+		}
+	}
+
+	/** (MT) What the deep kinds' blows set off past armour, from their source, sized by the damage-rate check (FIGHTRATE:
+	 *  the model had these at 1/2 to 1/20 of the real health lost over 5 turns): AS_OFOEFX scales them. */
+	static void effects(Fighter f, String n) {
+		double k = Tune.FOEFX;
+		switch (n) {
+			case "Eye": f.burstDmg = Dist.normal(30, 50); f.burstEvery = 6; f.zapDmg = null; break;   // (Eye.doAttack: charge, beam, 4-6 turns' cooldown, beside the hero too)
+			case "FireElemental": f.hitDirect = 6 * k; break;   // (Elemental.meleeProc: sets it burning)
+			case "Spinner": f.hitDirect = 5 * k; break;         // (half its bites poison for 7-8)
+			case "RipperDemon": f.hitDirect = 2 * k; break;     // (it leaps in for more)
+			case "Succubus": f.hitDirect = 1 * k; f.leech = 1; break;   // (charm: a blow lost, its health back)
 		}
 	}
 
