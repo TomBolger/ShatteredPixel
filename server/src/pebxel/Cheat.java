@@ -133,6 +133,7 @@ public final class Cheat {
 		if (!SETUP || h == null || !h.isAlive()) return false;
 		int start = envInt("STARTDEPTH", 0);
 		if (HEAD && !headDone && Dungeon.depth < start && Dungeon.branch == 0) {   // down a floor (each made as if walked)
+			passed(Dungeon.level);
 			LevelTransition tr = new LevelTransition(Dungeon.level, h.pos, LevelTransition.Type.REGULAR_EXIT, Dungeon.depth + 1, 0, LevelTransition.Type.REGULAR_ENTRANCE);
 			Dungeon.level.locked = false;
 			return Dungeon.level.activateTransition(h, tr);
@@ -141,6 +142,40 @@ public final class Cheat {
 		if (!kitDone) { kitDone = true; kit(h); }
 		if (MILD) mild(h);
 		return false;
+	}
+
+	/**
+	 * A floor the head start passes by, left as a player who walked it would leave it (agent K7): HEADMAP=1 (default)
+	 * its map known (as explored: Magic Mapping's knowledge, the secrets kept), and a boss floor beaten (HEADBOSS=1,
+	 * default): the boss gone and the way on open, as after the fight. Before, a hero who came back up to one (fleeing
+	 * up from 11, or the climb with the Amulet) met the floor as it was before the fight: on Tengu's floor he stood on
+	 * the walled-up exit for ever (K5's floor timeouts at 10), on Yog's he woke Yog.
+	 */
+	static void passed(com.shatteredpixel.shatteredpixeldungeon.levels.Level l) {
+		if (envInt("HEADMAP", 1) != 0) for (int i = 0; i < l.length(); i++) if ((com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.flags[l.map[i]] & com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.SECRET) == 0) l.mapped[i] = true;
+		if (envInt("HEADBOSS", 1) == 0 || !Dungeon.bossLevel()) return;
+		String what = "";
+		try {
+			for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : l.mobs.toArray(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob[0]))
+				if (m.properties().contains(com.shatteredpixel.shatteredpixeldungeon.actors.Char.Property.BOSS) || m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Pylon) { l.mobs.remove(m); com.shatteredpixel.shatteredpixeldungeon.actors.Actor.remove(m); if (m.sprite != null) m.sprite.killAndErase(); what += " " + m.getClass().getSimpleName(); }
+			if (l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.PrisonBossLevel) {   // (Tengu's arena as at the end: the exit's room, the state WON)
+				java.lang.reflect.Method end = l.getClass().getDeclaredMethod("setMapEnd"); end.setAccessible(true); end.invoke(l);
+				java.lang.reflect.Field st = l.getClass().getDeclaredField("state"); st.setAccessible(true); st.set(l, com.shatteredpixel.shatteredpixeldungeon.levels.PrisonBossLevel.State.WON);
+				what += " arena: end";
+			} else if (l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CavesBossLevel) {   // (the gate broken, as unseal() does)
+				com.watabou.utils.Rect g = com.shatteredpixel.shatteredpixeldungeon.levels.CavesBossLevel.gate;
+				for (int j = g.left; j < g.right; j++) com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(g.top * l.width() + j, com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EMPTY, l);
+				what += " gate open";
+			} else if (l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CityBossLevel) {   // (the arena's doors open)
+				for (String n : new String[]{"bottomDoor", "topDoor"}) { java.lang.reflect.Field f = l.getClass().getDeclaredField(n); f.setAccessible(true); com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(f.getInt(null), com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR, l); }
+				what += " doors open";
+			} else if (l instanceof com.shatteredpixel.shatteredpixeldungeon.levels.HallsBossLevel) {   // (the exit shown: Yog is summoned only while it isn't)
+				com.shatteredpixel.shatteredpixeldungeon.levels.Level.set(l.exit(), com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.EXIT, l);
+				what += " exit open";
+			}
+			com.shatteredpixel.shatteredpixeldungeon.scenes.GameScene.updateMap();
+		} catch (Throwable e) { what += " FAILED " + e; }
+		System.out.println("SETUP head start: boss floor " + Dungeon.depth + " passed as beaten:" + what);
 	}
 
 	static void give(Item i, boolean known) {
