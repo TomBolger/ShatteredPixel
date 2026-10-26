@@ -55,6 +55,12 @@ final class Rules {
 		veto("gear: swap back", c -> c.role == Role.EQUIP && swappedBack(c.t.item)),
 		// a swap in a fight costs a turn of free blows: only when the lookahead says the new piece wins it (Brain.value)
 		veto("gear: blind swap in a fight", c -> c.role == Role.EQUIP && Brain.fight && !(c.valued() && c.v > Brain.MARGIN)),
+		// -- K6: food and casters (AsBasics) --------------------------------------------------------------------------
+		// every rest priced in food (K6-base0: starving 66 turns a floor of 349, 400-turn rests before and after a boss)
+		veto("food: a rest it can't pay", c -> c.role == Role.REST && AsBasics.restUnaffordable(c.t)),
+		// the old shooter tactic against a caster (K6-base0: 38 of 47 deaths from depth 11 were bolts, waiting "round the corner")
+		veto("caster: the old corner", c -> AsBasics.casterVeto(c.t)),
+		veto("caster: no waiting in its line", c -> AsBasics.waitInLine(c.t)),
 		// -- the brain's own steadiness ------------------------------------------------------------------------------
 		// a walk to the stairs, chosen last turn over the fight, kept on: re-weighed from scratch each step it went back
 		// and forth (a step nearer, the foe a step nearer too)

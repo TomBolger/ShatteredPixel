@@ -40,6 +40,7 @@ final class AsBasics {
 
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
+		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -347,6 +348,103 @@ final class AsBasics {
 	}
 
 	// =============================================================================================================
+	// casters (K6: head start 11, 38 of 47 deaths to shamans' magic bolts; head start 16, 27 of 34 to warlocks' shadow
+	// bolts). A bolt ignores armour, a blow beside it doesn't: a shaman's zap 6-15, its blow 5-10 less the armour. The
+	// old tactic stepped out of its line and waited, and it stepped back into line from afar and zapped, over and over.
+	// Now: a true corner (every cell on its way there that sees the hero is beside him), else close in on it.
+	// =============================================================================================================
+	static final boolean CASTER = opt("BCASTER", true);
+	static final int CASTWALK = optInt("BCASTWALK", 3), CASTRISK = optInt("BCASTRISK", 40);   // steps to a corner at most; the fight's death chance (percent) above which it isn't charged
+	static boolean caster(Mob m) { return m instanceof Shaman || m instanceof Warlock || m instanceof DM100; }
+	/** Can the caster at s bolt the hero at c (the game's own test, Shaman.canAttack)? */
+	static boolean bolts(int s, int c) { try { return new com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica(s, c, com.shatteredpixel.shatteredpixeldungeon.mechanics.Ballistica.MAGIC_BOLT).collisionPos == c; } catch (Throwable e) { return false; } }
+	/** The nearest awake caster after the hero, in sight. */
+	static Mob casterNear() {
+		Mob b = null; int hp = Dungeon.hero.pos;
+		for (Mob m : mobs()) if (caster(m) && hostile(m) && hunting(m) && (b == null || distance(m.pos, hp) < distance(b.pos, hp))) b = m;
+		return b;
+	}
+	/** Is c no true corner against the caster at s: a cell it could reach before c (fewer of its steps) that, two or
+	 *  more from c, sees c (it would stop there and bolt)? Any way it may come, not only the shortest. */
+	static boolean seenOnWay(int s, int c) { return seenOnWay(s, c, crabDist(s)); }
+	static boolean seenOnWay(int s, int c, int[] ds) {
+		if (ds[c] >= INF) return true;
+		for (int x = 0; x < L.length(); x++) if (ds[x] < ds[c] && distance(x, c) >= 2 && bolts(x, c)) return true;
+		return false;
+	}
+	/** A caster after the hero, not beside him: to a true corner (once per caster), else at it. */
+	static Target casterTactic(Target planA) {
+		if (!CASTER) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.rooted) return null;
+		Mob sh = casterNear(); if (sh == null) return null;
+		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return null;   // (one beside him: that fight first)
+		if (cornerL != L) { cornerL = L; cornerFailed.clear(); }
+		int[] ds = crabDist(sh.pos);
+		boolean failed = cornerFailed.contains(sh.id());
+		if (!failed && cornerAt == hp && cornerId == sh.id()) {   // at the corner chosen: wait for it, unless it bolts from afar after all
+			if (bolts(sh.pos, hp) || Actor.now() >= cornerUntil) { cornerFailed.add(sh.id()); failed = true; cornerAt = -1; }
+			else { Target t = new Target(hp, WAIT, "caster: wait at the corner"); t.action = WAIT_ACT; return t; }
+		}
+		if (!failed && (cornerId != sh.id() || cornerAt < 0)) {
+			int best = -1, bd = INF;
+			for (int c = 0; c < L.length(); c++) if (dist[c] >= 0 && dist[c] <= CASTWALK && dist[c] < bd && (c == hp || (open[c] && seenChar(c) == null)) && !danger[c] && !L.water[c] && !bad.containsKey(c) && !seenOnWay(sh.pos, c, ds)) { bd = dist[c]; best = c; }
+			if (best >= 0 && bd < distance(sh.pos, hp) - 1) { cornerAt = best; cornerId = sh.id(); cornerUntil = Actor.now() + bd + distance(sh.pos, best) + 4; }
+			else cornerFailed.add(sh.id());
+		}
+		if (!cornerFailed.contains(sh.id()) && cornerId == sh.id() && cornerAt >= 0) {
+			if (cornerAt == hp) { Target t = new Target(hp, WAIT, "caster: wait at the corner"); t.action = WAIT_ACT; return t; }
+			if (walk(cornerAt) <= CASTWALK + 1) return new Target(cornerAt, GO, "caster: to a corner it must come round");
+			cornerFailed.add(sh.id());
+		}
+		java.util.List<Mob> fs = new ArrayList<>(); for (Mob m : mobs()) if (hostile(m) && hunting(m)) fs.add(m);
+		double pd = 0; try { pd = pebxel.bot.FightModel.evaluate(h, fs).pDeath * 100; } catch (Throwable e) { }
+		if (pd > CASTRISK || walk(sh.pos) > 12) return null;
+		return new Target(sh.pos, ENEMY, "caster: close in (its bolt ignores armour)");
+	}
+	static final Set<Integer> cornerFailed = new HashSet<>(); static Level cornerL;
+	static int cornerAt = -1, cornerId = -1; static float cornerUntil = -1;
+	/** The old shooter tactic (Assist.tactics) against a caster: out of its line, only for it to step back into line. */
+	static boolean casterVeto(Target t) {
+		if (!CASTER || t == null || t.why == null) return false;
+		if (!(t.why.startsWith("tactic: out of its line") || t.why.startsWith("tactic: wait round the corner"))) return false;
+		Mob sh = casterNear(); return sh != null;
+	}
+	/** A wait (any) in a caster's line, not beside a foe: every turn a bolt for nothing. */
+	static boolean waitInLine(Target t) {
+		if (!CASTER || t == null || t.kind != WAIT || (t.why != null && t.why.startsWith("caster"))) return false;
+		int hp = Dungeon.hero.pos;
+		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return false;
+		for (Mob m : mobs()) if (caster(m) && hostile(m) && bolts(m.pos, hp)) return true;
+		return false;
+	}
+
+	// =============================================================================================================
+	// stuck (K6): plan A down to searching. In Shattered a search on purpose finds every secret beside the hero at once
+	// (Hero.search: intentional, chance 1), so a spot searched is done for good; searching on there is time and food
+	// for nothing (a starved game searched one spot 700 times). Out of a branch (the Blacksmith's mine: AsQuests gives
+	// up its quests after 1500 steps, the way out with them) by its stairs; else, with every wall searched, a chasm.
+	// =============================================================================================================
+	static final boolean STUCK = opt("BSTUCK", true);
+	static Target stuck(Target planA) {
+		if (!STUCK || planA == null || seenFoe || inDanger) return null;
+		boolean srch = SEARCH_ACT.equals(planA.action) || planA.why.startsWith("search") || planA.why.startsWith("dead end");
+		if (!srch) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (Dungeon.branch != 0) {
+			for (com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr : L.transitions) if (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_ENTRANCE && known[tr.cell()])
+				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;
+			return null;
+		}
+		if (Assist.srchSpot(-1, -1) >= 0 || Dungeon.bossLevel() || Dungeon.depth >= 25 || h.HP * 2 < h.HT) return null;   // (walls left to search: Assist's own way)
+		int pit = -1, pd = INF;
+		for (int c = 0; c < L.length(); c++) if (L.pit[c] && known[c] && !L.solid[c] && Actor.findChar(c) == null) {
+			for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && (n == hp || (dist[n] < INF && open[n])) && (n == hp ? 0 : dist[n]) < pd) { pd = n == hp ? 0 : dist[n]; pit = c; } } }
+		if (pit < 0) return null;
+		return new Target(pit, GO, "stuck: down the chasm (every wall searched)");
+	}
+
+	// =============================================================================================================
 	// the food budget (BF-smoke4: 7 of 60 deaths starving; floors take ~600 turns, a ration is 300)
 	// =============================================================================================================
 
@@ -365,12 +463,43 @@ final class AsBasics {
 	static boolean veto(Target hk) {
 		if (!FOOD || hk == null) return false;
 		Hero h = Dungeon.hero;
-		if (hk.kind == WAIT && REST_ACT.equals(hk.action) && hk.why.startsWith("hurt")) {
-			if (h.HP * 4 < h.HT || L.locked) return stairsRest(hk);
-			if (foodTurns() < restTurns() + FOODRESERVE) return true;
-			return stairsRest(hk);
+		if (hk.kind == WAIT && REST_ACT.equals(hk.action)) {
+			if (restUnaffordable(hk)) return true;
+			if (hk.why.startsWith("hurt")) return stairsRest(hk);
 		}
 		return false;
+	}
+
+	static final boolean RESTALL = opt("BRESTALL", true);   // (K6) every rest priced, not only the hands' "hurt" ones: 400-turn rests before (and after) the boss starved runs
+	static final int FLOORNEED = optInt("BFLOORNEED", 150);   // turns the rest of a floor not yet explored is reckoned to take
+	/** A rest (any: the hands', the boss's, the brain's) the food can't pay for: none while starving (there is no
+	 *  regeneration then), and none that leaves less than the reserve plus the rest of this floor's walk. Dying
+	 *  (a quarter health), or with the floor locked (hunger stops), only one that would starve the hero. */
+	static boolean restUnaffordable(Target t) {
+		if (!FOOD || t == null || t.kind != WAIT || !REST_ACT.equals(t.action)) return false;
+		if (!RESTALL && !t.why.startsWith("hurt")) return false;
+		Hero h = Dungeon.hero;
+		if (Assist.starving()) return true;
+		if (t.why.startsWith("rest before the boss") && bossDown()) return true;
+		if (L.locked) return false;
+		int f = foodTurns() - (int) Hunger.STARVING, need = restTurns();   // (turns of food before starving)
+		if (h.HP * 4 < h.HT) return f < need;
+		return f - need < FOODRESERVE / 2 + floorNeed();
+	}
+	/** The floor's boss seen to die (its body gone from the floor while in sight, or seen dead): no boss to rest for. */
+	static final List<Mob> bossesSeen = new ArrayList<>(); static Level bossL;
+	static boolean bossDown() {
+		if (bossL != L) { bossL = L; bossesSeen.clear(); }
+		for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS) && !bossesSeen.contains(m)) bossesSeen.add(m);
+		if (bossesSeen.isEmpty()) return false;
+		for (Mob m : bossesSeen) if (m.isAlive()) return false;
+		return true;
+	}
+	/** Turns still to walk on this floor: to the stairs if the floor is done, more if not. */
+	static int floorNeed() {
+		int ex = L.exit(); boolean way = ex >= 0 && ex < L.length() && known[ex] && walk(ex) < INF;
+		boolean left = false; for (int c = 0; c < L.length() && !left; c++) if (dist[c] > 0 && dist[c] < INF && unseenBy(c)) left = true;
+		return (way ? walk(ex) : 30) + (left ? FLOORNEED : 0);
 	}
 
 	// =============================================================================================================
