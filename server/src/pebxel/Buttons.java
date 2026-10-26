@@ -52,6 +52,7 @@ public class Buttons {
 			if (p.matches("[udsbUDSB]\\d+")) { wait = Integer.parseInt(p.substring(1)); p = p.substring(0, 1); }   // (a press, then only that many frames: s2)
 			if (p.matches("\\d+")) wait = Integer.parseInt(p);
 			else if (p.startsWith("@give:")) { ((com.shatteredpixel.shatteredpixeldungeon.items.Item) Class.forName("com.shatteredpixel.shatteredpixeldungeon.items." + p.substring(6)).getDeclaredConstructor().newInstance()).identify().collect(); }   // (tests: an item, e.g. @give:Amulet)
+			else if (p.startsWith("@new:")) { ((com.shatteredpixel.shatteredpixeldungeon.items.Item) Class.forName("com.shatteredpixel.shatteredpixeldungeon.items." + p.substring(5)).getDeclaredConstructor().newInstance()).collect(); }   // (tests: an item as found: not identified, e.g. @new:potions.PotionOfHealing)
 			else if (p.startsWith("@read:")) {   // (tests: a scroll read at once, e.g. @read:ScrollOfMagicMapping)
 				com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll sc = (com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll) Class.forName("com.shatteredpixel.shatteredpixeldungeon.items.scrolls." + p.substring(6)).getDeclaredConstructor().newInstance();
 				sc.identify(); sc.collect();

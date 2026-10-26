@@ -23,7 +23,7 @@ public final class Swaps {
 			else if (w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndHero && !nativeHero) mine = new WndWatchHero();
 			else if (w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndInfoTalent) mine = new WndWatchTalent((com.shatteredpixel.shatteredpixeldungeon.windows.WndInfoTalent) w);
 			else if (w instanceof WndBag) { WndBag.ItemSelector sel = (WndBag.ItemSelector) get(WndBag.class, w, "selector"); mine = new WndWatchBag(startBag((Bag) get(WndBag.class, null, "lastBag"), sel), sel); ((WndBag) w).pebxelSwap = mine; }
-			if (mine == null) { dim(w); return w; }
+			if (mine == null) { if (w instanceof com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfIntuition.WndGuess) fitGuess(w); dim(w); return w; }
 			w.destroy();   // (it had set up its camera and key listener)
 			return mine;
 		} catch (Exception e) {
@@ -46,6 +46,33 @@ public final class Swaps {
 				if (i instanceof Bag) for (com.shatteredpixel.shatteredpixeldungeon.items.Item j : ((Bag) i).items) if (sel.itemSelectable(j)) return (Bag) i;
 		} catch (Exception e) { }
 		return bag;
+	}
+
+	/** The Stone of Intuition's guess window, laid out again (Thomas: "not all the icons, and the button under them, the
+	 *  text I'd read taking all the room"): Shattered put the button at a fixed 80 over icons that start below the text, in
+	 *  rows of up to half the choices. The icons here wrap to the window's width, the guess button sits below them (its
+	 *  place kept before a choice shows it), and the window is as tall as all that: a tall one scrolls (Controls, Caps). */
+	static void fitGuess(Window w) {
+		java.util.List<com.watabou.noosa.ui.Component> icons = new java.util.ArrayList<>();
+		com.shatteredpixel.shatteredpixeldungeon.ui.RedButton guess = null;
+		com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock text = null;
+		if (w.parent == null && !w.exists) return;
+		for (com.watabou.noosa.Gizmo g : com.watabou.noosa.GroupAccess.members(w)) {
+			if (g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.IconButton) icons.add((com.watabou.noosa.ui.Component) g);
+			else if (g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) guess = (com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) g;
+			else if (g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) text = (com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) g;
+		}
+		if (guess == null || text == null || icons.isEmpty()) return;
+		int wd = 120, sz = 20, per = Math.max(1, Math.min(wd / sz, icons.size()));
+		int rows = (icons.size() + per - 1) / per;
+		float top = text.bottom() + 4;
+		for (int i = 0; i < icons.size(); i++) {
+			int r = i / per, inRow = Math.min(per, icons.size() - r * per);
+			icons.get(i).setRect((wd - inRow * sz) / 2f + (i % per) * sz, top + r * sz, sz, sz);
+		}
+		float y = top + rows * sz + 4;
+		guess.setRect(0, y, wd, 20);
+		w.resize(wd, (int) (y + 20));
 	}
 
 	/** Shattered's own windows get Pebble PD's shade over the game behind them (its border would run into the HUD's). */
