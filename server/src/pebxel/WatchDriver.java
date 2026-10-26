@@ -457,7 +457,7 @@ public final class WatchDriver {
 		if (j == 0) planA++; else if (j > 0) inList++; else { notInList++; missKinds.merge(t.kind + ":" + t.why.replaceAll("[^A-Za-z ]", "").trim().replace(' ', '_'), 1, Integer::sum); }
 		if (VW) System.out.println("    watch list " + plan() + " target " + target() + "; bot " + t + " at " + j);
 		if (j >= 0) {
-			if (t.kind == Assist.USE && t.on != null) AsWindows.want = t.on;   // (the bag it opens: the bot's pick, as the Assistant framed it)
+			if (t.kind == Assist.USE && t.on != null) AsWindows.want(t.on);   // (the bag it opens: the bot's pick, as the Assistant framed it)
 			if (listTo(j)) return true;
 		}
 		Assist.noted(t);

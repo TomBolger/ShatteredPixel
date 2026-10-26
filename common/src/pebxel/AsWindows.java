@@ -80,14 +80,16 @@ public final class AsWindows {
 	}
 
 	/** The item the next item selector should get, set by the suggestion that opens it (an alchemy slot's ingredient). */
-	public static Item want;
+	public static Item want; static float wantAt = -1;
+	/** The item the next selector should get (this turn only). */
+	public static void want(Item i) { want = i; wantAt = Actor.now(); }
 
 	/** The item for a selector: the one the suggestion meant (want), the scroll's own target (Assist.choose: the armour
 	 *  plan's upgrade, identify, remove curse), else the worn things first, then the pack. */
 	public static Item selectorPick(WndBag.ItemSelector sel) {
 		Hero h = Dungeon.hero; if (h == null || sel == null) return null;
 		try {
-			if (want != null) { Item w = want; want = null; if (sel.itemSelectable(w) && h.belongings.contains(w)) return w; }
+			if (want != null && wantAt == Actor.now() && sel.itemSelectable(want) && h.belongings.contains(want)) return want;   // (kept till the next step: it may sit in another bag, reached by its tab)
 			Item src = Assist.actItem;
 			if (src != null) { Item c = Assist.choose(sel, src); if (c != null) return c; }
 			List<Item> worn = new ArrayList<>();
@@ -215,7 +217,7 @@ public final class AsWindows {
 	public static void newGame() { aPlan = null; aDepth = -1; aScene = null; want = null; alchemyVisits = 0; made.clear(); sales = 0; salesAt = -1; }
 
 	static Pick alchemy(com.watabou.noosa.Scene sc) {
-		AsAlchemy.used();
+		AsAlchemy.used(); want = null;
 		Object[] inputs = (Object[]) staticField(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
 		Object[] combines = (Object[]) staticField(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "combines");
 		if (inputs == null || combines == null) return back("alchemy: can't see its slots");
@@ -230,7 +232,7 @@ public final class AsWindows {
 		if (aPlan == null) return back("alchemy: nothing to make");
 		if (filled < aPlan.size()) {
 			for (Object in : inputs) if (in != null && Assist.field(in, "item") == null) {
-				want = aPlan.get(filled);
+				want(aPlan.get(filled));
 				Object slot = Assist.field(in, "slot");
 				if (slot instanceof Gizmo) return press((Gizmo) slot, "alchemy: put in " + want.getClass().getSimpleName());
 			}

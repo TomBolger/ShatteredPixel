@@ -1221,7 +1221,14 @@ public class Controls {
 		windowWhy = p.why;
 		if (log) System.out.println("pebxel: window " + (w != null ? w.getClass().getName() : sk) + ": " + p);
 		if (p.item != null) {
-			if (menu instanceof pebxel.ui.WndWatchBag) { ((pebxel.ui.WndWatchBag) menu).focusOn(p.item); suggested = ((pebxel.ui.WndWatchBag) menu).focused(); }
+			if (menu instanceof pebxel.ui.WndWatchBag) {
+				pebxel.ui.WndWatchBag wb = (pebxel.ui.WndWatchBag) menu;
+				// (in another bag, the scroll holder, the pouch: that bag's tab first; it opens in its place, and the frame
+				// goes on the item there. Before, the frame stayed on the first row and Select chose something else, round
+				// and round at the alchemy pot's energy)
+				if (!wb.focusOn(p.item)) for (com.shatteredpixel.shatteredpixeldungeon.items.bags.Bag bg : h.belongings.getBags()) if (bg != h.belongings.backpack && bg.items.contains(p.item) && wb.focusOn(bg)) break;
+				suggested = wb.focused();
+			}
 			return;
 		}
 		List<Ui.Part> bs = buttons(menu);

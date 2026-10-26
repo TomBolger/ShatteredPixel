@@ -17,9 +17,10 @@ import static pebxel.Assist.*;
  *   as plan B, the bot's plan A first, until he takes it (then it leads) or keeps taking plan A (it fades).</li>
  * <li><b>His habits.</b> Each kind of entry (items, grass, doors, the unexplored, searching...) earns a liking when he
  *   picks it over plan A, and loses it when he passes it over. Entries after plan A are ordered by the list's own order,
- *   lifted by his liking and by lying his way. A kind he has passed over twice and never taken since is no plan A
- *   (still offered after it) while something else is.</li>
- * <li><b>What he passed over.</b> Passed over in a fight: back once the fight is over (Assist's combatHeld). Passed
+ *   lifted by his liking and by lying his way. A kind he has passed over twice and never taken since (grass, doors,
+ *   searching, talking; never the loot, which wins games) is no plan A (still offered after it) while something else is.</li>
+ * <li><b>What he passed over.</b> Passed over in a fight: forgotten while it lasts (Assist's combatHeld); after it, plan
+ *   A again once, close by (loot: a few steps) or on the way, else after the rest. Passed
  *   over otherwise: held back (Assist's demotion, longer each time it is passed over again: 20, 60, 180 turns); then
  *   offered as plan A once more, only when it lies on the way to where he is going (a step or two out of the way), at
  *   least a while later. Passed over again: not plan A again on this floor (still last in the list).</li>
@@ -100,6 +101,7 @@ final class AsIntent {
 	static void skipped(Target e) {
 		if (e.kind != GO && e.kind != PICKUP) { if (optional(cat(e))) liked(cat(e), -0.5); return; }
 		int o = e.obj >= 0 ? e.obj : e.cell; if (o < 0) return;
+		if (e.why != null && (e.why.startsWith("your") || e.why.startsWith("resume"))) return;   // (his own way echoed back: no suggestion of ours to offer again)
 		Skip s = skips.computeIfAbsent(o, k -> new Skip());
 		s.n++; s.at = Actor.now(); s.combat = fight || seenFoe; s.why = e.why; s.kind = e.kind; s.cat = cat(e);
 		if (optional(cat(e)) && !s.combat) liked(cat(e), -0.5);
@@ -120,7 +122,7 @@ final class AsIntent {
 		if (calm && !postFight.isEmpty()) {
 			int ao = a.obj >= 0 ? a.obj : a.cell;
 			if (postFight.contains(ao) && (a.kind == GO || a.kind == PICKUP)) {
-				boolean near = walk(ao) <= NEAR;
+				boolean near = walk(ao) <= (a.kind == PICKUP ? AGAIN_NEAR : NEAR);   // (loot: a few steps more; the gear and the resources are what wins)
 				boolean onWay = false;
 				for (int j = 1; j < out.size() && !near; j++) { Target e = out.get(j); int eo = e.obj >= 0 ? e.obj : e.cell;
 					if ((e.kind == GO || e.kind == PICKUP) && eo >= 0 && eo < dist.length && !postFight.contains(eo) && walk(eo) < INF) { onWay = walk(ao) + distance(ao, eo) - walk(eo) <= DETOUR; break; } }
@@ -151,7 +153,7 @@ final class AsIntent {
 			}
 		}
 		// 2. a kind he doesn't care for: no plan A while something else is (not in a fight, never a skill's or his own)
-		if (calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && like(cat(a)) <= -2 && !(a.kind == PICKUP && keyAt(a.obj >= 0 ? a.obj : a.cell))) {
+		if (calm && a.src == null && (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("on the way") && optional(cat(a)) && !cat(a).equals("item") && like(cat(a)) <= -2) {   // (never the loot: it wins the game; only lower in B and C)
 			for (int j = 1; j < out.size(); j++) { Target e = out.get(j); if (e.kind != ENEMY && !(optional(cat(e)) && like(cat(e)) <= -2)) { out.add(0, out.remove(j)); disliked++; break; } }
 		}
 		// 3. his way: the next thing that way (what lies about, the unexplored, the stairs, a door he has been through or

@@ -90,7 +90,7 @@ public final class BotAlchemy {
 		for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
 		if (filled < plan.size()) {
 			for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") == null) {
-				AsWindows.want = plan.get(filled);
+				AsWindows.want(plan.get(filled));
 				Object slot = WatchDriver.get(in, "slot");
 				if (slot instanceof Gizmo) return new BotWindows.Answer((Gizmo) slot, null, "alchemy: put in " + BotItems.kind(AsWindows.want));
 			}
