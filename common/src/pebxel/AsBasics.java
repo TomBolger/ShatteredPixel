@@ -211,7 +211,7 @@ final class AsBasics {
 		int ex = L.exit();
 		if (ex >= 0 && ex < L.length() && known[ex] && walk(ex) < INF && t != ex) {   // (the way on known: what lies past its water is skipped, no waiting; food is time)
 			Assist.bad.put(t, Actor.now() + 300); if (planA.cell >= 0 && planA.cell != hp) Assist.bad.put(planA.cell, Actor.now() + 300); return null; }
-		if (w >= FISHPATIENCE && (fd >= 4 || w >= 3 * FISHPATIENCE)) return null;   // (a floor's patience spent, the only way on: across once it isn't at the crossing itself)
+		if (w >= FISHPATIENCE && fd >= 4 || w >= 2 * FISHPATIENCE && fd >= 2 || w >= 4 * FISHPATIENCE) return null;   // (the longer the wait, the nearer it may be; never for ever: EG, 1,586 turns waited on 3, starved)   // (a floor's patience spent, the only way on: across once it isn't at the crossing itself)
 		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(-1, w + 1); }
 		if (stop >= 0 && stop != hp) return new Target(stop, GO, "piranha: wait out of its reach for it to go");
 		if (stop < 0) { int dry = dryCell(hp); if (dry >= 0) return new Target(dry, GO, "piranha: off the shore (it can't follow)"); return null; }
@@ -221,9 +221,9 @@ final class AsBasics {
 	static boolean fishCheap(Hero h, List<Mob> fish) {
 		try { pebxel.bot.FightModel.Result r = pebxel.bot.FightModel.evaluate(h, fish); return r.pDeath * 100 <= FISHRISK && r.loss90 * 100 <= h.HP * FISHLOSS; } catch (Throwable e) { return false; }
 	}
-	/** The nearest cell the hero can walk to that no water touches (a piranha's bite can't reach it), within 6 steps, or -1. */
+	/** The nearest cell the hero can walk to that no water touches (a piranha's bite can't reach it), within 12 steps, or -1. */
 	static int dryCell(int from) {
-		int best = -1, bd = 7;
+		int best = -1, bd = 13;
 		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < bd && L.passable[c] && !L.water[c] && !shoreCell(c) && !L.avoid[c] && Actor.findChar(c) == null && !Assist.bad.containsKey(c)) { bd = dist[c]; best = c; }
 		return best;
 	}

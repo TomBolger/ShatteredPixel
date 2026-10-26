@@ -1364,7 +1364,7 @@ public final class Assist {
 					int sc0 = -1, sd = 1; for (int k = 0; k < 8; k++) { int c = hp + N8[k]; if (nb(hp, c) && open[c] && seenChar(c) == null && !danger[c] && distance(c, m.pos) > sd) { sd = distance(c, m.pos); sc0 = c; } }
 					if (sc0 >= 0) { kind[0] = GO; why[0] = "off the crab's side"; return sc0; }
 				} }
-			int amb = AMBUSH && !crab && !(AMBRANGED && rangedToHand()) && bk >= 1000 && w <= 8 && hunting(m) && !held(m) && !ranged(m) && !fast && !Char.hasProp(m, Char.Property.IMMOVABLE) ? ambushSpot(m) : -1;
+			int amb = AMBUSH && !crab && !(AMBRANGED && rangedToHand() && !(m instanceof Snake)) && bk >= 1000 && w <= 8 && hunting(m) && !held(m) && !ranged(m) && !fast && !Char.hasProp(m, Char.Property.IMMOVABLE) ? ambushSpot(m) : -1;
 			if (amb == hp && waitId == m.id() && waitCount > AMBSEEN + w) amb = -1;   // (it isn't coming)
 			if (amb == hp) { waitF[0] = true; if (waitId == m.id()) waitCount++; else { waitId = m.id(); waitCount = 1; } why[0] = "ambush: wait unseen"; ambushing = true; return best; }
 			if (amb >= 0) { kind[0] = GO; why[0] = "ambush: a step out of its sight"; ambushing = true; return amb; }

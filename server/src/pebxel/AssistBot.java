@@ -207,7 +207,8 @@ public class AssistBot {
 		InterlevelScene.mode = InterlevelScene.Mode.DESCEND;
 		Game.switchScene(InterlevelScene.class);
 
-		Signal.Listener<String> logL = s -> { synchronized (log) { log.addLast(s); while (log.size() > 8) log.removeFirst(); } return false; };
+		final boolean glog = "1".equals(System.getenv("GAMELOG"));   // (EG: every game message, for forensics)
+		Signal.Listener<String> logL = s -> { if (glog) System.out.println("    LOG t" + (int) com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now() + " " + s); synchronized (log) { log.addLast(s); while (log.size() > 8) log.removeFirst(); } return false; };
 		int maxD = 0, depth = 0, decisions = 0, stuckEvents = 0, sameRun = 0, picked = 0, actFails = 0, windows = 0;
 		float floorStart = 0; int lastPos = -1; String lastKey = "";
 		Map<String, Integer> whys = new TreeMap<>();

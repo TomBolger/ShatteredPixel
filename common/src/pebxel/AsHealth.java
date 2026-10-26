@@ -52,6 +52,7 @@ final class AsHealth {
 				}
 			}
 			if (ON && GOO && !out.isEmpty() && !H.rooted) { Target g = gooGuard(H); if (g != null) { out.add(0, g); if (DBG) System.out.println("EGH t " + Actor.now() + " " + g.why); return; } }
+			if (ON && FIRE && !out.isEmpty()) { Target f = fire(H, out.get(0)); if (f != null) { out.add(0, f); return; } }
 			if (ON && BOSSREST && !out.isEmpty()) { Target b = bossRest(H, out.get(0)); if (b != null) { out.add(0, b); return; } }
 			if (!ON || out.isEmpty() || H.rooted || L.locked || Dungeon.bossLevel() || bag(Amulet.class) != null) return;
 			Target a = out.get(0);
@@ -205,6 +206,29 @@ final class AsHealth {
 		if (AsBasics.foodTurns() < AsBasics.restTurns() + 30) return null;   // (the rest mustn't starve him)
 		Target r = new Target(H.pos, WAIT, String.format(Locale.ROOT, "boss floor: rest to full first (%d/%d); it seals the floor when it wakes", H.HP, H.HT)); r.action = REST_ACT; r.obj = -1;
 		return r;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// fire: the magical fire room's flames set alight whoever stands beside them (EternalFire), and burning eats
+	// health every turn. BASE1/EG runs: "escape the fire" stepped between two cells both beside the flames, and the
+	// hands rested there, burning, from 14 health to 1. Off any cell burning or beside eternal fire, first.
+	// ---------------------------------------------------------------------------------------------------------
+	static final boolean FIRE = opt("EGFIRE", true);
+	static boolean efire(int c) {
+		com.shatteredpixel.shatteredpixeldungeon.actors.blobs.Blob b = L.blobs.get(com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.MagicalFireRoom.EternalFire.class);
+		return b != null && b.volume > 0 && b.cur != null && c >= 0 && c < L.length() && b.cur[c] > 0 && (L.heroFOV[c] || known[c]);
+	}
+	static boolean nearEfire(int c) { if (efire(c)) return true; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && efire(n)) return true; } return false; }
+	static Target fire(Hero H, Target a) {
+		int hp = H.pos;
+		boolean burn = burning(), ef = nearEfire(hp);
+		if (!ef && !(burn && (a.kind == WAIT || a.kind == PICKUP || a.kind == USE && a.item != null && !(a.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion)))) return null;
+		int best = -1, bs = INF;
+		for (int c = 0; c < L.length(); c++) { int w = walk(c); if (w < 1 || w > 12 || !L.passable[c] || L.avoid[c] || seenChar(c) != null || nearEfire(c) || fireNear(c)) continue;
+			int sc = w * 2 + (L.flamable[c] ? 6 : 0) - (burn && L.water[c] ? 8 : 0); if (sc < bs) { bs = sc; best = c; } }
+		if (best < 0) return null;
+		if ((a.kind == GO || a.kind == PICKUP) && a.cell >= 0 && !nearEfire(a.cell) && !fireNear(a.cell) && !(burn && a.kind == PICKUP)) return null;   // (the plan's own step is off the flames)
+		return new Target(best, GO, burn ? "burning: to water or bare floor, off the flames" : "fire: off the cells beside the flames (they set you alight)");
 	}
 
 	// ---------------------------------------------------------------------------------------------------------
