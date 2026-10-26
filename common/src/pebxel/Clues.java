@@ -72,6 +72,8 @@ public final class Clues {
 	static final double KEEPH = Assist.optInt("CLUEKEEP", 50) / 100.0;
 	/** A potion believed the puzzle's kind this likely is drunk for its prize. */
 	static final double PUZ = Assist.optInt("CLUEPUZ", 45) / 100.0;
+	/** A scroll's worth known, per share of it being an escape (Teleportation, Terror, Lullaby, Mirror Image). */
+	static final double ESCW = Assist.optInt("CLUEESC", 100) / 100.0;
 
 	static Hero H; static Level L;
 
@@ -389,8 +391,11 @@ public final class Clues {
 			v += r[k] * x;
 		}
 		if (why != null) why.append(up != null ? "an upgrade target ready" : "no upgrade target").append(cursedWorn ? ", a cursed item worn" : "").append(unid ? ", unknown things" : "").append(early ? ", early on the floor" : "");
-		double mx = 0; for (double q : r) mx = Math.max(mx, q);
-		return v + (1 - mx) * (0.6 + 0.3 * Math.min(2, s.quantity() - 1));
+		double mx = 0, esc = 0; for (int k = 0; k < 12; k++) { mx = Math.max(mx, r[k]); Class<?> c = Identify.SCR[k];
+			if (c == ScrollOfTeleportation.class || c == ScrollOfTerror.class || c == ScrollOfLullaby.class || c == ScrollOfMirrorImage.class) esc += r[k]; }
+		// (knowing it: worth as much as it was in doubt; more for an escape, which a known one is kept for: unread, a
+		// dying gamble reads at random. ID-clues1: hoarding unread scrolls, 68 left unread at death in 90 games against 5)
+		return v + (1 - mx) * (0.6 + 0.3 * Math.min(2, s.quantity() - 1)) + ESCW * esc;
 	}
 
 	/** The hands' read-test: only a read that is of use whatever the scroll is, in calm. */
