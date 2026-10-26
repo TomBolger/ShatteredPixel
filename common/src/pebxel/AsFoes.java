@@ -162,8 +162,9 @@ final class AsFoes {
 	static String stats() {
 		for (Map.Entry<Mob, Boolean> e : statues.entrySet()) if (e.getValue() && !e.getKey().isAlive() && !wonCounted.contains(e.getKey())) statWon++;
 		int open = 0; for (Steal s : steals.values()) if (s.open) open++;
-		String r = String.format("stolen %d recovered %d lost %d (carried at the end %d) statues seen %d tried %d fought %d won %d ghoul downs %d by %s",
-				stolen, recovered, lost, open, statSeen, statTried, statFought, statWon, ghoulDowns, why);
+		String r = String.format("stolen %d recovered %d lost %d (carried at the end %d) statues seen %d tried %d fought %d won %d ghoul downs %d by %s verdicts%s",
+				stolen, recovered, lost, open, statSeen, statTried, statFought, statWon, ghoulDowns, why, verdicts);
+		verdicts = new StringBuilder();
 		stolen = recovered = lost = statSeen = statTried = statFought = statWon = ghoulDowns = 0;
 		why.clear(); statSeenIds.clear(); wonCounted.clear(); steals.clear(); statues.clear(); downs.clear(); ghoulsSeen.clear(); verdict.clear(); waits.clear(); floor = null; trod = null;
 		return r;
@@ -215,18 +216,34 @@ final class AsFoes {
 		Mob m = best.m;
 		boolean vis = L.heroFOV[m.pos] && m.invisible <= 0 && m.isAlive();
 		if (vis) {
-			if (adjacent(m.pos, hp)) return enemyAt(m, "thief: hit it (it has your " + best.what + ")");
+			if (adjacent(m.pos, hp)) { Target t = enemyAt(m, "thief: hit it (it has your " + best.what + ")"); t.hint = HINT; return t; }
 			Target r = rangedAt(m, "thief: shoot it (it has your " + best.what + ")");
-			if (r != null) return r;
+			if (r != null) { r.hint = HINT; return r; }
 			if (walk(m.pos) >= INF) return null;
-			return enemyAt(m, "thief: after it (it has your " + best.what + ")");
+			Target t = enemyAt(m, "thief: after it (it has your " + best.what + ")"); t.hint = HINT; return t;
 		}
 		if (Actor.now() - best.seen > CHASE) return null;
-		// out of sight: where it was last seen, on along the way it ran (as far as the known map goes)
-		int g = best.pos, W = L.width();
-		for (int k = 0; k < 4; k++) { int n = g + best.dx + best.dy * W; if (n < 0 || n >= L.length() || !L.passable[n] || !known[n] || walk(n) >= INF) break; g = n; }
-		if (g == hp || walk(g) >= INF) { g = best.pos; if (g == hp || walk(g) >= INF) return null; }
-		return new Target(g, GO, "thief: after it (seen running this way with your " + best.what + ")");
+		// out of sight: on the way it ran, from where it was last seen (it gets away only 6+ cells from where it last
+		// saw the hero: keep close). Reached and still not in sight: it ran on that way (the guess moved on).
+		int P = ahead(best.pos, best.dx, best.dy, 5);
+		if (distance(P, hp) <= 1) { best.pos = P; P = ahead(P, best.dx, best.dy, 5); }
+		int g = -1, gs = INF;
+		for (int c = 0; c < L.length(); c++) {
+			if (!known[c] || !L.passable[c] || walk(c) >= INF || walk(c) > 20 || distance(c, hp) < 2 || bad.containsKey(c)) continue;
+			int sc = 3 * distance(c, P) + walk(c);
+			if (sc < gs) { gs = sc; g = c; }
+		}
+		if (g < 0) return null;
+		Target t = new Target(g, GO, "thief: after it (seen running this way with your " + best.what + ")");
+		t.hint = HINT; return t;
+	}
+	static final double HINT = optInt("FHINT", 20) / 100.0;   // a stolen item got back, in floors (the brain's currency): the chase over a plain walk
+	/** From c on along (dx, dy), up to n cells over the known open map. */
+	static int ahead(int c, int dx, int dy, int n) {
+		int W = L.width();
+		if (dx == 0 && dy == 0) return c;
+		for (int k = 0; k < n; k++) { int m = c + dx + dy * W; if (m < 0 || m >= L.length() || !nb(c, m) || !L.passable[m] || !known[m]) break; c = m; }
+		return c;
 	}
 
 	// =============================================================================================================
@@ -319,12 +336,14 @@ final class AsFoes {
 		return enemyAt(best, "statue: fight it for its enchanted weapon" + w);
 	}
 	/** The fight model's verdict: the hero clearly outclasses it (kept while the hero's level and health stand). */
+	static StringBuilder verdicts = new StringBuilder();
 	static boolean outclassed(Statue m) {
 		Hero h = Dungeon.hero; float now = Actor.now();
 		float[] v = verdict.get(m.id());
 		if (v != null && v[1] == h.lvl && Math.abs(v[2] - h.HP) < h.HT / 10f && now - v[0] < 200) return v[3] > 0;
 		FightModel.Result r = FightModel.evaluate(h, Collections.singletonList(m));
 		boolean ok = r.pDeath * 100 <= STATP && r.lossMean * 100 <= h.HP * STATL;
+		if (v == null) verdicts.append(String.format(" d%d:%s/%.2f/%.0f-of-%d", Dungeon.depth, ok ? "yes" : "no", r.pDeath, r.lossMean, h.HP));
 		verdict.put(m.id(), new float[]{ now, h.lvl, h.HP, ok ? 1 : 0 });
 		return ok;
 	}

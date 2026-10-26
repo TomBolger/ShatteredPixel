@@ -102,6 +102,13 @@ final class Rules {
 		propose("bolts: out of every line", AsBolts::manyLines, 0, AsBolts::outOfAll),
 		// a scorpio hunting backs off (Scorpio.getCloser): waiting round the corner for it waits for nothing
 		veto("bolts: no waiting for a scorpio", AsBolts::waitScorpio),
+		// -- monsters and rooms (agent WC: AsFoes) -------------------------------------------------------------------
+		// a ghoul knocked down gets up in a few turns while its partner is near (Ghoul.die, GhoulLifeLink): no waiting
+		// for the partner to come, no rest, till it's finished
+		veto("foes: no waiting while a ghoul is down", AsFoes::ghoulWait),
+		// a dark floor (Level.Feeling.DARK): foes are seen late and come back sooner (Level.respawnCooldown): no rest in
+		// the open with a corridor a few steps off (AsFoes.darkRest walks there)
+		veto("foes: dark floor, no rest in the open", AsFoes::restOpen),
 		// -- the boss ahead: arrive whole, with the scrolls read ---------------------------------------------------
 		// (strategy-reference 4.x: every boss guide starts "full health, upgrades in"; Thomas: "boss preparation")
 		propose("boss next: rest first", c -> stairsDown(c) && bossNext() && calm() && H().HP * 100 < H().HT * 95 && !Assist.starving()
