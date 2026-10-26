@@ -30,11 +30,13 @@ public final class Look {
 		public boolean drink;         // drink Healing first (one of me.heals; a turn)
 		public double healAt = Tune.get("BHEALAT", 35) / 100;   // policy: drink below this share of health (0 never)
 		public int flee = -1;         // walk away this many steps and be gone (-1: stay and fight)
+		public int healing;           // Healing already drunk, still to come (the hero's Healing buff: healingLeft)
 		public Plan drink() { drink = true; return this; }
 		public Plan lose(int n) { lose = n; return this; }
 		public Plan flee(int n) { flee = n; return this; }
 		public Plan healAt(double h) { healAt = h; return this; }
 		public Plan me(Fighter f) { me = f; return this; }
+		public Plan healing(int h) { healing = h; return this; }
 	}
 
 	public static final class Out {
@@ -70,7 +72,7 @@ public final class Look {
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		int deaths = 0, done = 0; double left = 0, used = 0, tsum = 0;
 		for (int run = 0; run < runs; run++) {
-			int myHp = me.hp, sh = me.shield, heals = me.heals, shots = p.flee >= 0 ? 0 : me.rangedShots, healLeft = 0, usedR = 0;
+			int myHp = me.hp, sh = me.shield, heals = me.heals, shots = p.flee >= 0 ? 0 : me.rangedShots, healLeft = p.healing, usedR = 0;
 			boolean drink = p.drink && heals > 0;
 			for (int i = 0; i < n; i++) {
 				Fighter f = foes.get(i);

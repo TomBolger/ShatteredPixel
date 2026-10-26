@@ -68,6 +68,7 @@ final class Brain {
 	static Hero H; static Target first;
 	static final List<Cand> offers = new ArrayList<>();
 	static List<Mob> foes = new ArrayList<>(); static Fighter me; static List<Fighter> fs = new ArrayList<>();
+	static long beginNanos;
 	static double R; static long seed; static Look.Out base; static boolean fight;
 	static String lastWhy = "";
 	static Role lastRole; static float lastAt = -99;   // the brain's last change of plan A (Rules: keep going)
@@ -80,7 +81,9 @@ final class Brain {
 	static void begin(Target planA) {
 		first = planA; offers.clear(); H = Dungeon.hero;
 		try { Rules.observe(); } catch (Throwable e) { Assist.lastError = e; }
+		long t0 = System.nanoTime();
 		try { setupFight(); } catch (Throwable e) { Assist.lastError = e; fight = false; base = null; }
+		beginNanos = System.nanoTime() - t0;
 	}
 
 	/** A proposal from a rule (returned as is, for the legacy placement), screened by the table's vetoes: a vetoed one
@@ -137,7 +140,8 @@ final class Brain {
 		try {
 			judge0();
 		} catch (Throwable e) { Assist.lastError = e; }
-		long dt = System.nanoTime() - t0; nanos += dt; maxNanos = Math.max(maxNanos, dt); if (dt > 20_000_000L) slow++;
+		long dt = System.nanoTime() - t0 + beginNanos; nanos += dt;
+		if (DBG && dt > 20_000_000L) System.out.println("  BRAIN slow " + dt / 1000000 + " ms (begin " + beginNanos / 1000000 + ") d" + Dungeon.depth); maxNanos = Math.max(maxNanos, dt); if (dt > 20_000_000L) slow++;
 	}
 
 	static void judge0() {
@@ -186,9 +190,17 @@ final class Brain {
 		for (Mob m : foes) fs.add(FoeView.of(m, h));
 		R = Budget.ahead(h);
 		seed = 0x51ED ^ (Dungeon.depth * 1000003L) ^ (hp * 7919L) ^ ((long) Actor.now() * 31L);
-		base = Look.run(me, fs, new Look.Plan(), seed);
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
+		Object hl = hb == null ? null : Assist.field(hb, "healingLeft"); healing = hl instanceof Integer ? (Integer) hl : 0;
+		policy = me.heals > 0 ? FightModel.healAt(h, foes) : 0;   // (the drinking policy the hands follow: MT's, FightModel.healAt)
+		base = Look.run(me, fs, plan(), seed);
 		fight = true; fights++;
 	}
+
+	static double policy;
+	/** The hero's way on after his first move: the hands' drinking policy. */
+	static Look.Plan plan() { return new Look.Plan().healAt(policy).healing(healing); }
+	static int healing;
 
 	/** The brain's own options in a fight, when the rules didn't offer them: drink Healing, a known escape, the stairs. */
 	static void own(List<Cand> cs) {
@@ -223,21 +235,21 @@ final class Brain {
 			case CARRY: return;
 			case HEAL: {
 				if (n <= 0) return;
-				Look.Out o = Look.run(me, fs, new Look.Plan().drink(), seed);
+				Look.Out o = Look.run(me, fs, plan().drink(), seed);
 				c.v = fightV(o, n, vh, vh2) - fightV(base, n, vh, vh2);
 				c.note = "drink " + o + " | on " + base;
 				return;
 			}
 			case ESCAPE: {
 				int k = 0; for (Item i : h.belongings.backpack) if (i.getClass() == c.t.item.getClass()) k += i.quantity();
-				Look.Out o = Look.run(me, fs, new Look.Plan().lose(1).flee(0), seed);
+				Look.Out o = Look.run(me, fs, plan().lose(1).flee(0), seed);
 				c.v = gone(o, LATER * whole(n, vh, vh2), Budget.rescue(h, Math.max(1, k), ESCEFF)) - fightV(base, n, vh, vh2);
 				c.note = "escape " + o;
 				return;
 			}
 			case UP: case DOWN: {
 				int w = Math.max(0, Assist.walk(c.t.obj >= 0 ? c.t.obj : c.t.cell));
-				Look.Out o = Look.run(me, fs, new Look.Plan().flee(w), seed);
+				Look.Out o = Look.run(me, fs, plan().flee(w), seed);
 				double later = c.role == Role.UP ? LATER * whole(n, vh, vh2) : -arrive(o) * R;
 				c.v = gone(o, later, 0) - fightV(base, n, vh, vh2) - (c.role == Role.UP ? 0.02 : Assist.floorLeft() ? 0.2 : 0.05);
 				c.note = (c.role == Role.UP ? "up " : "down ") + w + " " + o;
@@ -247,7 +259,7 @@ final class Brain {
 				if (!GEARV) return;
 				Fighter m2 = gear(c.t.item);
 				if (m2 == null) return;
-				Look.Out o = Look.run(me, fs, new Look.Plan().me(m2).lose(1), seed);
+				Look.Out o = Look.run(me, fs, plan().me(m2).lose(1), seed);
 				c.v = fightV(o, n, vh, vh2) - fightV(base, n, vh, vh2);
 				c.note = "equip " + o;
 				return;
@@ -268,7 +280,7 @@ final class Brain {
 	static double whole(int n, double vh, double vh2) {
 		Fighter f = me.copy(); f.hp = f.ht; f.shield = 0;
 		List<Fighter> l = new ArrayList<>(); for (Fighter x : fs) { Fighter y = x.copy(); y.dist = Math.max(y.dist, 4); y.asleep = false; l.add(y); }
-		Look.Out o = Look.run(f, l, new Look.Plan(), seed ^ 0x77);
+		Look.Out o = Look.run(f, l, plan(), seed ^ 0x77);
 		return fightV(o, n, vh, vh2) - HPW;   // (the rest it took, a full bar's worth)
 	}
 	/** Down the stairs hurt: the next floor's danger, worse the less health there is to meet it with. */

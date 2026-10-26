@@ -22,6 +22,9 @@ public final class Budget {
 	private Budget() { }
 
 	public static final double CRISIS = Tune.get("BCRISIS", 250) / 100, RESCUE = Tune.get("BRESCUE", 70) / 100, FIND = Tune.get("BFIND", 35) / 100;
+	/** The least a rescue item is worth, as a share of a death (MT's Tune.HEALCOST: the death odds a Healing drunk costs;
+	 *  a full heal saves a long rest, and more crises come than the stretch counts). */
+	public static final double MIN = Tune.HEALCOST;
 	public static final int LAST = (int) Tune.get("BLAST", 26);
 
 	private static int cDepth = -1, cLvl = -1, cHT = -1, cStr = -1; private static Object cW, cA; private static double[] cQ; private static double cAhead;
@@ -67,7 +70,7 @@ public final class Budget {
 		if (n <= 0) return 0;
 		double lam = crises(h), term = Math.exp(-lam), cdf = 0;
 		for (int k = 0; k < n; k++) { cdf += term; term *= lam / (k + 1); }
-		return RESCUE * eff * Math.max(0, 1 - cdf) * ahead(h);
+		return Math.max(MIN, RESCUE * Math.max(0, 1 - cdf)) * eff * ahead(h);
 	}
 
 	/** The value of n such items together (the first n marginal values). */
