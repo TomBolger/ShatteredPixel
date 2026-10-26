@@ -136,14 +136,15 @@ public final class GearValue {
 		String[] curses = wpn ? Ench.WEAPON_CURSES : Ench.ARMOR_CURSES;
 		boolean lift = liftable(h);
 		double s = 0, ws = 0;
+		int up = HeroView.upgraded(i);   // (MT: the scrolls the player read onto it count on top of what it may have been)
 		for (int k = 0; k < LV.length; k++) {
 			if (pc < 1) {   // clean
-				double c = one(h, i, wpn, w0, a0, LV[k], shown.curse ? Ench.NONE : shown);
+				double c = one(h, i, wpn, w0, a0, LV[k] + up, shown.curse ? Ench.NONE : shown);
 				s += LP[k] * (1 - pc) * Math.pow(c, Tune.RISK); ws += LP[k] * (1 - pc);
 			}
 			if (pc > 0) for (String cn : curses) {
 				Ench ce = shown.curse ? shown : Ench.byName(cn);
-				double c = one(h, i, wpn, w0, a0, LV[k], ce);
+				double c = one(h, i, wpn, w0, a0, LV[k] + up, ce);
 				if (lift) c = Math.min(c, base * 1.02);   // (a scroll lifts it: some cost, a scroll's worth)
 				double p = LP[k] * pc / curses.length;
 				s += p * Math.pow(c, Tune.RISK); ws += p;

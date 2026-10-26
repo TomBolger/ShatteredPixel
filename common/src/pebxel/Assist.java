@@ -1770,6 +1770,7 @@ public final class Assist {
 			Item on = a != null && !(a.cursed && a.cursedKnown) ? a : wpn;
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
+			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
 		}
