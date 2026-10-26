@@ -92,26 +92,39 @@ final class AsBasics {
 	// never ends). Away from it, and to wait for it, only where there's room to slip off again.
 	// =============================================================================================================
 	static final boolean CRABEND = opt("BCRABEND", true);
+	static int crabPos = -1; static float crabSeenAt = -99; static Level crabL;
 
 	/** Plan A taking the hero into (or keeping it in) a dead end with the crab hunting it: a cell with room instead. */
 	static Target crab(Target planA) {
 		if (!CRABEND || planA == null) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		Mob cr = null; for (Mob m : mobs()) if (m instanceof GreatCrab && enemy(m) && hunting(m)) cr = m;
-		if (cr == null || h.rooted) return null;
+		if (crabL != L) { crabL = L; crabSeenAt = -99; }
+		if (cr != null) { crabPos = cr.pos; crabSeenAt = Actor.now(); }
+		else if (Actor.now() - crabSeenAt > 20 || L.heroFOV[crabPos]) return null;   // (out of sight lately, hunting: where it was seen, coming)
+		if (h.rooted) return null;
+		int crp = crabPos;
 		int goal = planA.kind == WAIT || planA.kind == ENEMY || planA.kind == USE ? hp : planA.obj >= 0 && planA.obj < L.length() ? planA.obj : planA.cell;
 		if (goal < 0) return null;
-		int[] cd = crabDist(cr.pos);
-		boolean pk = pocket(goal, cr.pos, cd);
-		if (DBG) System.out.println("    CRAB at " + cr.pos + " plan " + planA.why + "@" + goal + " pocket " + pk);
+		int[] cd = crabDist(crp);
+		boolean pk = pocket(goal, crp, cd);
+		if (DBG) System.out.println("    CRAB at " + crp + " plan " + planA.why + "@" + goal + " pocket " + pk);
 		if (!pk) return null;
-		if (adjacent(cr.pos, hp) && goal == hp && planA.kind == ENEMY) return null;   // (beside it already: the ambush blow, or the stall rules)
+		if (adjacent(crp, hp) && goal == hp && planA.kind == ENEMY) return null;   // (beside it already: the ambush blow, or the stall rules)
 		int best = -1, bs = -INF;
-		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 8 && open[c] && seenChar(c) == null && !danger[c] && !adjacent(c, cr.pos) && dist[c] < cd[c] * 3 / 2 + 1) {
-			int sc = 3 * Math.min(distance(c, cr.pos), 5) - 2 * dist[c] + (sight(cr.pos, c) ? 0 : 12);
-			if (sc > bs && !pocket(c, cr.pos, cd)) { bs = sc; best = c; } }
+		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 8 && open[c] && seenChar(c) == null && !danger[c] && !adjacent(c, crp) && dist[c] < cd[c] * 3 / 2 + 1) {
+			int sc = 3 * Math.min(distance(c, crp), 5) - 2 * dist[c] + (sight(crp, c) ? 0 : 12);
+			if (sc > bs && !pocket(c, crp, cd)) { bs = sc; best = c; } }
 		if (best < 0) return null;
 		return new Target(best, GO, "the crab: not into a dead end");
+	}
+
+	/** A move into a pocket with the crab hunting the hero (seen in the last 20 turns). */
+	static boolean crabVeto(Target t) {
+		if (!CRABEND || t == null || t.kind != GO || t.cell < 0 || crabL != L || Actor.now() - crabSeenAt > 20 || crabPos < 0) return false;
+		boolean v = pocket(t.cell, crabPos, crabDist(crabPos)) && !pocket(Dungeon.hero.pos, crabPos, crabDist(crabPos));
+		if (DBG && v) System.out.println("    CRAB veto " + t.why + "@" + t.cell);
+		return v;
 	}
 
 	/** Steps from the crab (it walks round walls), INF where it can't go. */
@@ -126,15 +139,20 @@ final class AsBasics {
 	}
 
 	/** Is c a pocket: with the crab come up beside it (on the side it comes from), few cells left to step off to (14
-	 *  or fewer within 6 steps of c, none beside the crab)? There every blow is seen and blocked for good. */
+	 *  or fewer within 6 steps of c, none beside the crab)? There every blow is seen and blocked for good. (Any cell
+	 *  within 3 that would corner c, not just the one on the crab's way, made most cells pockets: 60 games, no better.) */
 	static boolean pocket(int c, int crab, int[] cd) {
 		int N = L.length(), W = L.width(), qc = crab;
 		if (!adjacent(c, crab)) { int b = INF; for (int k : PathFinder.NEIGHBOURS8) { int v = c + k; if (v >= 0 && v < N && Math.abs(v % W - c % W) <= 1 && L.passable[v] && cd[v] < b) { b = cd[v]; qc = v; } } if (b >= INF) return false; }
-		int[] d = new int[N]; Arrays.fill(d, -1); ArrayDeque<Integer> q = new ArrayDeque<>();
+		return cornered(c, qc);
+	}
+	/** The crab at x: 14 or fewer cells left to c, none beside x, within 6 steps. */
+	static boolean cornered(int c, int x) {
+		int N = L.length(), W = L.width(); int[] d = new int[N]; Arrays.fill(d, -1); ArrayDeque<Integer> q = new ArrayDeque<>();
 		d[c] = 0; q.add(c); int n = 0;
 		while (!q.isEmpty()) { int u = q.poll(); if (++n > 14) return false; if (d[u] >= 6) continue;
 			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
-				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || d[v] >= 0 || !L.passable[v] || !(known[v] || L.heroFOV[v]) || distance(v, qc) <= 1) continue;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || d[v] >= 0 || !L.passable[v] || !(known[v] || L.heroFOV[v]) || distance(v, x) <= 1) continue;
 				d[v] = d[u] + 1; q.add(v); } }
 		return true;
 	}

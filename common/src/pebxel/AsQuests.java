@@ -77,6 +77,11 @@ final class AsQuests {
 		} catch (Throwable e) { lastError = e; return null; }
 	}
 
+	/** A tactic's move vetoed (Assist planList's hook): into the Great Crab's dead end. */
+	static boolean vetoMove(Target t) {
+		try { return AsBasics.crabVeto(t); } catch (Throwable e) { lastError = e; return false; }
+	}
+
 	/** A hands suggestion vetoed (Assist planList's hook). */
 	static boolean veto(Target hk) {
 		try {

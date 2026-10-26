@@ -774,7 +774,7 @@ public final class Assist {
 			if (!pinned) h0 = 0;
 			Target e = escape();
 			if (e != null) front(e);
-			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = AsBosses.tactics(); if (tc == null) tc = tactics(); if (tc != null) front(tc); }   // (a boss's own mechanics first: AsBosses)
+			else if (!(vetoStand >= 0 && Actor.now() < vetoStandUntil)) { Target tc = AsBosses.tactics(); if (tc == null) tc = tactics(); if (tc != null && !AsQuests.vetoMove(tc)) front(tc); }   // (a boss's own mechanics first: AsBosses)
 			h0 = 0;
 		}
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
