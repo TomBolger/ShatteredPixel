@@ -50,6 +50,7 @@ public final class ScrollPlan {
 	static final double FIND = Tune.get("UPFIND", 100) / 100, HOLDM = Tune.get("UPHOLDM", 0) / 1000, CHYST = Tune.get("UPCHYST", 10) / 1000;
 	static final int HOLDMIN = (int) Tune.get("UPHOLDMIN", 1);   // (the first floor a scroll may be held on)
 	static final double UNK = Tune.get("UPUNK", 40) / 100;   // (an unknown piece's level counted this much below its shown +0: a third are cursed, -1..-3)
+	public static final boolean SPLIT = Tune.on("UPSPLIT", true);   // (off: MD's split (AsWeapon) once the planner spends)
 	public static final boolean HOLD = Tune.on("UPHOLDON", true), WPLAN = Tune.on("UPWPLAN", false), PCOMMIT = Tune.on("UPCOMMIT", false);
 	/** The armour plan's own commit (AsGear's, HE's) when the planner's isn't used (PCOMMIT off: UP-a1, 288 full games:
 	 *  the planner's 12-floor commit kept cloth+n over mail on 68% of heroes at depth 17, against 33%; 15.44 against 16.26). */
@@ -299,7 +300,8 @@ public final class ScrollPlan {
 		// the Warrior's seal takes the first upgrade of the armour it is on and carries it to the next (Armor.upgrade,
 		// BrokenSeal.affixToArmor): that scroll isn't lost when the armour changes
 		boolean seal = arm && p == c.a0 && ((Armor) p).checkSeal() != null && ((Armor) p).checkSeal().level() == 0;
-		int Wn = HOLD && arrivals ? WMAX : 0;
+		// (a hold is a plan kept: its deadline, set when it began, isn't pushed back floor after floor; none with a boss next)
+		int Wn = HOLD && arrivals && !bossNear(c.d0) ? (holdUntil >= 0 && holdHero == c.h ? Math.min(WMAX, holdUntil - c.d0) : WMAX) : 0;
 		for (int W = 0; W <= Wn && W < c.K; W++) {   // (W 0: now)
 			double e = 0;
 			double[] base = new double[c.K];
@@ -353,11 +355,13 @@ public final class ScrollPlan {
 		Item t;
 		String nm = aBest ? "the armour" : "the weapon";
 		Item p = aBest ? c.cA : c.cW;
-		if (HOLD && vh.hold > now + HOLDM && c.d0 < 25 && c.d0 >= HOLDMIN && !Budget.climbing(h)) {   // (the climb: nothing new is found on the way up)
+		if (HOLD && vh.hold > now + HOLDM && c.d0 < 25 && c.d0 >= HOLDMIN && !Budget.climbing(h) && vh.holdW > 0) {   // (the climb: nothing new is found on the way up)
 			t = null;
+			if (holdHero != h || holdUntil < 0) { holdHero = h; holdUntil = c.d0 + vh.holdW; }
 			why = String.format(Locale.ROOT, "holding the upgrade: %s likely by floor %d (%.0f%%)", tierName(hArm, vh.holdT), c.d0 + vh.holdW, 100 * vh.holdP);
 		} else {
 			t = p;
+			if (holdHero == h) holdUntil = -1;   // (the hold over: the scroll spent)
 			why = String.format(Locale.ROOT, "upgrade %s%s (%s next best by %.2f floors)", nm, p != null && !p.isEquipped(h) ? " (" + p.name() + ", to wear)" : "", (aBest ? (vw.now >= 0 ? "the weapon" : "holding") : "the armour"), now - Math.max(aBest ? vw.now : va.now, vh.hold));
 		}
 		last = String.format(Locale.ROOT, "d%d kh %d rate %.2f arm %s now %.3f hold %.3f(W%d) | wpn %s now %.3f hold %.3f(W%d) -> %s", c.d0, c.kh, rate(),
@@ -368,6 +372,9 @@ public final class ScrollPlan {
 		return t;
 	}
 	static String lastWhy;
+	static int holdUntil = -1; static Hero holdHero;
+	/** The boss's floor or the one before it: every boss guide says arrive with the upgrades read. */
+	static boolean bossNear(int d) { return d % 5 == 4 || d % 5 == 0; }
 	static String tierName(boolean arm, int t) {
 		String[] a = { "", "cloth", "leather", "mail", "scale", "plate" }, w = { "", "a tier-1 weapon", "a tier-2 weapon", "a tier-3 weapon", "a tier-4 weapon", "a tier-5 weapon" };
 		return (arm ? a : w)[Math.max(0, Math.min(5, t))] + (t < 5 ? " or better" : "");

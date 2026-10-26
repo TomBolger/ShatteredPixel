@@ -36,7 +36,9 @@ final class AsWeapon {
 		Armor a = h.belongings.armor(); KindOfWeapon w = h.belongings.weapon();
 		if (pebxel.bot.ScrollPlan.ON) {   // (UP: the expected-value planner decides; the Mage's staff first to +3 stays the guide's)
 			if (w instanceof MagesStaff && w.level() < STAFF1 && dflt == w) return dflt;
-			Item t = pebxel.bot.ScrollPlan.target(h); why = pebxel.bot.ScrollPlan.why; return t;
+			Item t = pebxel.bot.ScrollPlan.target(h); why = pebxel.bot.ScrollPlan.why;
+			if (t == null || pebxel.bot.ScrollPlan.SPLIT) return t;
+			dflt = AsGear.commit(h);   // (UPSPLIT=0: the planner says when; MD's split below says where)
 		}
 		boolean aOk = a != null && !(a instanceof ClassArmor) && a.isUpgradable() && !(a.cursed && a.cursedKnown) && a.levelKnown;
 		if (dflt == null || !(dflt == a || dflt == w)) return dflt;   // (a hold, or a piece in the pack: the plan's own call)
