@@ -56,7 +56,7 @@ public final class FoeView {
 		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;
 		if (Tune.FOES) effects(f, f.name);
 		if (Tune.FOES && m instanceof Ghoul) for (Mob o : com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.mobs)   // (MT: a ghoul gets up again while its pair is near: Ghoul.die)
-			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }
+			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = Tune.KINDS ? Math.max(1, Math.round(f.ht / 10f)) : (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }   // (M2: it gets up with a tenth of its health, Ghoul.GhoulLifeLink, 5 turns on: M2-a had ghoul fights at P(death) >= 0.5 won 9 times in 12)
 		if (Tune.FOES && m instanceof GnollTrickster) f.dmg = f.dmg.shift(4);   // (MT: each dart that lands poisons, more each time: GnollTrickster.attackProc, ~4 a hit early on)
 		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; f.ragingNow = Tune.KINDS; }   // (already raging: its shield is in shielding())
