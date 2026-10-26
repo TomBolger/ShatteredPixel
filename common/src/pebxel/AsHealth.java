@@ -232,6 +232,23 @@ final class AsHealth {
 	}
 
 	// ---------------------------------------------------------------------------------------------------------
+	// the ambush (Assist's: out of its sight, a sure surprise blow as it steps up; 7% of the honest bot's blows were
+	// surprises): skipped for a ranged blow to hand, and any thrown stone in the pack counted as one. EGAMB: only a
+	// real one (the bow, a charged staff or wand, Guiding Light) skips it.
+	// ---------------------------------------------------------------------------------------------------------
+	static final boolean AMB = opt("EGAMB", false);
+	static boolean strongRanged() {
+		Hero H = Dungeon.hero;
+		if (bag(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.class) != null) return true;
+		com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff st = bag(com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff.class);
+		Object w = st == null ? null : field(st, "wand");
+		if (w instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand && charged((com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) w, st)) return true;
+		com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome tome = bag(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HolyTome.class);
+		try { if (tome != null && tome.canCast(H, com.shatteredpixel.shatteredpixeldungeon.actors.hero.spells.GuidingLight.INSTANCE)) return true; } catch (Throwable e) { }
+		return false;
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
 	// the gate: low, nothing about, the food for it: rest before going on (exploring, picking up, the stairs down)
 	// ---------------------------------------------------------------------------------------------------------
 	static final int GATE = optInt("EGGATE", 45);
