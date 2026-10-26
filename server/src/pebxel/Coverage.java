@@ -67,7 +67,7 @@ public final class Coverage {
 		kv(sb, "subclass", Dungeon.hero == null ? "" : Dungeon.hero.subClass.name());
 		kv(sb, "ability", Dungeon.hero == null || Dungeon.hero.armorAbility == null ? "" : Dungeon.hero.armorAbility.getClass().getSimpleName());
 		String q = "Ghost:" + st(flag(Ghost.class, "given"), Ghost.Quest.completed())
-				+ ",Wandmaker:" + st(flag(Wandmaker.class, "given"), flag(Wandmaker.class, "given") && obj(Wandmaker.class, "wand1") == null)
+				+ ",Wandmaker:" + st(wmGiven(), wmGiven() && obj(Wandmaker.class, "wand1") == null)
 				+ ",Blacksmith:" + st(Blacksmith.Quest.given(), Blacksmith.Quest.completed())
 				+ ",Imp:" + st(Imp.Quest.given(), Imp.Quest.isCompleted());
 		kv(sb, "quests", q);
@@ -94,6 +94,10 @@ public final class Coverage {
 		kv(sb, "problems", String.join(",", problems));
 		System.out.println(sb);
 	}
+
+	/** The Wandmaker's quest given this game: Quest.reset() leaves "given" from the game before till he spawns (it read
+	 *  "done" in most games of a JVM), so it counts only once he has spawned in this one. */
+	static boolean wmGiven() { return flag(Wandmaker.class, "spawned") && flag(Wandmaker.class, "given"); }
 
 	static String st(boolean given, boolean done) { return done ? "done" : given ? "started" : "no"; }
 

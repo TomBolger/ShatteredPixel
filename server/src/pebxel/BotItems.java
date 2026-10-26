@@ -48,7 +48,30 @@ public final class BotItems {
 			worked.computeIfAbsent(kind(i), k -> new TreeSet<>()).add(pAct);
 	}
 
-	static void newGame() { worked.clear(); pItem = null; done.clear(); carried.clear(); tries = 0; lastTryTurn = -100; }
+	static void newGame() { worked.clear(); pItem = null; done.clear(); carried.clear(); tries = 0; lastTryTurn = -100; artHeld.clear(); artWorn.clear(); artUses.clear(); }
+
+	// ---- artifacts and rings (AsArtifacts): how long each was carried and worn, and the uses taken (plan A acted on) ----
+	static final Map<String, Integer> artHeld = new TreeMap<>(), artWorn = new TreeMap<>(), artUses = new TreeMap<>();
+	/** Each decision taken: the misc items carried / worn counted, an AsArtifacts entry ("art: ...") counted. */
+	static void decided(Assist.Target t) {
+		Hero h = Dungeon.hero; if (h == null) return;
+		for (Item i : h.belongings) if (i instanceof KindofMisc) {
+			String k = kind(i); artHeld.merge(k, 1, Integer::sum);
+			if (((KindofMisc) i).isEquipped(h)) artWorn.merge(k, 1, Integer::sum);
+		}
+		if (t != null && t.why != null && t.why.startsWith("art: ")) {
+			String w = t.why.substring(5); int p = w.indexOf(" ("); if (p > 0) w = w.substring(0, p);
+			artUses.merge(w, 1, Integer::sum);
+		}
+	}
+	/** "ARTS" line: per kind carried, the share of decisions it was worn; the uses by reason. */
+	static String artLine() {
+		StringBuilder sb = new StringBuilder("ARTS worn");
+		for (Map.Entry<String, Integer> e : artHeld.entrySet()) sb.append(' ').append(e.getKey()).append(':').append(100 * artWorn.getOrDefault(e.getKey(), 0) / Math.max(1, e.getValue())).append('%').append('/').append(e.getValue());
+		sb.append(" | uses");
+		for (Map.Entry<String, Integer> e : artUses.entrySet()) sb.append(' ').append(e.getKey().replace(' ', '_')).append('=').append(e.getValue());
+		return sb.toString();
+	}
 
 	static String kind(Item i) { String n = i.getClass().getName(); return n.substring(n.lastIndexOf('.') + 1).replace('$', '.'); }
 

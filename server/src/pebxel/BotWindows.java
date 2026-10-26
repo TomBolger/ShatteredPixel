@@ -65,6 +65,7 @@ public final class BotWindows {
 			if (!bs.isEmpty()) return answer(bs.get(0).g, "back did nothing: first");
 		}
 		if (sameKind > 6 || visits > 4) return answer(null, "same window again and again: back");
+		{ String want = AsArtifacts.windowAnswer(w); Gizmo b = want == null ? null : byText(bs, want); if (b != null) return answer(b, "artifact: " + want); }   // (a swap's slot, the hourglass's freeze, the chalice's yes or no: AsArtifacts)
 		// item selectors (a scroll, the alchemy, a quest asking for an item)
 		// (only a bag asks for an item: other windows keep a selector of their own for after one of their buttons,
 		// and answering it directly broke them: the Blacksmith's reforge window threw, killing the game's thread)
@@ -75,6 +76,8 @@ public final class BotWindows {
 				Item it = sales < 3 ? spare() : null;
 				return it != null ? new Answer(null, it, "sell a spare") : new Answer(null, null, "done selling: back");
 			}
+			Item ch = AsChoices.select(sel);   // (a quest's selector: AsChoices, as the Assistant would suggest)
+			if (ch != null) return new Answer(null, ch, "choice: " + AsChoices.why);
 			Item it = BotItems.answerSelector(sel);
 			return it != null ? new Answer(null, it, "select") : new Answer(null, null, "nothing to select: back");
 		}
@@ -87,6 +90,9 @@ public final class BotWindows {
 		// buying in a shop: buy (the cheat has gold)
 		if (kind.equals("WndTradeItem") && byText(bs, "sell") != null && sales < 3) { sales++; return new Answer(byText(bs, "sell"), null, "sell"); }
 		if (kind.equals("WndTradeItem")) { Gizmo b = byText(bs, "buy"); return b != null ? new Answer(b, null, "buy") : new Answer(null, null, "can't buy: back"); }
+		// the quests' choices (AsChoices: the Ghost's reward, the Wandmaker's wand, the Blacksmith's favours, leaving the mine)
+		Ui.Part qc = AsChoices.choose(w, bs);
+		if (qc != null) return answer(qc.g, "choice: " + AsChoices.why);
 		// the hero's subclass and armour ability, quest rewards: one of the choices (each game its own), confirmed
 		if (HumanTalents.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null && (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility"))) {   // (TALENTS=human: the simulated player's random pick)
 			com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass hc = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass;
@@ -98,11 +104,15 @@ public final class BotWindows {
 			Gizmo b = byText(bs, Build.subclass(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
 			if (b != null) return new Answer(b, null, "the build's subclass");
 		}
+		if (kind.equals("WndChooseAbility") && !Cheat.ON && com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero != null) {   // (honest games: the build's armour ability)
+			Gizmo b = byText(bs, Build.ability(com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.heroClass).shortDesc().toLowerCase(Locale.ROOT));
+			if (b != null) return new Answer(b, null, "the build's armour ability");
+		}
 		if (kind.equals("WndChooseSubclass") || kind.equals("WndChooseAbility") || n.contains("WndSadGhost") || n.contains("WndWandmaker") || n.contains("WndImp") || n.contains("WndBlacksmith")) {
 			List<Gizmo> pos = positives(bs);
 			if (pos.isEmpty()) for (Ui.Part p : bs) if (!negative(p.text)) pos.add(p.g);   // (item pictures: no words on them)
 			if (pos.isEmpty()) return new Answer(null, null, "no choice: back");
-			if (!Cheat.ON && n.contains("WndSadGhost") && pos.size() == 2) {   // (honest games: the guide's pick, the armour unless the weapon is far better)
+			if (false && !Cheat.ON && n.contains("WndSadGhost") && pos.size() == 2) {   // (now AsChoices)   // (honest games: the guide's pick, the armour unless the weapon is far better)
 				boolean wpn = ghostWeapon();
 				return new Answer(pos.get(wpn ? 0 : 1), null, wpn ? "the Ghost's weapon" : "the Ghost's armour");
 			}
