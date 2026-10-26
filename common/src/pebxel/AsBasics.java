@@ -652,7 +652,36 @@ final class AsBasics {
 		if (w.startsWith("look") && !w.contains("grass")) {   // (a room left unexplored may hold food: only a far one is given up)
 			int near = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < near && unseenBy(c)) near = dist[c];
 			if (near <= 12) return null;
+			// a barricade just burnt: the storage room behind it (food among its 3-4 prizes, often) is not given up (K8)
+			if (AsItems.barL == L && AsItems.barAim >= 0) for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && distance(c, AsItems.barAim) <= 4 && unseenBy(c)) return null;
 		}
 		return new Target(st, st == Dungeon.hero.pos ? PICKUP : GO, amulet ? "short of food: on up" : "short of food: on down");
+	}
+
+	// =============================================================================================================
+	// the pit jump (WeakFloorRoom over PitRoom): a room of chasm with a well seen at its bottom ("a distant well"); a
+	// fall through that room lands in the pit room below (Chasm: fallIntoPit), whose remains hold a ring, artifact or
+	// gear, a potion or two, food, and the crystal key of its own door: shut from outside, the only way in is down.
+	// With the floor done, the way down is that jump, not the stairs (the fall costs half the health: from near full).
+	// =============================================================================================================
+	static final boolean PITJUMP = opt("BPITJUMP", true);
+	static final int PITHP = optInt("BPITHP", 85);
+	static Target pitJump(Target planA) {
+		if (!PITJUMP || planA == null || !"stairs".equals(planA.why) || Dungeon.bossLevel() || Dungeon.depth >= 24 || seenFoe || inDanger) return null;
+		Hero h = Dungeon.hero;
+		if (h.rooted || h.HP * 100 < h.HT * PITHP || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Levitation.class) != null || bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return null;
+		if (Dungeon.bossLevel(Dungeon.depth + 1)) return null;   // (below is a boss: no pit room there)
+		int well = -1;
+		if (L.customTiles != null) for (Object t : L.customTiles) if (t instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.WeakFloorRoom.HiddenWell) {
+			com.shatteredpixel.shatteredpixeldungeon.tiles.CustomTilemap ct = (com.shatteredpixel.shatteredpixeldungeon.tiles.CustomTilemap) t;
+			int c = ct.tileX + ct.tileY * L.width(); if (c >= 0 && c < L.length() && L.visited[c]) well = c; }   // (the well drawn at the bottom: seen)
+		if (well < 0) return null;
+		// the room's chasm: the pit cells joined to the well's
+		boolean[] in = new boolean[L.length()]; int[] q = new int[L.length()]; int qh = 0, qt = 0; in[well] = true; q[qt++] = well;
+		while (qh < qt) { int c = q[qh++]; for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && !in[n] && L.pit[n] && !L.solid[n] && distance(n, c) == 1) { in[n] = true; q[qt++] = n; } } }
+		int best = -1, bd = INF;
+		for (int c = 0; c < L.length(); c++) if (in[c] && known[c] && Actor.findChar(c) == null && walk(c) < bd) { bd = walk(c); best = c; }
+		if (best < 0 || bd >= INF) return null;
+		return new Target(best, GO, "pit jump: down through the weak floor, into the room below");
 	}
 }

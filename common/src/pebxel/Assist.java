@@ -532,7 +532,7 @@ public final class Assist {
 		huntMem.clear(); mobLast.clear();
 		combatHeld.clear(); grassHeld = false; fight = false; foeAt = -99; strikeAt = -1; threats.clear(); holdOff = false; holdId = -1;
 		trapMem = new boolean[l.length()]; fadingSeen = null;
-		hazMem = new boolean[l.length()]; sentries.clear(); sentryZone = new boolean[l.length()]; sentryKey = -1; crabSeen = -1; bossSeen = -1;
+		hazMem = new boolean[l.length()]; fireMem = new float[l.length()]; sentries.clear(); sentryZone = new boolean[l.length()]; sentryKey = -1; crabSeen = -1; bossSeen = -1;
 		doorSpot = -1; floorT0 = Actor.now(); actCell = -1; actTime = -1; eatBand = 0;
 	}
 
@@ -552,9 +552,11 @@ public final class Assist {
 			if (m instanceof Piranha) { fish = true; fishSeen = true; fishAt = Actor.now(); }
 			if (m instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.SentryRoom.Sentry) sentries.add(m.pos);
 		}
+		float now0 = Actor.now();
 		for (int c = 0; c < LEN; c++) {
 			known[c] = L.visited[c] || L.mapped[c];
-			if (L.heroFOV[c]) hazMem[c] = blobAt(c);
+			if (L.heroFOV[c]) { hazMem[c] = blobAt(c); fireMem[c] = hazMem[c] && plainFire(c) ? now0 : -1; }
+			else if (hazMem[c] && fireMem[c] >= 0 && now0 - fireMem[c] > FIREMEM) hazMem[c] = false;   // (plain fire out of sight burns out: K8, a barricade burnt and its room behind never gone into, the flames remembered)
 		}
 		hazMem[hp] = blobAt(hp);   // (felt, even blind)
 		tenguTraps();
@@ -1061,6 +1063,16 @@ public final class Assist {
 		}
 		return false;
 	}
+	/** Only plain fire on c (it burns out in a few turns; gas lingers, the magical fire room's never goes out). */
+	static boolean plainFire(int c) {
+		boolean f = false;
+		for (Blob b : L.blobs.values()) {
+			if (b == null || b.volume <= 0 || b.cur == null || c >= b.cur.length || b.cur[c] <= 0) continue;
+			if (b instanceof Fire) f = true; else if (b instanceof ToxicGas || b instanceof CorrosiveGas || b instanceof ConfusionGas || b instanceof ParalyticGas || b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing || b instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.MagicalFireRoom.EternalFire) return false;
+		}
+		return f;
+	}
+	static float[] fireMem; static final int FIREMEM = optInt("FIREMEM", 8);
 	static boolean burning() { for (Buff b : H.buffs()) if (b.getClass().getSimpleName().equals("Burning")) return true; return false; }
 	static boolean fireAt(int c) { Blob f = L.blobs.get(Fire.class); return c >= 0 && c < LEN && L.heroFOV[c] && f != null && f.volume > 0 && f.cur != null && f.cur[c] > 0; }
 	static boolean fireNear(int c) { if (fireAt(c)) return true; for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && fireAt(n) && L.flamable[c]) return true; } return false; }
@@ -1145,7 +1157,7 @@ public final class Assist {
 
 	static boolean risky(Heap h) {
 		if (h.type == Heap.Type.TOMB) return H.lvl < Dungeon.depth + 3;
-		if ((h.type == Heap.Type.SKELETON || h.type == Heap.Type.REMAINS) && H.HP * 3 < H.HT * 2) return true;
+		if ((h.type == Heap.Type.SKELETON || h.type == Heap.Type.REMAINS) && H.HP * 2 < H.HT) return true;   // (a wraith comes out of haunted remains only: weak, one hit kills it. K8: two thirds kept a hero landed in the pit room at 60% searching its walls till he starved)
 		return false;
 	}
 
@@ -1865,7 +1877,7 @@ public final class Assist {
 			for (int k = -1; k < 8; k++) { int n = k < 0 ? hp : hp + N8[k]; if (k < 0 || nb(hp, n)) burn |= L.flamable[n]; }
 			PotionOfLiquidFlame lf = new PotionOfLiquidFlame();
 			if (lf.isKnown() || ((water(hp) || !scr) && !burn))
-				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i))) return use(i, Potion.AC_DRINK, -1, "drink to learn");
+				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i)) && !AsItems.remedyHeld(i)) return use(i, Potion.AC_DRINK, -1, "drink to learn");   // (remedyHeld: maybe the floor's Frost / Liquid Flame for its room)
 		}
 		boolean foeInView = false; for (Mob m : mobs()) if (enemy(m) && !(m instanceof NPC)) foeInView = true;   // (MT: no swapping with a foe about, sleeping or not)
 		if (OGEAR && !foeInView) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }

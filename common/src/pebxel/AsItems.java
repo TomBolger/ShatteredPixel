@@ -84,6 +84,7 @@ final class AsItems {
 		prepAt = now; prepPos = H.pos; prepL = L;
 		hp = H.pos; W = L.width(); LEN = L.length(); hpf = H.HP / (float) Math.max(1, H.HT);
 		ban.values().removeIf(t -> t < now);
+		notePotions();
 		foes.clear(); near.clear(); adj.clear(); pDeath = 0; hard = false; bossNear = false;
 		if (!AsAbilities.prep()) return false;
 		foes.addAll(AsAbilities.foes); near.addAll(AsAbilities.near); adj.addAll(AsAbilities.adj);
@@ -756,6 +757,7 @@ final class AsItems {
 		Target t;
 		if ((t = magicalFire()) != null) return t;
 		if ((t = barricade()) != null) return t;
+		if ((t = toBarricade()) != null) return t;
 		if ((t = grab()) != null) return t;
 		if (hpf < 0.6f) return null;
 		for (int kind = LEV; kind <= PURE; kind++) {
@@ -781,21 +783,104 @@ final class AsItems {
 	/** The magical fire room: a wall of eternal fire; one freeze anywhere on it puts it all out (EternalFire.evolve). */
 	static Target magicalFire() {
 		Blob ef = L.blobs.get(MagicalFireRoom.EternalFire.class);
-		if (ef == null || ef.volume <= 0 || ef.cur == null) return null;
-		int best = -1, bd = 99;
-		for (int c = 0; c < LEN; c++) if (ef.cur[c] > 0 && L.heroFOV[c]) { int d = dist(c, hp); if (d >= 2 && d < bd && lands(c)) { bd = d; best = c; } }
-		if (best < 0) return null;
-		for (Class<? extends Item> c : Arrays.asList(PotionOfFrost.class, PotionOfSnapFreeze.class, BlizzardBrew.class, FrostBomb.class, Icecap.Seed.class, AquaBrew.class)) {
-			Item i = has(c); if (i == null) continue;
-			return use(i, i instanceof Bomb ? "LIGHTTHROW" : Item.AC_THROW, best, "magical fire: put it out with " + c.getSimpleName());
+		if (fireL != L) { fireL = L; fireSeen.clear(); }
+		if (ef == null || ef.volume <= 0 || ef.cur == null) { fireSeen.clear(); return null; }
+		for (int c = 0; c < LEN; c++) if (L.heroFOV[c]) { if (ef.cur[c] > 0) fireSeen.add(c); else fireSeen.remove(c); }   // (only what the hero saw of it)
+		if (fireSeen.isEmpty()) return null;
+		Item rem = null;
+		for (Class<? extends Item> c : Arrays.asList(PotionOfFrost.class, PotionOfSnapFreeze.class, BlizzardBrew.class, FrostBomb.class, AquaBrew.class, PotionOfStormClouds.class, PotionOfPurity.class)) {   // (not Icecap: Freezing.affect puts out plain fire only)
+			Item i = has(c); if (i != null && ok(i, i instanceof Bomb ? "LIGHTTHROW" : Item.AC_THROW)) { rem = i; break; } }
+		// none known: the room put a Potion of Frost among the floor's own items (MagicalFireRoom.paint:
+		// addItemToSpawn), so an unknown kind first found on this floor may well be it (K6: the room's food left
+		// behind on most floors that had one). Thrown from 3 or more off (a gas it turns out to be stays off the hero).
+		Potion g = rem == null ? floorGuess() : null;
+		if (rem == null && (g == null || hpf < 0.5f)) return null;
+		// (the fire's cells aren't passable: a throw stops on the cell before one, as at a barricade. So the aim is a
+		// free floor cell beside the fire: a Frost potion's freeze there reaches it (EternalFire looks round each cell))
+		Set<Integer> aims = new HashSet<>();
+		for (int f : fireSeen) for (int k = 0; k < 8; k++) { int n = f + Assist.N8[k]; if (Assist.nb(f, n) && L.passable[n] && Assist.known[n] && !fireSeen.contains(n) && Actor.findChar(n) == null) aims.add(n); }
+		boolean safe = fireOff(hp);
+		int best = -1, bd = 99;   // (a guess from 3 off when there's room: a gas it turns out to be stays off the hero)
+		if (safe) for (int c : aims) if (L.heroFOV[c]) { int d = dist(c, hp); if (d >= 2 && d <= 6 && (d < bd || (rem == null && bd < 3 && d >= 3)) && lands(c)) { bd = d; best = c; } }
+		if (K8DBG) System.out.println("    FIRE seen " + fireSeen.size() + " rem " + rem + " guess " + g + " best " + best);
+		if (best >= 0) {
+			if (rem != null) return use(rem, rem instanceof Bomb ? "LIGHTTHROW" : Item.AC_THROW, best, "magical fire: put it out with " + rem.getClass().getSimpleName());
+			return use(g, Item.AC_THROW, best, "magical fire: an unknown potion found here (the room's Frost is among the floor's)");
 		}
-		return null;
+		// out of sight or out of line: to the nearest spot it can be thrown from (an aim in line, 3 to 5 off)
+		int s = throwSpot(aims, 3, 5); if (s < 0) s = throwSpot(aims, 2, 5);
+		if (K8DBG) System.out.println("    FIRE spot " + s + " hp " + hp + " aims " + aims);
+		if (s < 0 || s == hp) return null;
+		Target t = new Target(s, Assist.GO, IT + "magical fire: to a spot to throw " + (rem != null ? "the remedy" : "a guess") + " from"); t.obj = s; return t;
+	}
+	/** Out of the eternal fire's reach (it sets alight whoever stands on or beside it). */
+	static boolean fireOff(int c) { for (int f : fireSeen) if (dist(f, c) < 2) return false; return true; }
+	static final Set<Integer> fireSeen = new HashSet<>(); static Level fireL;
+	/** The nearest cell the hero can walk to (none of the danger) from which a throw lands on one of the cells, dmin to dmax off. */
+	static int throwSpot(Collection<Integer> cells, int dmin, int dmax) {
+		int best = -1, bd = Assist.INF;
+		for (int t : cells) for (int dy = -dmax; dy <= dmax; dy++) for (int dx = -dmax; dx <= dmax; dx++) {
+			int d = Math.max(Math.abs(dx), Math.abs(dy)); if (d < dmin) continue;
+			int sx = x(t) + dx, sy = y(t) + dy; if (sx < 0 || sy < 0 || sx >= W || sy >= L.height()) continue;
+			int c = sx + sy * W;
+			if (Assist.dist[c] >= bd || !Assist.open[c] || Actor.findChar(c) != null && c != hp || L.flamable[c] || !fireOff(c)) continue;
+			if (Assist.line(c, t)) { bd = Assist.dist[c]; best = c; }
+		}
+		return bd <= 40 ? best : -1;
+	}
+
+	// the floors' remedies: a magical fire room puts a Potion of Frost among the floor's items, a storage room (its
+	// barricade) and the Wandmaker's grave one of Liquid Flame, a traps room one of Levitation (each Room.paint:
+	// level.addItemToSpawn). The source's knowledge, used on what the player saw: which unknown potion kinds were
+	// first picked up on which floor.
+	static final boolean K8DBG = System.getenv("K8DBG") != null;
+	static final Map<Class<?>, Integer> potionFloor = new HashMap<>(); static Object potionHero;
+	static void notePotions() {
+		if (potionHero != H) { potionHero = H; potionFloor.clear(); }
+		for (Item i : H.belongings) if (i instanceof Potion && !Assist.known(i)) potionFloor.putIfAbsent(i.getClass(), Dungeon.depth);
+	}
+	/** An unknown potion of a kind first found on this floor (the fewest held first: the remedy is one potion), or null. */
+	static Potion floorGuess() {
+		Potion best = null;
+		for (Item i : H.belongings) if (i instanceof Potion && !Assist.known(i) && !(i instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.exotic.ExoticPotion) && Integer.valueOf(Dungeon.depth).equals(potionFloor.get(i.getClass())) && ok(i, Item.AC_THROW))
+			if (best == null || i.quantity() < best.quantity()) best = (Potion) i;
+		return best;
+	}
+	/** Unknown potions found on this floor kept back from drinking to learn while a room's remedy is still wanted:
+	 *  the magical fire burns in sight, a barricade with the unknown behind it is seen. */
+	static boolean remedyHeld(Item i) {
+		try {
+			H = Dungeon.hero; L = Dungeon.level; if (H == null || L == null || !(i instanceof Potion) || Assist.known(i)) return false;
+			notePotions();
+			if (!Integer.valueOf(Dungeon.depth).equals(potionFloor.get(i.getClass()))) return false;
+			Blob ef = L.blobs.get(MagicalFireRoom.EternalFire.class);
+			if (ef != null && ef.volume > 0 && ef.cur != null) for (int c = 0; c < L.length(); c++) if (ef.cur[c] > 0 && Assist.known[c]) return true;
+			for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c]) {
+				for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && !Assist.known[n]) return true; } }
+			return false;
+		} catch (Throwable e) { return false; }
 	}
 
 	/** A barricade with the unknown behind it (a storage room): burnt with known fire, or blown up. (The Wandmaker's
 	 *  grave is AsQuests'.) */
 	static Target barricade() {
-		if (AsQuests.graveOpen()) return null;
+		if (K8DBG && barL == L && barAim >= 0) { StringBuilder b = new StringBuilder("    BAR t " + Actor.now() + " aim " + barAim + ":"); for (int k = 0; k < 8; k++) { int n = barAim + Assist.N8[k]; b.append(' ').append(n).append('=').append(L.map[n]).append(Assist.hazMem[n] ? "H" : "").append(Assist.known[n] ? "k" : "").append(L.heroFOV[n] ? "v" : "").append(Assist.dist[n] < Assist.INF ? "d" + Assist.dist[n] : ""); } System.out.println(b);
+			int f0 = barAim; for (int yy = y(f0) - 6; yy <= y(f0) + 6; yy++) { StringBuilder bb = new StringBuilder("     ");
+				for (int xx = x(f0) - 10; xx <= x(f0) + 10; xx++) { int c = xx + yy * W; if (c < 0 || c >= LEN || xx < 0 || xx >= W) { bb.append(' '); continue; }
+					bb.append(c == hp ? '@' : !Assist.known[c] ? ' ' : L.solid[c] ? '#' : Assist.dist[c] >= Assist.INF ? 'x' : !Assist.open[c] ? 'o' : Assist.unseenBy(c) ? 'u' : '.'); }
+				System.out.println(bb); } }
+		Target t = barricade0(); if (t != null) { barT = Actor.now(); barL = L; barAim = t.cell; } return t; }
+	static int barAim = -1;
+	static float barT = -99; static Level barL;
+	/** A throw at a barricade lately (fire takes a few turns to burn it: K8, a Frost guess thrown next put out the
+	 *  Liquid Flame just thrown), or fire burning beside one. */
+	static boolean barWait() {
+		if (barL == L && Actor.now() - barT < 6) return true;
+		for (int c = 0; c < LEN; c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c]) for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && Assist.fireAt(n)) return true; }
+		return false;
+	}
+	static Target barricade0() {
+		if (AsQuests.graveOpen() || barWait()) return null;
 		// (a barricade is solid: a throw stops on the cell before it, so the aim is a free floor cell beside it, on the
 		// hero's side; Liquid Flame's 3x3 of flames, a bomb's blast or a Fireblast cone there reaches it: K4's finding)
 		int aim = -1, bar = -1, bd = 99;
@@ -813,7 +898,29 @@ final class AsItems {
 			InfernalBrew ib = has(InfernalBrew.class); if (ib != null && bd >= 4) return use(ib, Item.AC_THROW, aim, "barricade: burn it");
 		}
 		for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class && bd >= 3) return use(i, "LIGHTTHROW", aim, "barricade: blow it up");
+		// none known: the storage room put a Potion of Liquid Flame among the floor's items (StorageRoom.paint): an
+		// unknown kind first found here, thrown from 3 or more off and off grass (K6: the room's food never reached)
+		Potion g = floorGuess();
+		if (g != null && bd >= 3 && !L.flamable[hp] && hpf >= 0.5f) return use(g, Item.AC_THROW, aim, "barricade: an unknown potion found here (the room's Liquid Flame is among the floor's)");
 		return null;
+	}
+	/** A barricade seen with the unknown behind it, a remedy in hand (known fire, a bomb, a floor's guess) but no throw
+	 *  from here: to the nearest spot one lands from, 3 or 4 off its aim (K6: the storage room's food never seen). */
+	static Target toBarricade() {
+		if (AsQuests.graveOpen() || hpf < 0.5f || barWait()) return null;
+		boolean rem = has(PotionOfLiquidFlame.class) != null || wand(WandOfFireblast.class) != null || has(InfernalBrew.class) != null || floorGuess() != null;
+		if (!rem) for (Item i : H.belongings.backpack) if (i.getClass() == Bomb.class) rem = true;
+		if (!rem) return null;
+		Set<Integer> aims = new HashSet<>();
+		for (int c = 0; c < LEN; c++) if (L.map[c] == Terrain.BARRICADE && Assist.known[c]) {
+			boolean behind = false; for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && !Assist.known[n]) behind = true; }
+			if (!behind) continue;
+			for (int k = 0; k < 8; k++) { int n = c + Assist.N8[k]; if (Assist.nb(c, n) && L.passable[n] && !L.solid[n] && Assist.known[n] && Assist.dist[n] < Assist.INF && Actor.findChar(n) == null) aims.add(n); }
+		}
+		if (aims.isEmpty()) return null;
+		int s = throwSpot(aims, 3, 4);
+		if (s < 0 || s == hp) return null;
+		Target t = new Target(s, Assist.GO, IT + "barricade: to a spot to throw from"); t.obj = s; return t;
 	}
 
 	/** Telekinetic Grab: a prize in sight the hero can't walk to (across water with piranhas, a chasm, fire). */
