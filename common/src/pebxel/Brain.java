@@ -186,14 +186,15 @@ final class Brain {
 	static void setupFight() {
 		foes = new ArrayList<>(); fs = new ArrayList<>(); fight = false; base = null;
 		Hero h = H; int hp = h.pos;
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
+		Object hl = hb == null ? null : Assist.field(hb, "healingLeft"); healing = hl instanceof Integer ? (Integer) hl : 0;
+		R = Budget.ahead(h);
 		for (Mob m : Assist.mobs()) if (Assist.enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (Assist.adjacent(m.pos, hp) || (Assist.hunting(m) && Assist.walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && Assist.distance(m.pos, hp) <= 8 && Assist.line(m.pos, hp)))) foes.add(m);
 		if (foes.isEmpty()) return;
 		me = HeroView.of(h);
 		for (Mob m : foes) fs.add(FoeView.of(m, h));
 		R = Budget.ahead(h);
 		seed = 0x51ED ^ (Dungeon.depth * 1000003L) ^ (hp * 7919L) ^ ((long) Actor.now() * 31L);
-		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
-		Object hl = hb == null ? null : Assist.field(hb, "healingLeft"); healing = hl instanceof Integer ? (Integer) hl : 0;
 		policy = me.heals > 0 ? FightModel.healAt(h, foes) : 0;   // (the drinking policy the hands follow: MT's, FightModel.healAt)
 		base = Look.run(me, fs, plan(), seed);
 		fight = true; fights++;

@@ -59,11 +59,20 @@ final class Rules {
 		// a walk to the stairs, chosen last turn over the fight, kept on: re-weighed from scratch each step it went back
 		// and forth (a step nearer, the foe a step nearer too)
 		boost("keep going: the stairs", c -> (c.role == Role.UP || c.role == Role.DOWN) && c.role == Brain.lastRole && Actor.now() - Brain.lastAt <= 2, Brain.MARGIN),
+		// -- rescue items ---------------------------------------------------------------------------------------------
+		// the hands' Healing for what the lookahead doesn't see: harm still to come (fire, poison, bleeding: HeroView.dot)
+		// or health this low (MT's Tune.HEALLOW; BR-a2: a burning Mage kept his potion on the brain's say and died)
+		boost("rescue: the hands' Healing, hurt to the quick", c -> c.role == Role.HEAL && !"brain".equals(c.src)
+				&& (pebxel.bot.HeroView.dot(H()) > 0 || H().HP * 100 < H().HT * Math.max(pebxel.bot.Tune.HEALLOW, 40)), 99),
+		// never die holding Healing (BR-a2: deaths with 5 to 11 known Healing left, burning or under warlocks' bolts: the
+		// hands give nothing while the hero burns, "out of the fire first"): the next round's worst (the blows of those
+		// beside him at their most, the bolts of the shooters in line, a third of the harm to come) could kill: drink
+		propose("rescue: drink rather than die", c -> c == Rules.planA && c.role != Role.HEAL && healPot() != null && Brain.healing == 0 && worstRound() >= H().HP, 0, Rules::drinkTarget),
 		// -- getting away by the stairs ------------------------------------------------------------------------------
 		// (BR-a1: a starving hero bounced between the floors for ever, up from the foe by the stairs, down again as the
 		// floor above was done.) The stairs up are an escape only with a rest to come (food for it), not straight after
 		// another escape by the stairs, and the floor fled to is rested on before going back.
-		veto("stairs: no rest to come", c -> (c.role == Role.UP || c.role == Role.DOWN) && (Assist.starving() || AsBasics.foodTurns() < AsBasics.restTurns() + AsBasics.FOODRESERVE)),
+		veto("stairs: no rest to come", c -> (c.role == Role.UP || c.role == Role.DOWN) && Assist.starving()),
 		veto("stairs: no chained escapes", c -> (c.role == Role.UP || c.role == Role.DOWN) && Actor.now() - Brain.fledAt < 30 && Actor.now() >= Brain.fledAt),
 		propose("fled: rest before going back", c -> (stairsDown(c) || stairsUp(c)) && Brain.fledFrom >= 0 && Math.abs(Brain.fledFrom - Dungeon.depth) == 1
 				&& H().HP * 10 < H().HT * 9 && calm() && !Assist.starving() && !Assist.declined(null, Assist.REST_ACT), PREP, Rules::restTarget),
@@ -87,6 +96,27 @@ final class Rules {
 	static boolean stairsDown(Cand c) {
 		int ex = Assist.L.exit(); Target t = c.t;
 		return c == planA && (t.kind == Assist.GO || t.kind == Assist.PICKUP) && (t.obj == ex || t.cell == ex) && Assist.bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null;
+	}
+	static com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing healPot() {
+		com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing p = H().belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class);
+		return p != null && p.isKnown() ? p : null;
+	}
+	/** The most the next round could take: the foes in the fight at their hardest blow (a bolt from afar), a third of the harm to come. */
+	static double worstRound() {
+		double w = pebxel.bot.HeroView.dot(H()) / 3;
+		if (Brain.fight && Brain.me != null) for (pebxel.bot.Fighter f : Brain.fs) {
+			if (f.asleep) continue;
+			int dr = Brain.me.dr.lo;
+			if (f.dist <= 1) w += Math.max(0, (f.rageHp == 0 && f.rageDmg != null ? f.rageDmg : f.dmg).hi() - dr) * Math.max(1, Math.round(1 / Math.max(0.25, f.delay)));
+			else if (f.zapDmg != null) w += f.zapDmg.hi();
+			else if (f.dist <= 1 + f.speed && !f.ranged) w += Math.max(0, f.dmg.hi() - dr) * 0.5;
+		}
+		return w;
+	}
+	static Target drinkTarget() {
+		Target t = Assist.use(healPot(), com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.AC_DRINK, -1, "rescue: drink rather than die");
+		t.hint = Math.max(1, Brain.R) * 0.5;   // (a likely death put off: half the floors ahead)
+		return t;
 	}
 	/** c is plan A, the walk to the stairs up. */
 	static boolean stairsUp(Cand c) { int en = Assist.L.entrance(); Target t = c.t; return c == planA && (t.kind == Assist.GO || t.kind == Assist.PICKUP) && (t.obj == en || t.cell == en); }
@@ -143,7 +173,7 @@ final class Rules {
 				if (!r.on || r.kind.equals("VETO") || !r.when.test(c)) continue;
 				r.fired++;
 				if (r.kind.equals("BOOST")) { c.v = (c.valued() ? c.v : 0) + r.boost; c.note += " +" + r.name; }
-				else { Target t = r.make.get(); if (t != null) { Cand p = new Cand(t, "rule", Brain.role(t)); p.v = r.boost; p.note = r.name; cs.add(p); } }
+				else { Target t = r.make.get(); if (t != null) { Cand p = new Cand(t, "rule", Brain.role(t)); p.v = Double.isNaN(t.hint) ? r.boost : t.hint; p.note = r.name; cs.add(p); } }
 			}
 		}
 		planA = null;
