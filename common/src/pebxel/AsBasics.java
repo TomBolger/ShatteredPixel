@@ -540,6 +540,7 @@ final class AsBasics {
 	// up its quests after 1500 steps, the way out with them) by its stairs; else, with every wall searched, a chasm.
 	// =============================================================================================================
 	static final boolean STUCK = opt("BSTUCK", true);
+	static final int JUMPHUNGRY = optInt("MDJUMP", 30);   // (MD: the least health, in percent, to jump at short of food)
 	static final int HAZAGE = optInt("BHAZAGE", 50);   // turns after which gas or fire last seen (out of sight now) is taken as gone
 	static float[] hazSeen; static Level hazL;
 	/** Each decision: when the remembered gas / fire was last in sight. */
@@ -570,7 +571,10 @@ final class AsBasics {
 				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;
 			return null;
 		}
-		if (Assist.srchSpot(-1, -1) >= 0 || Dungeon.bossLevel() || Dungeon.depth >= 25 || h.HP * 2 < h.HT) return null;   // (walls left to search: Assist's own way)
+		// (MD: starving, the jump while it is still safe: the fall costs half the health left at worst, starving costs it
+		// all; 25 of 576 full games died searching a floor whose stairs lay past a chasm, most below half health)
+		boolean hungry = Assist.starving() || shortOfFood();
+		if (Assist.srchSpot(-1, -1) >= 0 || Dungeon.bossLevel() || Dungeon.depth >= 25 || h.HP * 100 < h.HT * (hungry ? JUMPHUNGRY : 50)) return null;   // (walls left to search: Assist's own way)
 		int pit = -1, pd = INF;
 		for (int c = 0; c < L.length(); c++) if (L.pit[c] && known[c] && !L.solid[c] && Actor.findChar(c) == null) {
 			for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && (n == hp || (dist[n] < INF && open[n])) && (n == hp ? 0 : dist[n]) < pd) { pd = n == hp ? 0 : dist[n]; pit = c; } } }

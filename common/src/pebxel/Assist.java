@@ -673,7 +673,7 @@ public final class Assist {
 	 *  Rogue's clone): not one that can't move or is held, nor one too large for the hero's cell. K6: the plan walled
 	 *  allies off like foes, and a ghost in a corridor stalled the hero for hundreds of turns. */
 	static boolean swappable(Mob m) {
-		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || m instanceof NPC || Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
+		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || (m instanceof NPC && !(m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.DirectableAlly)) ||   /* MD: the Dried Rose's ghost is an NPC too: it walled the hero into a dead end for 1,000 starving turns */ Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
 		if (H.rooted || H.paralysed > 0 || m.rooted || m.paralysed > 0 || !L.passable[m.pos]) return false;
 		if (Char.hasProp(m, Char.Property.LARGE) && !L.openSpace[hp]) return false;
 		for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
@@ -848,6 +848,7 @@ public final class Assist {
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
 		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
+		if (mode() != 0) AsPacing.after(out);   // (agent MD: a wait that has not paid, given up)
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
