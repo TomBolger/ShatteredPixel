@@ -69,6 +69,7 @@ final class AsIntent {
 		if (w.contains("grass")) return "grass";
 		if (w.startsWith("door")) return "door";
 		if (w.startsWith("unexplored") || w.startsWith("explore") || w.startsWith("look")) return "explore";
+		if (w.startsWith("stairs up")) return "up";   // (back up a floor: never lifted by a liking)
 		if (w.startsWith("stairs") || w.equals("up")) return "stairs";
 		if (w.startsWith("talk")) return "talk";
 		if (w.startsWith("dead end") || w.startsWith("search")) return "search";
@@ -80,7 +81,7 @@ final class AsIntent {
 	 *  only grass, doors and talking can lose plan A by it (the loot wins games, a search finds the way on). */
 	static boolean optional(String c) { return c.equals("item") || c.equals("grass") || c.equals("door") || c.equals("search") || c.equals("talk"); }
 	static double like(String c) { Double v = like.get(c); return v == null ? 0 : v; }
-	static void liked(String c, double d) { if (c.isEmpty()) return; like.replaceAll((k, v) -> v * 0.95); like.merge(c, d, Double::sum); }
+	static void liked(String c, double d) { if (c.isEmpty() || c.equals("up")) return; like.replaceAll((k, v) -> v * 0.95); like.merge(c, d, Double::sum); }
 
 	/** Assist.chose: the player took t while planA led. */
 	static void chose(Target t, Target planA) {
@@ -200,6 +201,10 @@ final class AsIntent {
 			int sd = dist[c]; if (sd < 3 || sd >= INF || off(c, dir) > CONE || bad.containsKey(c)) continue;
 			com.shatteredpixel.shatteredpixeldungeon.items.Heap hh = seenHeap(c);
 			int t = L.map[c];
+			// (the stairs only as the way off the floor: the way down once the floor is done, the way up with the Amulet.
+			// DS-fin2: "your way" onto the stairs up, taken, climbed the wilful player back up 20 floors a game)
+			boolean amulet = bag(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null;
+			if ((c == L.entrance() && !amulet) || (c == L.exit() && (amulet || floorLeft()))) continue;
 			int w = hh != null && heapOk(hh) ? 3 : c == L.exit() || c == L.entrance() || unseenBy(c) ? 4 : known[c] && (t == Terrain.DOOR || t == Terrain.OPEN_DOOR) ? 4 : 0;
 			if (w > 0 && sd * w < ns) { ns = sd * w; nt = c; }
 		}

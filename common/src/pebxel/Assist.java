@@ -1631,6 +1631,7 @@ public final class Assist {
 			int nt = -1, ns = INF;
 			for (int c = 0; c < LEN; c++) {
 				int sd = dist[c]; if (sd < 1 || sd >= INF || off(c, wd) > CONE || bad.containsKey(c)) continue;
+				if (AsIntent.ON && c == L.exit() && floorLeft()) continue;   // (DS: not down the stairs with the floor not done, as his way on)
 				Heap hh = seenHeap(c); Char ch = seenChar(c);
 				int w = (hh != null && heapOk(hh)) || (ch instanceof NPC && L.heroFOV[c]) ? 3 : c == L.exit() || unseenBy(c) || (L.map[c] == Terrain.LOCKED_DOOR && Notes.keyCount(new IronKey(Dungeon.depth)) > 0) ? 4
 						: known[c] && (L.map[c] == Terrain.DOOR || L.map[c] == Terrain.OPEN_DOOR) && sd > 1 ? 5 : 0;   // (DS: a door that way, been through or not)

@@ -351,20 +351,20 @@ public final class WatchDriver {
 	final Set<String> windowKinds = new TreeSet<>();
 	String playerSummary() {
 		return String.format("windows %d downs %d closes %d otherchoices %d taps %d ", windowsSeen, windowDowns, windowCloses, otherChoices, humanTaps) + obey.line()
-				+ (wilfulOn ? String.format(" wilful dislike %s whims %d done %d whimpicks A %d B %d C %d tap %d none %d dislikedA %d of %d calm (first half %d of %d) skipsDisliked %d", dislike, whims, whimsDone, whimAt[0], whimAt[1], whimAt[2], whimTaps, whimNone, dislikedA, calmA, dislikedA1, calmA1, dislikeSkips) : "")
+				+ (wilfulOn ? String.format(" wilful dislike %s whims %d done %d whimpicks A %d B %d C %d tap %d none %d dislikedA %d of %d calm (first half %d of %d) skipsDisliked %d yourA %d", dislike, whims, whimsDone, whimAt[0], whimAt[1], whimAt[2], whimTaps, whimNone, dislikedA, calmA, dislikedA1, calmA1, dislikeSkips, yourA) : "")
 				+ " intent " + AsIntent.stats().replace(' ', '_');
 	}
 
 	// ---- PLAYER=wilful: a player with a will of his own (Thomas: "if we choose to go north for some totally unknown
-	// reason..."): mostly Select; now and then (WHIMPCT% of calm decisions) he sets off for a place of his own (a door, the
-	// stairs, the unexplored, away from where plan A leads) and goes there, taking the list's A, B or C when one of them
+	// reason..."): mostly Select; now and then (WHIMPCT% of calm decisions) he sets off for a place of his own (a known
+	// door a fair walk off, away from where plan A leads) and goes there, taking the list's A, B or C when one of them
 	// takes him on his way (Down first), else tapping the map; and each game he may not care for one kind of thing (grass,
 	// items, doors or searching) and passes it over whenever it is plan A. What's measured: how often his next move was
 	// A, B or C (the list read his mind) or a tap (it didn't); how often plan A was the kind he doesn't care for. ----
 	static final int WHIMPCT = Integer.parseInt(System.getenv().getOrDefault("WHIMPCT", "4"));
 	int lastTapAt = -1; float lastTapNow;
 	boolean wilfulOn; String dislike = "none"; int whim = -1, whimLeft;
-	long whims, whimsDone, whimTaps, whimNone, dislikedA, calmA, dislikedA1, calmA1, dislikeSkips, wilfulDecisions; final long[] whimAt = new long[3];
+	long yourA; long whims, whimsDone, whimTaps, whimNone, dislikedA, calmA, dislikedA1, calmA1, dislikeSkips, wilfulDecisions; final long[] whimAt = new long[3];
 	void newWilful(long seed) {
 		wilfulOn = true; Random r = new Random(seed * 11 + 5);
 		String[] ks = {"grass", "item", "door", "search", "none"}; dislike = ks[r.nextInt(ks.length)];
@@ -382,6 +382,7 @@ public final class WatchDriver {
 		if (VW) System.out.println("    wilful: list " + ps.subList(0, Math.min(4, ps.size())) + " whim " + whim + " hero " + h.pos + " t" + Math.round(com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now()) + " like " + AsIntent.like + " dir " + AsIntent.dir);
 		calmA++; if (wilfulDecisions < 1500) calmA1++;
 		boolean dis = AsIntent.cat(a).equals(dislike);
+		if (whim < 0 && a.why != null && a.why.startsWith("your")) yourA++;
 		if (dis) { dislikedA++; if (wilfulDecisions < 1500) dislikedA1++; }
 		// a new errand of his own: somewhere known a fair walk off (a door, the stairs), not where plan A leads
 		if (whim < 0 && !dis && human.nextInt(100) < WHIMPCT) {
@@ -390,7 +391,7 @@ public final class WatchDriver {
 			for (int c = 0; c < d.length; c++) {
 				if (d[c] < 6 || d[c] > 30 || !(L.visited[c] || L.mapped[c])) continue;
 				boolean door = L.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR || L.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.OPEN_DOOR;
-				if (!(door || c == L.exit() || c == L.entrance())) continue;
+				if (!door) continue;   // (doors only: an errand to the stairs ended up the stairs, a floor back, which says nothing about the list)
 				if (ao >= 0 && ao < d.length && L.distance(c, ao) < 5) continue;
 				cs.add(c);
 			}
