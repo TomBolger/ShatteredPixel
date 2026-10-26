@@ -399,6 +399,9 @@ final class AsBasics {
 		if (h.rooted) return null;
 		Mob sh = casterNear(); if (sh == null) return null;
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return null;   // (one beside him: that fight first)
+		// a boss floor with the boss in sight: the boss's own tactics (AsBosses) lead, the corner yields (M2: at the Dwarf
+		// King, "off the immune king" and "to a corner" took turns every turn, no blow struck, till he died)
+		if (Dungeon.bossLevel()) for (Mob m : mobs()) if (enemy(m) && Char.hasProp(m, Char.Property.BOSS)) return null;
 		if (cornerL != L) { cornerL = L; cornerFailed.clear(); }
 		int[] ds = crabDist(sh.pos);
 		List<Mob> others = new ArrayList<>(); List<int[]> ods = new ArrayList<>();

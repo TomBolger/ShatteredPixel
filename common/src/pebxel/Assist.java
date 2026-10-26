@@ -832,6 +832,12 @@ public final class Assist {
 			h0 = 0;
 			Brain.judge();
 		}
+		// the list's "stairs up" is never plan A by default with the floor not done (K8: plan A lost to a "bad" mark, the
+		// list's entry for the way up came first, and a head-start hero went up to a floor it couldn't leave, and starved)
+		if (!out.isEmpty() && "stairs up".equals(out.get(0).why) && bag(Amulet.class) == null && floorLeft()) {
+			out.add(out.remove(0));
+			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
+		}
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
