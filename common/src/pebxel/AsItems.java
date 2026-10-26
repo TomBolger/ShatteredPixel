@@ -65,7 +65,7 @@ final class AsItems {
 	private AsItems() {}
 
 	static final boolean ON = Assist.opt("ITEMUSE", true), FIGHT = Assist.opt("ITEMFIGHT", true);
-	static final int SPEND = Assist.optInt("ITEMSPEND", 10);   // a fight worth a dear consumable: P(death) this many percent, or a hard fight (AsAbilities)
+	static final int SPEND = Assist.optInt("ITEMSPEND", 25);   // (K5-b, 48 paired games each: 25 over 10 +0.81 from depth 1, +0.75 from 11)   // a fight worth a dear consumable: P(death) this many percent, or a hard fight (AsAbilities)
 	static final String IT = "it:";
 
 	// ---- per turn ----
@@ -155,6 +155,7 @@ final class AsItems {
 			if (ph != null && ph.isKnown() && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
 			if (dying && (t = escapes()) != null) return t;
 			if ((t = hasteRun()) != null) return t;
+			if ((t = antiMagic()) != null) return t;
 			if (hard && (t = hardFight()) != null) return t;
 			if ((t = trapOnFoes()) != null) return t;
 			if ((t = thrown()) != null) return t;
@@ -425,6 +426,18 @@ final class AsItems {
 		return null;
 	}
 
+	/** The magic shooters (their bolts and gazes are what MagicImmune / AntiMagic stop: AntiMagic.RESISTS): shamans,
+	 *  warlocks, eyes, DM-100s, Yog's fists: in the fight and in line, the hero not at full health or two of them. */
+	static Target antiMagic() {
+		int n = 0; boolean eye = false;
+		for (Mob m : near) if ((m instanceof Shaman || m instanceof Warlock || m instanceof Eye || m instanceof DM100 || m instanceof YogFist) && Assist.line(m.pos, hp)) { n++; eye |= m instanceof Eye || m instanceof YogFist; }
+		if (n == 0 || H.buff(MagicImmune.class) != null || H.buff(ArcaneArmor.class) != null) return null;
+		if (n < 2 && hpf > 0.7f && !eye) return null;
+		ElixirOfArcaneArmor aa = has(ElixirOfArcaneArmor.class); if (aa != null) return use(aa, Potion.AC_DRINK, -1, "arcane armor: magic shooters");
+		ScrollOfAntiMagic am = has(ScrollOfAntiMagic.class); if (am != null && scrollsOk()) return use(am, Scroll.AC_READ, -1, "anti-magic: magic shooters");
+		return null;
+	}
+
 	/** Corruption by WandOfCorruption.onZap's own sum, from what shows: its level, its health bar, its debuffs. */
 	static boolean corruptSure(Mob m, Item holder) {
 		Wand w = holder instanceof MagesStaff ? staffWand() : (Wand) holder; if (w == null) return false;
@@ -547,6 +560,7 @@ final class AsItems {
 		if (t == null) return null;
 		if (H.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.class) != null) return null;   // (the bow: Assist's)
 		if (t instanceof Tengu || t instanceof Eye || t instanceof Scorpio) return null;   // (they dodge or outshoot it: Assist's rule)
+		Wand sw = staffWand(); if (sw != null && Assist.charged(sw, H.belongings.getItem(MagesStaff.class)) && Assist.attackWand(sw.getClass(), td)) return null;   // (the staff's bolt first: Assist's)
 		MissileWeapon best = null;
 		for (Item i : H.belongings.backpack) if (i instanceof MissileWeapon && !(i instanceof TippedDart) && ok(i, Item.AC_THROW) && (best == null || ((MissileWeapon) i).tier > best.tier)) best = (MissileWeapon) i;
 		if (best == null) return null;
