@@ -53,6 +53,8 @@ public final class FoeView {
 		special(f, m.getClass().getSimpleName(), m.HT);
 		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;
 		if (Tune.FOES) effects(f, f.name);
+		if (Tune.FOES && m instanceof Ghoul) for (Mob o : com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.mobs)   // (MT: a ghoul gets up again while its pair is near: Ghoul.die)
+			if (o != m && o instanceof Ghoul && o.isAlive() && com.shatteredpixel.shatteredpixeldungeon.Dungeon.level.heroFOV[o.pos]) { f.rageHp = (int) (f.ht / 2 * Tune.FOEFX); f.rageDmg = f.dmg; break; }
 		if (Tune.FOES && m instanceof GnollTrickster) f.dmg = f.dmg.shift(4);   // (MT: each dart that lands poisons, more each time: GnollTrickster.attackProc, ~4 a hit early on)
 		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; }   // (already raging: its shield is in shielding())
@@ -83,8 +85,6 @@ public final class FoeView {
 			case "Spinner": f.hitDirect = 5 * k; break;         // (half its bites poison for 7-8)
 			case "RipperDemon": f.hitDirect = 2 * k; break;     // (it leaps in for more)
 			case "Succubus": f.hitDirect = 1 * k; f.leech = 1; break;   // (charm: a blow lost, its health back)
-			case "Ghoul": f.rageHp = (int) (f.ht / 2 * k); f.rageDmg = f.dmg; break;   // (it gets up again beside its pair)
-			case "Monk": f.hitDirect = 1.5 * k; break;          // (disarms)
 		}
 	}
 
