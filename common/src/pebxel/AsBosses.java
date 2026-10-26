@@ -114,6 +114,7 @@ final class AsBosses {
 		if (st != tenguState) {   // (the flash and the floor redrawn: the traps shown before are gone)
 			tenguState = st;
 			if (trapMem != null) Arrays.fill(trapMem, false);
+			flicker.clear();
 		}
 		int W = l.width();
 		for (Heap h : l.heaps.valueList()) {
@@ -174,7 +175,7 @@ final class AsBosses {
 		Object st = ((PrisonBossLevel) L).state();
 		if (st != PrisonBossLevel.State.FIGHT_START && st != PrisonBossLevel.State.FIGHT_ARENA) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
-		if (tenguL != L) { tenguL = L; tenguAt = -1; tenguLooked.clear(); }
+		if (tenguL != L) { tenguL = L; tenguAt = -1; tenguLooked.clear(); flicker.clear(); }
 		Tengu tg = null; for (Mob m : mobs()) if (m instanceof Tengu && m.isAlive() && L.mobs.contains(m)) tg = (Tengu) m;
 		if (tg == null) return null;
 		boolean seen = L.heroFOV[tg.pos] && tg.invisible <= 0;
@@ -196,16 +197,17 @@ final class AsBosses {
 						int kk = L.distance(c, hp); if (kk < bk) { bk = kk; best = c; } }
 					if (best >= 0) return use(bl, Item.AC_THROW, best, "Tengu: blink beside him"); }
 			}
-			int s1 = kingStep(tg.pos, -1);
+			int s1 = tenguStep(tg.pos);
+			if (s1 < 0 && !danger[hp]) return wait(hp, "Tengu: wait for the blow to pass");
 			return s1 >= 0 ? new Target(s1, GO, "Tengu: to him (his aim halves beside him)") : null;
 		}
 		// out of sight: where he was last seen, then the cells not in sight
 		if (tenguAt >= 0 && (L.heroFOV[tenguAt] || L.distance(tenguAt, hp) <= 1)) { tenguLooked.add(tenguAt); tenguAt = -1; }
-		if (tenguAt >= 0) { int s1 = kingStep(tenguAt, -1); if (s1 >= 0) return new Target(s1, GO, "Tengu: to where he was last seen"); tenguAt = -1; }
+		if (tenguAt >= 0) { int s1 = tenguStep(tenguAt); if (s1 >= 0) return new Target(s1, GO, "Tengu: to where he was last seen"); tenguAt = -1; }
 		int best = -1, bk = INF;
 		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < INF && !L.heroFOV[c] && open[c] && !danger[c] && !tenguLooked.contains(c) && dist[c] < bk) { bk = dist[c]; best = c; }
 		if (best < 0) return null;
-		int s1 = kingStep(best, -1); if (s1 < 0) return null;
+		int s1 = tenguStep(best); if (s1 < 0) return null;
 		if (L.distance(best, hp) <= 1) tenguLooked.add(best);
 		return new Target(s1, GO, "Tengu: look for him");
 	}
@@ -244,6 +246,7 @@ final class AsBosses {
 			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !elec[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
 				int k = (dist[c] == 1 ? (obj >= 0 ? L.distance(c, obj) : 0) : 100 + dist[c] * 8) + (soon[c] ? 4 : 0);   // (out of a shocker's ring, not to its other half)   // (a step at a time: the game's own walk of two might cut through the lit ones)
 				if (k < bk) { bk = k; best = c; } }
+			if (best >= 0 && L instanceof PrisonBossLevel && dz[hp]) flicker.add(hp);   // (a cell dodged out of on Tengu's floor: not walked back into)
 			if (best >= 0) return new Target(best, GO, onElec && !dz[hp] ? "boss: off the electrified floor" : "boss: out of the blow's way");
 		}
 		return null;
@@ -571,7 +574,14 @@ final class AsBosses {
 
 	/** The first step to beside c, round the immune king's side (each cell beside him costs 6 more) and off the
 	 *  summoning circles and other blows' cells. */
-	static int kingStep(int c, int king) {
+	static int kingStep(int c, int king) { return kingStep(c, king, false); }
+	/** noBlow: never through a cell a blow is coming at (Tengu's: the walk in through a bomb's or a flame's cells and
+	 *  the dodge back out took turns for ever, the floor's timeouts). */
+	static boolean noSoon; static final Set<Integer> flicker = new HashSet<>();
+	/** To beside c for Tengu: off the blows' cells and a shocker's ring (lit every other turn: stepped into dark, dodged
+	 *  out of lit, for ever), else off the blows' cells only. */
+	static int tenguStep(int c) { noSoon = true; int s = kingStep(c, -1, true); noSoon = false; return s >= 0 ? s : kingStep(c, -1, true); }
+	static int kingStep(int c, int king, boolean noBlow) {
 		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
 		int[] cost = new int[N]; Arrays.fill(cost, INF); int[] first = new int[N];
 		PriorityQueue<int[]> q = new PriorityQueue<>((x, y) -> Integer.compare(x[0], y[0]));
@@ -582,6 +592,7 @@ final class AsBosses {
 			if (u != hp && L.adjacent(u, c) && cost[u] < bs) { bs = cost[u]; best = u; }
 			for (int k : PathFinder.NEIGHBOURS8) { int n = u + k;
 				if (n < 0 || n >= N || Math.abs(n % W - u % W) > 1 || !L.passable[n] || L.avoid[n] || !(known[n] || L.heroFOV[n]) || (seenChar(n) != null && n != hp)) continue;
+				if (noBlow && n < dz.length && (dz[n] || (noSoon && (soon[n] || flicker.contains(n))))) continue;
 				int nc = cost[u] + 1 + (danger[n] ? 8 : 0) + (king >= 0 && L.adjacent(n, king) ? 6 : 0);
 				if (nc < cost[n]) { cost[n] = nc; first[n] = u == hp ? n : first[u]; q.add(new int[]{nc, n}); } }
 		}
