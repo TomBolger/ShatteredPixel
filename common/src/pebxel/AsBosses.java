@@ -147,6 +147,7 @@ final class AsBosses {
 		if (DBG && (L instanceof PrisonBossLevel || L instanceof CavesBossLevel || L instanceof com.shatteredpixel.shatteredpixeldungeon.levels.CityBossLevel)) dump();
 		if (PYLON && L instanceof CavesBossLevel) for (Mob m : mobs()) if (m instanceof DM300 && m.isAlive() && ((DM300) m).isSupercharged()) {   // (its own plan dodges: the dodge off the electrified floor and the walk to the pylon over it took turns, for ever)
 			Target t = dm300((DM300) m); if (t != null) return t; }
+		if (TENGU && tenguCommit()) { Target tc = tenguPlan(); if (tc != null) return tc; }
 		Target dg = dodge(); if (dg != null) return dg;
 		if (!Dungeon.bossLevel()) return null;
 		Target t = null;
@@ -175,7 +176,7 @@ final class AsBosses {
 		Object st = ((PrisonBossLevel) L).state();
 		if (st != PrisonBossLevel.State.FIGHT_START && st != PrisonBossLevel.State.FIGHT_ARENA) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
-		if (tenguL != L) { tenguL = L; tenguAt = -1; tenguLooked.clear(); flicker.clear(); }
+		if (tenguL != L) { tenguL = L; tenguAt = -1; tenguLooked.clear(); flicker.clear(); commitUntil = -1; }
 		Tengu tg = null; for (Mob m : mobs()) if (m instanceof Tengu && m.isAlive() && L.mobs.contains(m)) tg = (Tengu) m;
 		if (tg == null) return null;
 		boolean seen = L.heroFOV[tg.pos] && tg.invisible <= 0;
@@ -263,7 +264,7 @@ final class AsBosses {
 
 	// =============================================================================================================
 	// the boss kit (strategy-reference 4.0): the floor before a boss's done, plan A the stairs down: the Ankh blessed
-	// (WP-B's AsEconomy.blessAnkh, when it's there), the Waterskin filled from the dew in sight and the tall grass near
+	// (WP-B's AsEconomy.blessAnkh), the Waterskin filled from the dew in sight and the tall grass near
 	// (a few dozen turns at most, never short of food). Rest and the region's upgrades: Rules' "boss next" rows.
 	// =============================================================================================================
 	static final boolean PREP = opt("BPREP", true);
@@ -291,13 +292,8 @@ final class AsBosses {
 		return new Target(best, GO, "boss next: through the grass for dew");
 	}
 
-	/** WP-B's Ankh blessing (AsEconomy.blessAnkh(): a Target, or null), called by name so either side builds alone. */
-	static Target blessAnkh() {
-		if (!ankhLooked) { ankhLooked = true; try { ankhM = Class.forName("pebxel.AsEconomy").getDeclaredMethod("blessAnkh"); ankhM.setAccessible(true); } catch (Throwable e) { ankhM = null; } }
-		if (ankhM == null) return null;
-		try { Object t = ankhM.invoke(null); return t instanceof Target ? (Target) t : null; } catch (Throwable e) { return null; }
-	}
-	static boolean ankhLooked; static java.lang.reflect.Method ankhM;
+	/** WP-B's Ankh blessing (AsEconomy.blessAnkh: the full Waterskin poured on it), then the skin filled again. */
+	static Target blessAnkh() { try { return AsEconomy.blessAnkh(); } catch (Throwable e) { lastError = e; return null; } }
 
 	// =============================================================================================================
 	// Yog-Dzewa (strategy-reference 4.5; YogDzewa, YogFist). Yog sits for good at the seat (the exit + 3 rows), his
@@ -580,7 +576,19 @@ final class AsBosses {
 	static boolean noSoon; static final Set<Integer> flicker = new HashSet<>();
 	/** To beside c for Tengu: off the blows' cells and a shocker's ring (lit every other turn: stepped into dark, dodged
 	 *  out of lit, for ever), else off the blows' cells only. */
-	static int tenguStep(int c) { noSoon = true; int s = kingStep(c, -1, true); noSoon = false; return s >= 0 ? s : kingStep(c, -1, true); }
+	static int tenguStep(int c) {
+		noSoon = true; int s = kingStep(c, -1, true); noSoon = false; if (s >= 0) return s;
+		s = kingStep(c, -1, true);
+		if (s >= 0) commitUntil = Actor.now() + 3;   // (no way round the sparks: through them, no dodging back out for a few turns)
+		return s;
+	}
+	static float commitUntil = -1;
+	/** Committed to the walk through the sparks to Tengu, and no bomb of his lying in sight (those are dodged). */
+	static boolean tenguCommit() {
+		if (!(L instanceof PrisonBossLevel) || Actor.now() > commitUntil) return false;
+		for (Heap h : L.heaps.valueList()) if (h.seen) for (Item i : h.items) if (i instanceof Tengu.BombAbility.BombItem) return false;
+		Blob f = L.blobs.get(Tengu.FireAbility.FireBlob.class); return f == null || f.volume == 0;
+	}
 	static int kingStep(int c, int king, boolean noBlow) {
 		int hp = Dungeon.hero.pos, N = L.length(), W = L.width();
 		int[] cost = new int[N]; Arrays.fill(cost, INF); int[] first = new int[N];
