@@ -90,7 +90,7 @@ def summary(path):
         kc = collections.Counter(); fc = collections.Counter(); hp0 = []; heal = esc = unk = 0
         for g in b:
             d = g["death"]; kc[d.split(" killer ")[1].split()[0]] += 1
-            for x in re.search(r" foes (\S*)", d)[1].split(","):
+            for x in re.search(r" foes ?(\S*) heal", d)[1].split(","):
                 if x: fc[x] += 1
             hp0.append(int(re.search(r" hp0 (-?\d+)", d)[1]))
             heal += int(re.search(r" heal (\d+)", d)[1]) > 0; esc += int(re.search(r" esc (\d+)", d)[1]) > 0
