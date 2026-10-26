@@ -34,6 +34,10 @@ final class AsWeapon {
 	static Item target(Hero h, Item dflt) {
 		if (!ON) return dflt;
 		Armor a = h.belongings.armor(); KindOfWeapon w = h.belongings.weapon();
+		if (pebxel.bot.ScrollPlan.ON) {   // (UP: the expected-value planner decides; the Mage's staff first to +3 stays the guide's)
+			if (w instanceof MagesStaff && w.level() < STAFF1 && dflt == w) return dflt;
+			Item t = pebxel.bot.ScrollPlan.target(h); why = pebxel.bot.ScrollPlan.why; return t;
+		}
 		boolean aOk = a != null && !(a instanceof ClassArmor) && a.isUpgradable() && !(a.cursed && a.cursedKnown) && a.levelKnown;
 		if (dflt == null || !(dflt == a || dflt == w)) return dflt;   // (a hold, or a piece in the pack: the plan's own call)
 		if (w instanceof MagesStaff && w.level() < STAFF1) return dflt;   // (the Mage: the staff first, to +3)
@@ -56,7 +60,7 @@ final class AsWeapon {
 	// beat any unknown tier-4 as it stood, and the one point of STR it lacked. As HE's armour plan does for armour: each
 	// weapon counted at the level it will reach (its shown level plus FUT scrolls), its need at that level (upgrades lower
 	// it), and worn once it hits as hard as the worn one does now.
-	static final boolean PLAN = opt("MDWPLAN", false);   // (off: MD-fin1, 288 full games each, 15.79 on against 16.22 off; MD-lw1 15.77 / 16.19. Kept for tuning)
+	static final boolean PLAN = opt("MDWPLAN", pebxel.bot.ScrollPlan.ON && pebxel.bot.ScrollPlan.WPLAN);   // (UP: on with the planner, which commits the weapon)   // (off: MD-fin1, 288 full games each, 15.79 on against 16.22 off; MD-lw1 15.77 / 16.19. Kept for tuning)
 	static { if (PLAN && ON) pebxel.bot.GearValue.weaponElsewhere = true; }
 	static final int FUT = optInt("MDWFUT", 2), HYST = optInt("MDWHYST", 10), DRK = optInt("MDWDR", 50);   // (scrolls ahead counted; percent a new one must win by)
 
@@ -89,6 +93,7 @@ final class AsWeapon {
 	/** The weapon the coming scrolls go into: the worn one, or a better one carried. */
 	static Item commit(Hero h) {
 		KindOfWeapon w = h.belongings.weapon();
+		if (pebxel.bot.ScrollPlan.ON) { Item c = pebxel.bot.ScrollPlan.commitWeapon(h); pebxel.bot.GearValue.keepWeapon = c; return c; }
 		if (!PLAN || !(w instanceof MeleeWeapon) || w instanceof MagesStaff || (w.cursed && w.cursedKnown)) return w;
 		Item best = w; double bv = ahead(h, (MeleeWeapon) w) * (1 + HYST / 100.0);
 		for (Item i : h.belongings.backpack) if (usable(i)) { double v = ahead(h, (MeleeWeapon) i); if (v > bv) { bv = v; best = i; } }
@@ -102,12 +107,18 @@ final class AsWeapon {
 		if (w instanceof MagesStaff || (w != null && w.cursed && w.cursedKnown)) return null;
 		if (w != null && !(w instanceof MeleeWeapon)) return null;
 		Item c = commit(h);
+		if (pebxel.bot.ScrollPlan.ON) {   // (UP: the committed weapon, once it beats the worn one on this floor; an unknown one only with a curse liftable)
+			if (c == null || c == w || !(c instanceof MeleeWeapon)) return null;
+			if (!(c.cursedKnown && !c.cursed) && !liftable(h)) return null;
+			return pebxel.bot.ScrollPlan.better(h, c) ? c : null;
+		}
 		if (w == null) { Item b = null; double bv = 0; for (Item i : h.belongings.backpack) if (usable(i)) { double v = worth(h, (MeleeWeapon) i, Math.max(0, HeroView.visLevel(i))); if (v > bv) { bv = v; b = i; } } return b; }
 		if (c == null || c == w) return null;
 		double nc = worth(h, (MeleeWeapon) c, Math.max(0, HeroView.visLevel(c))), nw = worth(h, (MeleeWeapon) w, Math.max(0, HeroView.visLevel(w)));
 		return nc > 0 && nc >= nw ? c : null;
 	}
 	static String wearWhy(Hero h, Item c) {
+		if (pebxel.bot.ScrollPlan.ON) return "weapon plan: " + c.name() + " (the one the upgrades go into; better on this floor)";
 		return String.format(java.util.Locale.ROOT, "weapon plan: %s (about %.0f a blow with the scrolls ahead)", c.name(), worth(h, (MeleeWeapon) c, Math.max(0, HeroView.visLevel(c)) + FUT));
 	}
 }

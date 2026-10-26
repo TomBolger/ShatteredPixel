@@ -66,6 +66,7 @@ final class AsGear {
 
 	/** The armour the coming upgrades should go into: the worn one, or a better one carried. */
 	static Armor commit(Hero h) {
+		if (pebxel.bot.ScrollPlan.ON) { Armor c = pebxel.bot.ScrollPlan.commitArmor(h); pebxel.bot.GearValue.keepArmor = c; return c; }   // (UP: the expected-value planner)
 		Armor cur = h.belongings.armor(), best = cur; double bv = worth(h, cur) + HYST / 100.0;
 		for (Item i : h.belongings.backpack) if (i instanceof Armor) { double v = worth(h, (Armor) i); if (v > bv) { bv = v; best = (Armor) i; } }
 		pebxel.bot.GearValue.keepArmor = best;
@@ -101,6 +102,7 @@ final class AsGear {
 	/** The Scroll of Upgrade's target among the armour: the commit piece, worn or carried (carried: each scroll
 	 *  raises its block and lowers its STR need till it beats the worn one), or null to hold. */
 	static Item upgradeOn(Hero h) {
+		if (pebxel.bot.ScrollPlan.ON) { commit(h); return pebxel.bot.ScrollPlan.target(h); }   // (UP: armour, weapon or hold, by the odds)
 		Armor c = commit(h);
 		if (c == null) return null;
 		if (HOLD1 && c.tier == 1 && !(c instanceof ClassArmor) && !bossNext()) return null;

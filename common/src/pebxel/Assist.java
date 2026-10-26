@@ -1941,7 +1941,7 @@ public final class Assist {
 			on = AsWeapon.target(H, on);   // (MD: the armour to a mark, then the weapon close behind)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
-			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
+			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, pebxel.bot.ScrollPlan.ON ? AsWeapon.why : "upgrade"); t.on = on; return t; }
 		}
 		if (scrollsOk) {   // the known scrolls that sat unread: Remove Curse, Identify, Magic Mapping
 			boolean cw = false; Item unid = null;
@@ -1988,7 +1988,7 @@ public final class Assist {
 		if (AsGear.ON && !foeInView) { Armor g = AsGear.wear(H); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, AsGear.why(H, g)); }   // (HE: the armour plan; GearValue keeps the weapon)
 		if (OGEAR && !foeInView) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
 		if (!OGEAR) for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)
-			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff || (AsGear.ON && i instanceof Armor)) continue;
+			if (!(i instanceof Armor || i instanceof MeleeWeapon) || i instanceof ClassArmor || i instanceof MagesStaff || (AsGear.ON && i instanceof Armor) || (AsWeapon.PLAN && pebxel.bot.ScrollPlan.ON && i instanceof MeleeWeapon)) continue;
 			Item cur = i instanceof Armor ? H.belongings.armor() : H.belongings.weapon();
 			if (cur != null && cur.cursed && cur.cursedKnown) continue;
 			if ((i.cursedKnown && i.cursed) || (i.levelKnown && i.level() < 0)) continue;
