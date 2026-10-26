@@ -115,6 +115,7 @@ final class Rules {
 		// ready eye's sight (it comes round); at it between beams (4-6 turns it can't fire).
 		propose("eye: out of its sight before it fires", AsEyes::dodgeWhen, 0, AsEyes::dodgeTarget),
 		propose("eye: to cover before it charges", AsEyes::hideWhen, 0, AsEyes::hideTarget),
+		propose("eye: to a spot with cover a step off", AsEyes::spotWhen, 0, AsEyes::spotTarget),
 		veto(AsEyes.NOSTEP, AsEyes::stepVeto),
 		veto(AsEyes.NOCHARGED, AsEyes::chargedVeto),
 		propose("eye: wait in cover", AsEyes::holdWhen, 0, AsEyes::holdTarget),

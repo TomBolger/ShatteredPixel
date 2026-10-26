@@ -40,9 +40,10 @@ final class AsEyes {
 	private AsEyes() {}
 
 	static final boolean ON = opt("EYES", true);
-	static final int COOL = optInt("EYECOOL", 3), MEM = optInt("EYEMEM", 10), HIDEMAX = optInt("EYEHIDE", 4);
+	static final int COOL = optInt("EYECOOL", 3), MEM = optInt("EYEMEM", 10), HIDEMAX = optInt("EYEHIDE", 4), HIDEHUNT = optInt("EYEHIDEH", 2);
 	static final boolean STEP = opt("EYESTEP", true), HIDE = opt("EYEHIDEON", true), HOLD = opt("EYEHOLD", true), CLOSE = opt("EYECLOSE", true), TELE = opt("EYETELE", true);
 	static final double DODGEV = optInt("EYEDODGEV", 200);
+	static final boolean TWO = opt("EYETWO", false);
 	static final boolean DBGE = opt("EYEDBG", false);
 
 	/** An eye as seen: where, charged or not, when it was last seen charged and when it fired (the charge gone). */
@@ -68,6 +69,7 @@ final class AsEyes {
 			if (c) s.chargedAt = now;
 			s.charged = c; s.pos = m.pos; s.at = now;
 		}
+		if (DBGE && !seen.isEmpty()) { StringBuilder b = new StringBuilder("    EYES t" + (int) now + " hp@" + h.pos + ":"); for (Seen s : seen.values()) b.append(' ').append(s.pos).append(s.at == now ? "" : "(old)").append(s.charged ? " CHARGED" : cooling(s) ? " cool" : " ready").append(targets(s, s.pos, h.pos) ? " SEES" : "").append(" fired@").append((int) s.firedAt); System.out.println(b); }
 		seen.values().removeIf(s -> !s.m.isAlive() || now - s.at > MEM || now < s.at || (s.at < now && L.heroFOV[s.pos] && !(seenChar(s.pos) == s.m)));
 	}
 	/** Can't fire for a while: it fired lately (4-6 of its turns' cooldown; COOL counted safe). */
@@ -77,10 +79,9 @@ final class AsEyes {
 	// =============================================================================================================
 	// what an eye sees and where its beam goes (the known map; the door the hero stands in shuts when he steps off)
 	// =============================================================================================================
-	static int heroDoor() {
-		int hp = Dungeon.hero.pos;
-		return L.map[hp] == Terrain.OPEN_DOOR && L.heaps.get(hp) == null ? hp : -1;
-	}
+	static int heroDoor() { return doorAt(Dungeon.hero.pos); }
+	/** c, if it's a door that shuts when the hero steps off it (no heap holding it open), else -1. */
+	static int doorAt(int c) { return c >= 0 && (L.map[c] == Terrain.OPEN_DOOR || L.map[c] == Terrain.DOOR) && L.heaps.get(c) == null ? c : -1; }
 	static final Map<Long, boolean[]> fovs = new HashMap<>(); static float fovT = -1; static int fovDec = -1;
 	/** The eye's field of view from p (unknown cells taken as see-through), the hero's door shut or not. */
 	static boolean[] fov(Mob m, int p, int door) {
@@ -119,9 +120,11 @@ final class AsEyes {
 		finally { if (door >= 0) L.solid[door] = was; }
 	}
 	/** An eye at p would aim at the hero standing at c (sees him, in its beam's line or beside it). */
-	static boolean targets(Seen s, int p, int c) {
+	static boolean targets(Seen s, int p, int c) { return targetsFrom(s, p, c, Dungeon.hero.pos); }
+	/** The same with the hero come to c from the cell leave (a door there shut behind him). */
+	static boolean targetsFrom(Seen s, int p, int c, int leave) {
 		if (p == c) return false;
-		int door = c != Dungeon.hero.pos ? heroDoor() : -1;
+		int door = c != leave ? doorAt(leave) : -1;
 		if (distance(p, c) > s.m.viewDistance) return false;
 		if (!fov(s.m, p, door)[c]) return false;
 		return adjacent(p, c) || reach(p, c, door);
@@ -147,6 +150,12 @@ final class AsEyes {
 				d[v] = d[u] + 1; q[qt++] = v; } }
 		return d;
 	}
+	/** The step beside the hero on a shortest free walk to c (d: steps()). */
+	static int parent(int c, int[] d) {
+		int hp = Dungeon.hero.pos; int W = L.width();
+		for (int k : PathFinder.NEIGHBOURS8) { int n = hp + k; if (n >= 0 && n < L.length() && Math.abs(n % W - hp % W) <= 1 && d[n] == 1 && adjacent(n, c) && d[c] == 2) return n; }
+		return -1;
+	}
 	static List<Seen> charged() { List<Seen> l = new ArrayList<>(); float now = Actor.now(); for (Seen s : seen.values()) if (s.charged && s.at == now) l.add(s); return l; }
 	static List<Seen> readyNow() { List<Seen> l = new ArrayList<>(); float now = Actor.now(); for (Seen s : seen.values()) if (ready(s) && s.at == now) l.add(s); return l; }
 	static int melee(int c) { int n = 0; for (Mob m : mobs()) if (hostile(m) && !(m instanceof Eye) && adjacent(m.pos, c)) n++; return n; }
@@ -164,7 +173,7 @@ final class AsEyes {
 	static Target dodgeTarget() {
 		List<Seen> ch = charged(), rd = readyNow(); Hero h = Dungeon.hero; int hp = h.pos; float now = Actor.now();
 		boolean fresh = true; for (Seen s : ch) if (hits(s, hp) && s.chargeSeen < now) fresh = false;   // (seen charged before: one step left)
-		int[] d = steps(fresh ? 2 : 1);
+		int[] d = steps(TWO && fresh ? 2 : 1);   // (ST-1 logs: the beam came after the hero's first step every time; two steps only with AS_EYETWO)
 		int best = -1; double bk = Double.MAX_VALUE;
 		for (int c = 0; c < L.length(); c++) {
 			if (d[c] >= INF || c == hp) continue;
@@ -184,6 +193,7 @@ final class AsEyes {
 			}
 			return null;
 		}
+		if (d[best] > 1) { int p = parent(best, d); if (p >= 0) best = p; }   // (the game's own walk there may pass through its sight: my first step, then on)
 		Target t = new Target(best, GO, "eye: out of its sight before it fires");
 		t.hint = DODGEV;
 		return t;
@@ -200,16 +210,17 @@ final class AsEyes {
 		if (c.t.kind == GO || c.t.kind == PICKUP) { int dst = c.t.cell; boolean ok = true; for (Seen s : rd) if (targets(s, s.pos, dst)) ok = false; if (ok && walk(dst) <= 2) return false; }   // (on its way out of sight already)
 		return coverNear(rd, hp) < 0;
 	}
-	/** A cell within 2 steps of c out of every ready eye's sight (the escape after a charge), or -1. */
+	/** A cell a step from c out of every ready eye's sight (the escape after a charge: one step before the beam), or -1. */
 	static int coverNear(List<Seen> rd, int c0) {
 		int hp = Dungeon.hero.pos; if (c0 != hp) return -1;
-		int[] d = steps(2);
+		int[] d = steps(1);
 		for (int c = 0; c < L.length(); c++) { if (d[c] >= INF || c == hp) continue; boolean ok = true; for (Seen s : rd) if (targets(s, s.pos, c)) { ok = false; break; } if (ok) return c; }
 		return -1;
 	}
 	static Target hideTarget() {
 		List<Seen> rd = readyNow(); Hero h = Dungeon.hero; int hp = h.pos;
-		int[] d = steps(HIDEMAX);
+		boolean hunted = false; for (Seen s : rd) if (hunting(s.m)) hunted = true;
+		int[] d = steps(hunted ? HIDEHUNT : HIDEMAX);   // (one hunting him charges on its turn: cover farther than 2 is a beam taken on the way)
 		int best = -1; double bk = Double.MAX_VALUE;
 		for (int c = 0; c < L.length(); c++) {
 			if (d[c] >= INF || c == hp) continue;
@@ -221,6 +232,42 @@ final class AsEyes {
 		if (best < 0) return null;
 		Target t = new Target(best, GO, "eye: to cover before it charges (" + d[best] + " steps)");
 		t.hint = 0.3 + Math.max(1, Brain.R) * Math.min(1, 40.0 / Math.max(1, h.HP)) * 0.6;
+		return t;
+	}
+
+	/** PROPOSE: an eye near and not charged, no cover a step from the hero (beside it, its charge is a beam taken): a
+	 *  step to a cell that has cover a step off (a door to step back through, a corner), beside it if it can be. */
+	static final boolean SPOT = opt("EYESPOT", true);
+	static Seen spotEye; static int spotCell = -1;
+	static boolean spotWhen(Cand c) {
+		spotCell = -1;
+		if (!ON || !SPOT || c != Rules.planA || Dungeon.hero.rooted || c.t == null) return false;
+		if (c.t.why != null && c.t.why.startsWith("eye:")) return false;
+		note(); Hero h = Dungeon.hero; int hp = h.pos; float now = Actor.now();
+		Seen e = null; for (Seen s : seen.values()) if (s.at == now && !s.charged && distance(s.pos, hp) <= 3 && (e == null || distance(s.pos, hp) < distance(e.pos, hp))) e = s;
+		if (e == null || !targets(e, e.pos, hp)) return false;
+		if (coverFrom(e, hp)) return false;
+		int best = -1; double bk = Double.MAX_VALUE;
+		for (int k : PathFinder.NEIGHBOURS8) { int x = hp + k;
+			if (!free(x) || !adjacent(x, hp) || x == e.pos) continue;
+			if (!coverFrom(e, x)) continue;
+			double v = (adjacent(x, e.pos) ? 0 : 3) + melee(x) * 5 + (L.water[x] ? 2 : 0);
+			if (v < bk) { bk = v; best = x; } }
+		spotEye = e; spotCell = best;
+		return best >= 0;
+	}
+	/** From x, a free cell a step off out of the eye's sight (the door at x shut behind him). */
+	static boolean coverFrom(Seen e, int x) {
+		int W = L.width();
+		for (int k : PathFinder.NEIGHBOURS8) { int n = x + k;
+			if (n < 0 || n >= L.length() || Math.abs(n % W - x % W) > 1 || n == e.pos || !(free(n) || n == Dungeon.hero.pos)) continue;
+			if (!targetsFrom(e, e.pos, n, x)) return true; }
+		return false;
+	}
+	static Target spotTarget() {
+		if (spotCell < 0) return null;
+		Target t = new Target(spotCell, GO, "eye: to a spot with cover a step off (" + (ready(spotEye) ? "ready" : "between beams") + ")");
+		t.hint = 0.2 + Math.max(1, Brain.R) * Math.min(1, 40.0 / Math.max(1, Dungeon.hero.HP)) * 0.4;
 		return t;
 	}
 
@@ -247,7 +294,9 @@ final class AsEyes {
 		if (!ON) return false;
 		Target t = c.t; if (t == null || t.cell < 0) return false;
 		if (t.why != null && t.why.startsWith("eye: out of its sight")) return false;
-		note(); List<Seen> ch = charged(); if (ch.isEmpty()) return false;
+		note(); List<Seen> ch = new ArrayList<>(); float now = Actor.now();
+		for (Seen s : seen.values()) if (s.charged && now - s.chargedAt <= 2 && now >= s.chargedAt) ch.add(s);   // (one out of sight lately charged too: it fires on its turn)
+		if (ch.isEmpty()) return false;
 		Hero h = Dungeon.hero; int hp = h.pos; if (h.rooted || t.cell == hp) return false;
 		int first;
 		if (t.kind == GO || t.kind == PICKUP) first = adjacent(t.cell, hp) ? t.cell : firstStep(t.cell);
@@ -300,7 +349,7 @@ final class AsEyes {
 		if (!ON || !STEP || out == null || out.isEmpty()) return;
 		try {
 			Target t = out.get(0);
-			if ((t.kind != GO && t.kind != PICKUP) || t.cell < 0) return;
+			if ((t.kind != GO && t.kind != PICKUP && !(t.kind == ENEMY && t.action == null)) || t.cell < 0) return;
 			if (t.why != null && t.why.startsWith("eye: out of its sight")) return;   // (the dodge: both steps before the beam)
 			Hero h = Dungeon.hero; int hp = h.pos;
 			if (t.cell == hp || adjacent(t.cell, hp)) return;
