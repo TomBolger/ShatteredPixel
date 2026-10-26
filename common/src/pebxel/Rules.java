@@ -84,6 +84,8 @@ final class Rules {
 		// Terror (CB-8: a known Teleportation in 30 of 85 deaths from 16, Invisibility in 17)
 		propose("stealth: drink rather than die, the curse counted", AsStealth::drinkWhen, 0, AsStealth::drinkTarget),
 		propose("stealth: away rather than die", AsStealth::awayWhen, 0, AsStealth::awayTarget),
+		veto("stealth: no trading bolts with a cursed caster", AsStealth::tradeVeto),
+		propose("stealth: out of the cursed caster's line", c -> c == Rules.planA && c.veto && c.note.contains("no trading bolts"), 0, AsFire::outTarget),
 		// -- getting away by the stairs ------------------------------------------------------------------------------
 		// (BR-a1: a starving hero bounced between the floors for ever, up from the foe by the stairs, down again as the
 		// floor above was done.) The stairs up are an escape only with a rest to come (food for it), not straight after

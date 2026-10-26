@@ -75,6 +75,23 @@ final class AsStealth {
 		return t;
 	}
 
+	/** VETO (the climb): a shot or zap at a cursed caster from in its line (CB-8: a Huntress on 9 shot a DM-100 five times,
+	 *  140 health to 4: its bolt is 13-45 there, her arrow far less; the lookahead, the curse left out, called it even),
+	 *  with a cell out of every line a few steps off (AsFire: out of its line, it comes round to be met beside him). */
+	static final boolean TRADE = opt("STTRADE", true);
+	static boolean tradeVeto(Cand c) {
+		if (!ON || !TRADE) return false;
+		Target t = c.t; if (t == null || t.kind != USE || t.cell < 0 || t.action == null) return false;
+		if (!(t.action.equals(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.AC_SHOOT) || t.action.equals(com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand.AC_ZAP)
+				|| t.action.equals(com.shatteredpixel.shatteredpixeldungeon.items.weapon.melee.MagesStaff.AC_ZAP) || t.action.equals(Item.AC_THROW))) return false;
+		if (t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb || t.item instanceof Potion) return false;   // (a bomb or a potion: one blow that ends it)
+		com.shatteredpixel.shatteredpixeldungeon.actors.Char ch = seenChar(t.cell);
+		if (!(ch instanceof Mob) || !AsFire.shooter((Mob) ch) || AscensionChallenge.statModifier(ch) < 2) return false;
+		int hp = Dungeon.hero.pos; if (distance(ch.pos, hp) <= 1 || Dungeon.hero.rooted) return false;
+		AsFire.note(); if (AsFire.fireAt(hp, false) <= 0) return false;
+		return AsFire.outTarget() != null;
+	}
+
 	/** PROPOSE: Rules' "drink rather than die" with the climb's curse counted (it isn't in the lookahead's numbers). */
 	static boolean drinkWhen(Cand c) {
 		if (!ON || !DRINK || c != Rules.planA || c.role == Brain.Role.HEAL || Rules.healPot() == null || Brain.healing > 0) return false;
