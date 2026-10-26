@@ -129,6 +129,8 @@ public final class HeroView {
 				}
 			}
 		}
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
+		if (hb != null && lvlPlus == 0) { Object hl = field(hb, "healingLeft"); if (hl instanceof Integer) f.healLeft = (Integer) hl; }   // (shown: the buff's icon and its description)
 		PotionOfHealing heal = h.belongings.getItem(PotionOfHealing.class);
 		if (heal != null && heal.isKnown()) { f.heals = heal.quantity(); f.healAmount = Math.round(0.8f * f.ht + 14); }
 		return f;

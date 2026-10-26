@@ -51,7 +51,9 @@ public final class FoeView {
 			} finally { Random.popGenerator(); }
 		}
 		special(f, m.getClass().getSimpleName(), m.HT);
-		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
+		if (m instanceof GreatCrab && !f.asleep && Tune.CRAB) f.blockAll = true;
+		if (Tune.FOES && m instanceof GnollTrickster) f.dmg = f.dmg.shift(4);   // (MT: each dart that lands poisons, more each time: GnollTrickster.attackProc, ~4 a hit early on)
+		if (Tune.FOES && m instanceof Swarm && m.HP > 8) f.delay /= 1.6;   // (MT: each blow that doesn't kill it splits it: more of them biting, Swarm.defenseProc)   // (MT: GreatCrab.defenseSkill / damage: every blow, shot and zap from the one it faces, as the screen shows: "blocks")
 		if (m instanceof Brute && rage(m)) { f.rageHp = 0; }   // (already raging: its shield is in shielding())
 		return f;
 	}

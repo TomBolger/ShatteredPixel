@@ -20,6 +20,8 @@ public final class Tune {
 	// drunk with a foe after the hero or harm to come whatever the visible fight's odds (what the model can't see: more coming)
 	public static final double HEALCOST = get("OHEALCOST", 2) / 100, HEALLOW = get("OHEALLOW", 25);
 	public static final boolean CRAB = on("OCRAB", true);   // (MT: the Great Crab's block counted)
+	public static final boolean FOES = on("OFOES", true);   // (MT: the trickster's poison, the swarm's splitting)
+	public static final boolean HEALTICK = on("OHEALTICK", true);   // (MT: Healing heals over turns, as the game's Healing buff does)
 	public static final boolean SLOTS = on("OSLOTS", true);   // (MT: FightModel counts the room beside the hero)
 	public static final boolean HEAL2 = on("OHEAL2", true);   // (off: O's first rule, P(death) >= ODEATH)
 	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;

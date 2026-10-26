@@ -234,9 +234,11 @@ public final class Assist {
 	 *  (FightModel.healAt) says below this health, or low with a foe after the hero or harm to come. */
 	static boolean oHeal(boolean adj, int hard) {
 		if (!Tune.HEAL2) return oLosing(ODEATH);
-		double dot = HeroView.dot(H);
-		if (H.HP <= dot + 1) return true;
-		if (H.HP * 100 < H.HT * Tune.HEALLOW && (adj || hard > 0 || dot > 0)) return true;
+		double dot = HeroView.dot(H); int hl = 0;
+		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
+		if (hb != null && field(hb, "healingLeft") instanceof Integer) hl = (Integer) field(hb, "healingLeft");   // (one already drunk, still healing: not a second at once)
+		if (H.HP + hl / 2 <= dot + 1) return true;
+		if (hl == 0 && H.HP * 100 < H.HT * Tune.HEALLOW && (adj || hard > 0 || dot > 0)) return true;
 		List<Mob> fs = oFightList(); if (fs.isEmpty()) return false;
 		return H.HP < H.HT * FightModel.healAt(H, fs);
 	}
@@ -1702,7 +1704,12 @@ public final class Assist {
 		for (Mob m : mobs()) { if (!enemy(m) || m.state == m.PASSIVE || m instanceof NPC) continue; seen = true;
 			int d = distance(m.pos, hp); if (d <= 3) near = true; if (d <= 1) adj = true;
 			hard += boss(m) ? 2 : hunting(m) ? 1 : 0; }
-		if (foul(hp) || burning()) return null;   // out of the gas / fire first
+		if (foul(hp) || burning()) {   // out of the gas / fire first
+			PotionOfHealing hp0 = bag(PotionOfHealing.class);   // (MT: unless it would kill first: 5 of 8 burned deaths in MT-b1 held a known Healing)
+			if (OFIGHT && hp0 != null && hp0.isKnown() && H.HP * 100 < H.HT * Tune.HEALMAX && (H.HP <= HeroView.dot(H) + 3 || H.HP * 5 < H.HT) && H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class) == null)
+				return use(hp0, Potion.AC_DRINK, -1, "burning / gas: heal");
+			return null;
+		}
 		if (ambushing && H.HP * 3 > H.HT) return null;   // lying in wait: nothing that would give it away
 		boolean scrollsOk = !blind();
 		// eat once starving (never with one within 3); starving, the stairs next: down first
