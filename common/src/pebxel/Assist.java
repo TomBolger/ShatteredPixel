@@ -487,8 +487,8 @@ public final class Assist {
 		if (h.belongings.ring() != null) worn.add(h.belongings.ring());
 		if (h.belongings.artifact() != null) worn.add(h.belongings.artifact());
 		if (h.belongings.misc() != null) worn.add(h.belongings.misc());
-		if (src instanceof ScrollOfUpgrade && AsGear.ON && !(STAFFUP && h.belongings.weapon() instanceof MagesStaff && h.belongings.weapon().level() < 3)) { Item u = AsGear.commit(h); if (u != null && sel.itemSelectable(u)) return u; }   // (HE: the armour plan)
-		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = UpgradePlan.target(h); if (u != null && sel.itemSelectable(u)) return u; }
+		if (src instanceof ScrollOfUpgrade && AsGear.ON && !(STAFFUP && h.belongings.weapon() instanceof MagesStaff && h.belongings.weapon().level() < 3)) { Item u = AsWeapon.target(h, AsGear.commit(h)); if (u != null && sel.itemSelectable(u)) return u; }   // (HE: the armour plan; MD: the weapon its share)
+		if (src instanceof ScrollOfUpgrade && OUPG) { Item u = AsWeapon.target(h, UpgradePlan.target(h)); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfIdentify && OIDENT) { Item u = Identify.identifyTarget(h); if (u != null && sel.itemSelectable(u)) return u; }
 		if (src instanceof ScrollOfUpgrade) {
 			for (Item i : worn) if (sel.itemSelectable(i) && !(i.cursed && i.cursedKnown)) return i;
@@ -674,7 +674,7 @@ public final class Assist {
 	 *  Rogue's clone): not one that can't move or is held, nor one too large for the hero's cell. K6: the plan walled
 	 *  allies off like foes, and a ghost in a corridor stalled the hero for hundreds of turns. */
 	static boolean swappable(Mob m) {
-		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || m instanceof NPC || Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
+		if (m == null || !m.isAlive() || m.alignment != Char.Alignment.ALLY || (m instanceof NPC && !(m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.DirectableAlly)) ||   /* MD: the Dried Rose's ghost is an NPC too: it walled the hero into a dead end for 1,000 starving turns */ Char.hasProp(m, Char.Property.IMMOVABLE)) return false;
 		if (H.rooted || H.paralysed > 0 || m.rooted || m.paralysed > 0 || !L.passable[m.pos]) return false;
 		if (Char.hasProp(m, Char.Property.LARGE) && !L.openSpace[hp]) return false;
 		for (Buff b : m.buffs()) if (b.getClass().getSimpleName().equals("Vertigo")) return false;
@@ -849,6 +849,7 @@ public final class Assist {
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
 		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
+		if (mode() != 0) AsPacing.after(out);   // (agent MD: a wait that has not paid, given up)
 		if (mode() != 0) AsEscape.after(out);   // (agent HE: a known way out, used before it's too late)
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
@@ -1869,7 +1870,7 @@ public final class Assist {
 		// eat once starving (never with one within 3); starving, the stairs next: down first
 		int st = bag(Amulet.class) != null ? L.entrance() : L.exit();
 		boolean down = planA != null && (planA.obj == st || planA.cell == st) && H.HP * 2 >= H.HT && !seen;
-		boolean eat = starving() && !near && !down;
+		boolean eat = starving() && (!near || (!adj && AsPacing.starvedLong())) && !down;   // (MD: starving a while, a foe near but not beside: eat (heroes starved through 600-turn King fights with food held))
 		int band = H.HP * 4 < H.HT ? 2 : H.HP * 2 < H.HT ? 1 : 0;
 		boolean passedEat = declinedAny(Food.AC_EAT);
 		if (!passedEat) eatBand = 0;
@@ -1937,6 +1938,7 @@ public final class Assist {
 			if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn;   // (the Mage: the staff first, strategy-reference 2.1; its level is shown)
 			if (OUPG) on = UpgradePlan.target(H);   // (O: null holds it)
 			if (AsGear.ON && a != null) { on = AsGear.upgradeOn(H); if (STAFFUP && wpn instanceof MagesStaff && wpn.level() < 3) on = wpn; }   // (HE: armour first, into the armour plan's piece; null: wear it first, or hold)
+			on = AsWeapon.target(H, on);   // (MD: the armour to a mark, then the weapon close behind)
 			if (ODIFF) System.out.println("OUPG t " + (int) Actor.now() + " d " + Dungeon.depth + " -> " + (on == null ? "hold" : on.getClass().getSimpleName() + (on.isEquipped(H) ? "(worn)" : "(pack)")) + " | " + UpgradePlan.last);
 			boolean behind = a == null || !a.levelKnown || a.level() * 3 < Dungeon.depth;
 			if (on != null && (!upgradeHeld || behind || UpgradePlan.noHold(H) /* M2: no hoarding: two in hand, or health lost outrunning the food */)) { Target t = use(up, Scroll.AC_READ, -1, "upgrade"); t.on = on; return t; }
@@ -1982,6 +1984,7 @@ public final class Assist {
 				for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i) && !declined(i.getClass(), Potion.AC_DRINK) && !(OIDENT && Identify.keep(H, i)) && !AsItems.remedyHeld(i)) return use(i, Potion.AC_DRINK, -1, "drink to learn");   // (remedyHeld: maybe the floor's Frost / Liquid Flame for its room)
 		}
 		boolean foeInView = false; for (Mob m : mobs()) if (enemy(m) && !(m instanceof NPC)) foeInView = true;   // (MT: no swapping with a foe about, sleeping or not)
+		if (AsWeapon.PLAN && !foeInView) { Item g = AsWeapon.wear(H); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, AsWeapon.wearWhy(H, g)); }   // (MD: the weapon plan)
 		if (AsGear.ON && !foeInView) { Armor g = AsGear.wear(H); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, AsGear.why(H, g)); }   // (HE: the armour plan; GearValue keeps the weapon)
 		if (OGEAR && !foeInView) { Item g = GearValue.bestEquip(H, Tune.GEARNEED); if (g != null && !declined(g.getClass(), EquipableItem.AC_EQUIP)) return use(g, EquipableItem.AC_EQUIP, -1, "better gear"); }
 		if (!OGEAR) for (Item i : H.belongings.backpack) {   // better gear (an unknown piece a tier better is worth wearing)

@@ -211,7 +211,7 @@ final class Rules {
 	static Item upgradeOn() {
 		Item on = null; try { on = AsGear.ON ? AsGear.commit(H()) : UpgradePlan.target(H()); } catch (Throwable e) { }
 		if (on == null) { Armor a = H().belongings.armor(); on = a != null && !(a.cursed && a.cursedKnown) ? a : H().belongings.weapon(); }
-		return on;
+		return AsWeapon.target(H(), on);   // (MD: the weapon its share)
 	}
 	static Target upgradeTarget() { Target t = Assist.use(upgrade(), Scroll.AC_READ, -1, "boss next: read the upgrades"); t.on = upgradeOn(); return t; }
 
