@@ -333,6 +333,18 @@ public class Controls {
 		Camera c = w.camera;
 		int[][] spots = Screen.round ? new int[][]{{186, 40}, {50, 40}, {222, 118}, {14, 118}, {186, 196}, {50, 196}}
 				: new int[][]{{Screen.w - 24, 0}, {0, 0}, {Screen.w - 24, Screen.h - 24}, {0, Screen.h - 24}};
+		// a tall window's tag belongs to the window's top right corner and scrolls with it, out of the way of the text
+		// below the title (pinned to the screen it covered the end of a line wherever the text was scrolled to)
+		com.watabou.noosa.NinePatch chrome = pebxel.ui.Caps.chrome(w);
+		if (tall(w) && chrome != null && chrome.visible) {
+			float u = 24 * 2 / c.zoom, tx = chrome.x + chrome.width - chrome.marginRight() - u, ty = chrome.y + chrome.marginTop();
+			for (Ui.Part p : buttons(w)) {
+				Component b = (Component) p.g;
+				if (b.width() <= 26 * 2 / c.zoom && b.left() < tx + u && b.right() > tx && b.top() < ty + u && b.bottom() > ty && shifted.add(b)) b.setPos(tx - b.width(), b.top());
+			}
+			close.setRect(tx, ty, u, u);
+			return;
+		}
 		// (a spot over the window's frame moves inside it: the frame's edge is never drawn over, nor the tag cut off
 		// where a tall window's frame ends are held)
 		float[] in = innerRect(w);
