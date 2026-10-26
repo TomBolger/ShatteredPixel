@@ -56,7 +56,7 @@ final class AsHealth {
 			if (ON && BOSSREST && !out.isEmpty()) { Target b = bossRest(H, out.get(0)); if (b != null) { out.add(0, b); return; } }
 			if (!ON || out.isEmpty() || H.rooted || L.locked || Dungeon.bossLevel() || bag(Amulet.class) != null) return;
 			Target a = out.get(0);
-			if (a.why != null && (a.why.startsWith("escape") || a.why.startsWith("rescue") || a.why.contains("heal") || a.why.startsWith("dying"))) return;   // (the rules' own way out stands)
+			if (a.why != null && (a.why.startsWith("escape") || a.why.startsWith("rescue") || a.why.startsWith("eye: out of its sight") || a.why.startsWith("stealth:") || a.why.contains("heal") || a.why.startsWith("dying"))) return;   // (the rules' own way out stands)
 			Target t = lasher(H);
 			if (t == null && FLEE) t = flee(H, a);
 			if (t == null && GATE > 0) t = gate(H, a);

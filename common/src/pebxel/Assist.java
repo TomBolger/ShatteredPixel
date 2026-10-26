@@ -854,6 +854,7 @@ public final class Assist {
 		mind();
 		planned.values().removeIf(t -> t < Actor.now());
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
+		if (mode() != 0) AsEyes.stepwise(out);   // (ST: in an eye's sight a walk goes a step at a time)
 		return out;
 	}
 
@@ -1809,7 +1810,7 @@ public final class Assist {
 			int d = distance(m.pos, hp);
 			if (m instanceof Goo && pumped(m)) goo = m;
 			else if (d < 2) return null;   // one beside you: fight it
-			if ((m instanceof Eye || m instanceof Scorpio || m instanceof Shaman || m instanceof Warlock || (SHOOTERS && ((SHOOTDM && m instanceof DM100) || m instanceof GnollTrickster))) && hunting(m) && (sh == null || d < distance(sh.pos, hp))) sh = m;
+			if (((m instanceof Eye && !AsEyes.ON) || m instanceof Scorpio || m instanceof Shaman || m instanceof Warlock || (SHOOTERS && ((SHOOTDM && m instanceof DM100) || m instanceof GnollTrickster))) && hunting(m) && (sh == null || d < distance(sh.pos, hp))) sh = m;
 		}
 		if (goo != null) {   // Goo pumped up hits hard and reaches 2 cells: out of its reach and let it waste it
 			if (!gooReach(goo.pos, hp)) { Target t = new Target(hp, WAIT, "tactic: let Goo waste it"); t.action = WAIT_ACT; return t; }

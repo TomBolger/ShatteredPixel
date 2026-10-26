@@ -53,7 +53,7 @@ final class AsFire {
 	static Level seenL; static float noteT = -1; static int notePos = -1, noteDec = -1;
 
 	static boolean shooter(Mob m) {
-		return m instanceof DM100 || m instanceof Shaman || m instanceof Warlock || m instanceof Eye || m instanceof Scorpio || m instanceof GnollTrickster
+		return m instanceof DM100 || m instanceof Shaman || m instanceof Warlock || (m instanceof Eye && !AsEyes.ON) || m instanceof Scorpio || m instanceof GnollTrickster
 				|| m instanceof Elemental || m instanceof FungalSentry;
 	}
 	static boolean comes(Mob m) { return (m instanceof DM100 || m instanceof Shaman || m instanceof Warlock || m instanceof Eye) && !Char.hasProp(m, Char.Property.IMMOVABLE); }

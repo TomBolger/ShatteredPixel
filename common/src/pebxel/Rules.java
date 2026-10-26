@@ -79,6 +79,15 @@ final class Rules {
 		// hands give nothing while the hero burns, "out of the fire first"): the next round's worst (the blows of those
 		// beside him at their most, the bolts of the shooters in line, a third of the harm to come) could kill: drink
 		propose("rescue: drink rather than die", c -> c == Rules.planA && c.role != Role.HEAL && healPot() != null && Brain.healing == 0 && worstRound() >= H().HP, 0, Rules::drinkTarget),
+		// (ST) the same with the climb's curse counted (the lookahead leaves it out: a DM-100's bolt is 4.5 times what it
+		// sees), and with no Healing, a known way out: Teleportation, Invisibility (unseen, nothing strikes or bolts him),
+		// Terror (CB-8: a known Teleportation in 30 of 85 deaths from 16, Invisibility in 17)
+		propose("stealth: drink rather than die, the curse counted", AsStealth::drinkWhen, 0, AsStealth::drinkTarget),
+		propose("stealth: away rather than die", AsStealth::awayWhen, 0, AsStealth::awayTarget),
+		veto("stealth: no trading bolts with a cursed caster", AsStealth::tradeVeto),
+		veto(AsStealth.NOHURT, AsStealth::hurtVeto),
+		propose("stealth: hurt, out of its line first", AsStealth::hurtHoldWhen, 0, AsStealth::hurtHold),
+		propose("stealth: out of the cursed caster's line", c -> c == Rules.planA && c.veto && c.note.contains("no trading bolts"), 0, AsFire::outTarget),
 		// -- getting away by the stairs ------------------------------------------------------------------------------
 		// (BR-a1: a starving hero bounced between the floors for ever, up from the foe by the stairs, down again as the
 		// floor above was done.) The stairs up are an escape only with a rest to come (food for it), not straight after
@@ -101,6 +110,18 @@ final class Rules {
 		veto("ascent: every trap a depth-26 trap", AsAscent::trap),
 		veto("ascent: Healing kept for the Caves", AsAscent::keep),
 		propose("ascent: drink, the blows multiplied", AsAscent::drinkLow, 0, AsAscent::drinkTarget),
+		// -- the evil eyes (agent ST: AsEyes) --------------------------------------------------------------------------
+		// (CB-8: the deathgaze the top killer from 11, 16 and 21, 52 deaths.) A charged eye re-aims at the hero when it
+		// fires if it still sees him: only out of its sight is the beam dodged (a step off its line in its sight was the
+		// old rule). Out of its sight while charged; to cover first when it's ready with none near; no step back into a
+		// ready eye's sight (it comes round); at it between beams (4-6 turns it can't fire).
+		propose("eye: out of its sight before it fires", AsEyes::dodgeWhen, 0, AsEyes::dodgeTarget),
+		propose("eye: to cover before it charges", AsEyes::hideWhen, 0, AsEyes::hideTarget),
+		propose("eye: to a spot with cover a step off", AsEyes::spotWhen, 0, AsEyes::spotTarget),
+		veto(AsEyes.NOSTEP, AsEyes::stepVeto),
+		veto(AsEyes.NOCHARGED, AsEyes::chargedVeto),
+		propose("eye: wait in cover", AsEyes::holdWhen, 0, AsEyes::holdTarget),
+		propose("eye: at it between beams", AsEyes::closeWhen, 0, AsEyes::closeTarget),
 		// -- shooters' bolts (agent K7: AsBolts) ------------------------------------------------------------------------
 		// an eye's charged beam (shown: the charge, aimed where the hero stood) fires through its line for 30-50: off it
 		propose("bolts: off the eye's beam", AsBolts::inBeam, 0, AsBolts::offBeam),
