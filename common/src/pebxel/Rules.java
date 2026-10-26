@@ -64,6 +64,9 @@ final class Rules {
 		// or health this low (MT's Tune.HEALLOW; BR-a2: a burning Mage kept his potion on the brain's say and died)
 		boost("rescue: the hands' Healing, hurt to the quick", c -> c.role == Role.HEAL && !"brain".equals(c.src)
 				&& (pebxel.bot.HeroView.dot(H()) > 0 || H().HP * 100 < H().HT * Math.max(pebxel.bot.Tune.HEALLOW, 40)), 99),
+		// a fight seen going nowhere (AsBasics: blows that never lower its health): the basics' way out stands; the
+		// lookahead only has the numbers, the stall was seen (BR-a3: a Rogue kept hitting the Great Crab for 1,100 turns)
+		boost("rescue: the basics' way out of a stalled fight", c -> c.t.why.startsWith("stalled"), 99),
 		// never die holding Healing (BR-a2: deaths with 5 to 11 known Healing left, burning or under warlocks' bolts: the
 		// hands give nothing while the hero burns, "out of the fire first"): the next round's worst (the blows of those
 		// beside him at their most, the bolts of the shooters in line, a third of the harm to come) could kill: drink
@@ -107,7 +110,7 @@ final class Rules {
 		if (Brain.fight && Brain.me != null) for (pebxel.bot.Fighter f : Brain.fs) {
 			if (f.asleep) continue;
 			int dr = Brain.me.dr.lo;
-			if (f.dist <= 1) w += Math.max(0, (f.rageHp == 0 && f.rageDmg != null ? f.rageDmg : f.dmg).hi() - dr) * Math.max(1, Math.round(1 / Math.max(0.25, f.delay)));
+			if (f.dist <= 1) w += Math.max(f.zapDmg != null && "Eye".equals(f.name) ? f.zapDmg.hi() : 0, Math.max(0, (f.rageHp == 0 && f.rageDmg != null ? f.rageDmg : f.dmg).hi() - dr) * Math.max(1, Math.round(1 / Math.max(0.25, f.delay))));   // (an eye gazes beside the hero too)
 			else if (f.zapDmg != null) w += f.zapDmg.hi();
 			else if (f.dist <= 1 + f.speed && !f.ranged) w += Math.max(0, f.dmg.hi() - dr) * 0.5;
 		}

@@ -59,16 +59,18 @@ public final class Look {
 		Dist[] bH = new Dist[n], bF = new Dist[n], bR = new Dist[n], bRage = new Dist[n], bLow = new Dist[n], bDeath = new Dist[n], bZ = new Dist[n];
 		for (int i = 0; i < n; i++) {
 			Fighter f = foes.get(i);
-			pH[i] = Dist.hit(me.acc, f.eva); bH[i] = Fighter.blow(me.dmg, f);
+			pH[i] = f.blockAll ? 0 : Dist.hit(me.acc, f.eva); bH[i] = Fighter.blow(me.dmg, f);   // (the Great Crab awake blocks every blow it sees: FoeView, MT)
 			pF[i] = Dist.hit(f.acc, me.eva); bF[i] = Fighter.blow(f.dmg, me);
 			if (f.rageDmg != null) bRage[i] = Fighter.blow(f.rageDmg, me);
 			if (f.lowDmg != null) { bLow[i] = Fighter.blow(f.lowDmg, me); pLow[i] = Dist.hit(f.lowAcc, me.eva); pHLow[i] = Dist.hit(me.acc, f.lowEva > 0 ? f.lowEva : f.eva); }
 			if (f.deathDmg != null) bDeath[i] = f.deathDmg.minus0(me.dr.plus(me.dr));
 			if (f.zapDmg != null) { bZ[i] = f.zapDmg; pZ[i] = Dist.hit(2 * f.acc, me.eva); }
-			if (me.rangedDmg != null) { pR[i] = me.rangedSure ? 1 : Dist.hit(me.rangedAcc, f.eva); bR[i] = Fighter.blow(me.rangedDmg, f); }
+			if (me.rangedDmg != null) { pR[i] = f.blockAll ? 0 : me.rangedSure ? 1 : Dist.hit(me.rangedAcc, f.eva); bR[i] = Fighter.blow(me.rangedDmg, f); }
 			// walking off: a faster one strikes every (its blow + the step it takes to catch up); a shooter keeps shooting
 			chase[i] = f.ranged ? f.delay / 0.6 : f.speed > me.speed * 1.01 ? f.delay + 1 / f.speed : 0;
 		}
+		boolean hurtable = false; for (Fighter f : foes) hurtable |= !f.blockAll;
+		double horizon = hurtable ? 100 : 30;   // (as FightModel, MT: against what can't be hurt, how fast it goes wrong is what counts)
 		int[] hp = new int[n]; double[] next = new double[n], arr = new double[n], atk = new double[n]; boolean[] rage = new boolean[n], awake = new boolean[n];
 		int deaths = 0, done = 0; double left = 0, used = 0, tsum = 0;
 		for (int run = 0; run < runs; run++) {
@@ -83,7 +85,7 @@ public final class Look {
 				if (p.flee >= 0) next[i] = chase[i] > 0 && awake[i] ? (f.ranged ? 0 : arr[i]) + chase[i] * rnd.nextDouble() : Double.MAX_VALUE;
 			}
 			double t = 0, tH = 0; boolean dead = false, gone = false; int alive = n, lost = p.lose, steps = p.flee;
-			for (int guard = 0; guard < 600 && alive > 0 && !dead && !gone; guard++) {
+			for (int guard = 0; guard < 600 && alive > 0 && !dead && !gone && t <= horizon; guard++) {
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {

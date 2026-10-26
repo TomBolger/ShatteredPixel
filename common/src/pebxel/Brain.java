@@ -189,7 +189,7 @@ final class Brain {
 		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
 		Object hl = hb == null ? null : Assist.field(hb, "healingLeft"); healing = hl instanceof Integer ? (Integer) hl : 0;
 		R = Budget.ahead(h);
-		for (Mob m : Assist.mobs()) if (Assist.enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (Assist.adjacent(m.pos, hp) || (Assist.hunting(m) && Assist.walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && Assist.distance(m.pos, hp) <= 8 && Assist.line(m.pos, hp)))) foes.add(m);
+		for (Mob m : Assist.mobs()) if (Assist.enemy(m) && m.state != m.PASSIVE && !(m instanceof NPC) && (Assist.adjacent(m.pos, hp) || (Assist.hunting(m) && Assist.walk(m.pos) <= 8 && !(m instanceof Piranha)) || (FoeView.shooter(m) && m.state != m.SLEEPING && Assist.distance(m.pos, hp) <= 8 && (Assist.line(m.pos, hp) || (m instanceof Eye && Assist.sight(m.pos, hp)))))) foes.add(m);   // (an eye's gaze goes through whoever stands between: BR-a3, a Mage killed by the eye behind the one he fought)
 		if (foes.isEmpty()) return;
 		me = HeroView.of(h);
 		for (Mob m : foes) fs.add(FoeView.of(m, h));
