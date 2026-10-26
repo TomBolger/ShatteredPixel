@@ -216,12 +216,14 @@ public final class FightModel {
 				if (f.ranged || f.asleep || f.immobile) continue;
 				if (room > 0) { room--; held[i] = true; } else { queued[i] = true; arrQ[i] = arr[i]; arr[i] = atk[i] = next[i] = Double.MAX_VALUE; } }
 			else for (int i = 0; i < n; i++) { queued[i] = false; held[i] = false; }
+			double bled = 0, bt = 0;
 			double t = 0, tH = 0; boolean dead = false, gone = false; int alive = n, lost = p.lose, steps = p.flee;
 			for (int guard = 0; guard < 600 && alive > 0 && !dead && !gone && t < horizon; guard++) {
 				events++;
 				int fi = -1; double ft = Double.MAX_VALUE;
 				for (int i = 0; i < n; i++) if (hp[i] > 0 && next[i] < ft) { ft = next[i]; fi = i; }
 				if (tH <= ft) {
+					if (me.bleed > 0) { bled += me.bleed * (tH - bt); bt = tH; int b = (int) bled; if (b > 0) { bled -= b; myHp -= b; if (myHp <= 0) { dead = true; break; } } }   // (M2: the curse's harm a turn)
 					t = tH;
 					if (hl > 0) { int x = Math.max(1, Math.min(hl, Math.round(hl * 0.25f))); myHp = Math.min(me.ht, myHp + x); hl -= x; }   // (Healing heals a quarter of what's left a turn: Healing.healingThisTick)
 					if (drink) { drink = false; heals--; usedR++; hl += me.healAmount; tH += 1; busy(foes0, hp, t, 1, arr, atk, zapEnd); continue; }

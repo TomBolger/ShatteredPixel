@@ -55,6 +55,8 @@ public final class Fighter {
 	public double taken = 1;
 	/** Hero only (MT): the cells beside it that a foe could stand on (Level.passable): how many can come at it at once. */
 	public int slots = 8;
+	/** Hero only (M2): health lost a turn whatever happens (the Amulet's curse at 8 stacks and up). */
+	public double bleed;
 	/** Hero only, gear values: the share of blows that are surprise blows (sure hits: an ambush, the cloak) and their damage
 	 *  (a dagger, dirk or assassin's blade: 75% of the way to max and up, Dagger.damageRoll; null: the usual roll). */
 	public double sure; public Dist sureDmg;
@@ -65,7 +67,7 @@ public final class Fighter {
 		f.dist = dist; f.ranged = ranged; f.asleep = asleep; f.boss = boss; f.slimeCap = slimeCap; f.rageHp = rageHp; f.rageDmg = rageDmg;
 		f.rageDecay = rageDecay; f.ragingNow = ragingNow; f.burstCharge = burstCharge; f.burstReady = burstReady; f.reach = reach; f.fleeHit = fleeHit; f.fleeT = fleeT; f.pump = pump; f.pumpNow = pumpNow; f.immobile = immobile;
 		f.deathDmg = deathDmg; f.blockAll = blockAll; f.hitDirect = hitDirect; f.burstDmg = burstDmg; f.burstEvery = burstEvery; f.leech = leech; f.zapDmg = zapDmg; f.lowAt = lowAt; f.lowAcc = lowAcc; f.lowEva = lowEva; f.lowDmg = lowDmg; f.rangedAcc = rangedAcc; f.rangedDmg = rangedDmg; f.rangedDelay = rangedDelay; f.rangedShots = rangedShots;
-		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg; f.slots = slots; f.healLeft = healLeft;
+		f.rangedSure = rangedSure; f.heals = heals; f.healAmount = healAmount; f.taken = taken; f.sure = sure; f.sureDmg = sureDmg; f.slots = slots; f.healLeft = healLeft; f.bleed = bleed;
 		return f;
 	}
 

@@ -41,6 +41,14 @@ public final class Budget {
 		for (String k : ks) { Fighter f = MobTable.cursed(k); if (f == null) continue; double x = FightModel.duelCost(me, f) / Math.max(1, me.ht); load += CLIMBF / ks.length * x * x; }
 		return Math.exp(-(CLIMB0 + 0.55 * load));   // (the floors already explored, their stairs known: a smaller hazard of their own than a new floor's 0.05)
 	}
+	/** (M2) The curse's own toll on a floor's walk (CLIMBTURNS turns): at 8 stacks and up (stacks - 4) / 4 a turn, as a
+	 *  load like a fight's (its share of the health, squared). Kills a floor: CLIMBKILLS (each takes a stack off). */
+	static double curseSurvival(Fighter me, double st) {
+		if (st < 8) return 1;
+		double x = (st - 4) / 4 * CLIMBTURNS / Math.max(1, me.ht);
+		return Math.exp(-0.55 * x * x);
+	}
+	public static final double CLIMBKILLS = Tune.get("BCLIMBKILLS", 2), CLIMBTURNS = Tune.get("BCLIMBTURNS", 150);
 	public static final double CLIMB0 = Tune.get("BCLIMB0", 2) / 100;
 
 	/** q[k]: the chance the k-th floor from here (0: this one) kills, as RunProjection sees it. Cached per depth and build. */
@@ -49,9 +57,14 @@ public final class Budget {
 		boolean climb = climbing(h);
 		if (cQ != null && cDepth == Dungeon.depth && cLvl == h.lvl && cHT == h.HT && cStr == h.STR() && cW == w && cA == a && cClimb == climb) return cQ;
 		if (climb) {
-			int n = Math.max(1, Dungeon.depth); double[] q = new double[n]; double alive = 1;
-			Fighter me = HeroView.of(h); me.hp = me.ht; me.heals = 0; me.rangedShots = 0;
-			for (int k = 0; k < n; k++) { double s; try { s = climbSurvival(me, Dungeon.depth - k); } catch (Throwable e) { s = 0.9; } q[k] = Math.max(0, Math.min(1, 1 - s)); alive *= s; }
+			int n = Math.max(1, Dungeon.depth); double[] q = new double[n]; double alive = 1, st = HeroView.curse(h);
+			Fighter me = HeroView.of(h); me.hp = me.ht; me.heals = 0; me.rangedShots = 0; me.bleed = 0;
+			for (int k = 0; k < n; k++) {
+				int d = Dungeon.depth - k;
+				if (k > 0 && d % 5 != 0) st += 2;   // (PN: each new floor climbed adds 2, a boss floor none (and heals, feeds); each cursed foe killed takes 1 off)
+				if (k > 0) st = Math.max(0, st - CLIMBKILLS);
+				double s; try { s = d % 5 == 0 ? Math.exp(-CLIMB0) : climbSurvival(me, d) * curseSurvival(me, st); } catch (Throwable e) { s = 0.9; }
+				q[k] = Math.max(0, Math.min(1, 1 - s)); alive *= s; }
 			if (Tune.on("BDBG", false)) { StringBuilder b = new StringBuilder("  CLIMB d" + Dungeon.depth + " " + me + " q"); for (double x : q) b.append(String.format(" %.2f", x)); System.out.println(b); }
 			cQ = q; cAhead = Math.max(1, WIN * alive); cDepth = Dungeon.depth; cLvl = h.lvl; cHT = h.HT; cStr = h.STR(); cW = w; cA = a; cClimb = true;
 			return q;
