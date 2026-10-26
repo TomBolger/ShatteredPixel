@@ -30,7 +30,7 @@ final class AsBolts {
 
 	static final boolean ON = opt("BOLTS", true);
 
-	static boolean shooter(Mob m) { return FoeView.shooter(m) && !(m instanceof DwarfKing) && !(m instanceof Tengu); }
+	static boolean shooter(Mob m) { return FoeView.shooter(m) && !(m instanceof DwarfKing) && !(m instanceof Tengu) && !(m instanceof Eye && AsEyes.ON); }   // (the eyes: AsEyes)
 	/** The shooters awake in sight. */
 	static List<Mob> shooters() {
 		List<Mob> l = new ArrayList<>();
@@ -81,7 +81,7 @@ final class AsBolts {
 	static int beamHi() { int hi = 0; Hero h = Dungeon.hero; for (Mob m : mobs()) if (m instanceof Eye && ((Eye) m).beamCharged && L.heroFOV[m.pos]) { Fighter f = FoeView.of(m, h); hi = Math.max(hi, f.zapDmg != null ? f.zapDmg.hi() : 55); } return hi; }
 
 	/** Rules: the hero in a charged beam's line: the nearest step out of it (and out of every other line if it can). */
-	static boolean inBeam(Brain.Cand c) { if (!ON || c != Rules.planA) return false; Set<Integer> b = beams(); return !b.isEmpty() && b.contains(Dungeon.hero.pos); }
+	static boolean inBeam(Brain.Cand c) { if (!ON || AsEyes.ON || c != Rules.planA) return false; Set<Integer> b = beams(); return !b.isEmpty() && b.contains(Dungeon.hero.pos); }
 	static Target offBeam() {
 		Set<Integer> b = beams(); int hp = Dungeon.hero.pos; List<Mob> sh = shooters();
 		int best = -1, bk = INF;

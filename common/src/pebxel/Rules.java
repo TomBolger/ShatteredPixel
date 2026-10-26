@@ -101,6 +101,17 @@ final class Rules {
 		veto("ascent: every trap a depth-26 trap", AsAscent::trap),
 		veto("ascent: Healing kept for the Caves", AsAscent::keep),
 		propose("ascent: drink, the blows multiplied", AsAscent::drinkLow, 0, AsAscent::drinkTarget),
+		// -- the evil eyes (agent ST: AsEyes) --------------------------------------------------------------------------
+		// (CB-8: the deathgaze the top killer from 11, 16 and 21, 52 deaths.) A charged eye re-aims at the hero when it
+		// fires if it still sees him: only out of its sight is the beam dodged (a step off its line in its sight was the
+		// old rule). Out of its sight while charged; to cover first when it's ready with none near; no step back into a
+		// ready eye's sight (it comes round); at it between beams (4-6 turns it can't fire).
+		propose("eye: out of its sight before it fires", AsEyes::dodgeWhen, 0, AsEyes::dodgeTarget),
+		propose("eye: to cover before it charges", AsEyes::hideWhen, 0, AsEyes::hideTarget),
+		veto(AsEyes.NOSTEP, AsEyes::stepVeto),
+		veto(AsEyes.NOCHARGED, AsEyes::chargedVeto),
+		propose("eye: wait in cover", AsEyes::holdWhen, 0, AsEyes::holdTarget),
+		propose("eye: at it between beams", AsEyes::closeWhen, 0, AsEyes::closeTarget),
 		// -- shooters' bolts (agent K7: AsBolts) ------------------------------------------------------------------------
 		// an eye's charged beam (shown: the charge, aimed where the hero stood) fires through its line for 30-50: off it
 		propose("bolts: off the eye's beam", AsBolts::inBeam, 0, AsBolts::offBeam),
