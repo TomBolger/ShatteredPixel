@@ -41,7 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
-		foodSeen();
+		foodSeen(); hazNote();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -362,7 +362,7 @@ final class AsBasics {
 	/** The nearest awake caster after the hero, in sight. */
 	static Mob casterNear() {
 		Mob b = null; int hp = Dungeon.hero.pos;
-		for (Mob m : mobs()) if (caster(m) && hostile(m) && hunting(m) && (b == null || distance(m.pos, hp) < distance(b.pos, hp))) b = m;
+		for (Mob m : mobs()) if (caster(m) && hostile(m) && (hunting(m) || bolts(m.pos, hp)) && (b == null || distance(m.pos, hp) < distance(b.pos, hp))) b = m;
 		return b;
 	}
 	/** Is c no true corner against the caster at s: a cell it could reach before c (fewer of its steps) that, two or
@@ -427,11 +427,29 @@ final class AsBasics {
 	// up its quests after 1500 steps, the way out with them) by its stairs; else, with every wall searched, a chasm.
 	// =============================================================================================================
 	static final boolean STUCK = opt("BSTUCK", true);
+	static final int HAZAGE = optInt("BHAZAGE", 50);   // turns after which gas or fire last seen (out of sight now) is taken as gone
+	static float[] hazSeen; static Level hazL;
+	/** Each decision: when the remembered gas / fire was last in sight. */
+	static void hazNote() {
+		if (hazL != L || hazSeen == null || hazSeen.length != L.length()) { hazL = L; hazSeen = new float[L.length()]; Arrays.fill(hazSeen, Actor.now()); }
+		if (Assist.hazMem == null || Assist.hazMem.length != L.length()) return;
+		for (int c = 0; c < L.length(); c++) if (Assist.hazMem[c] && L.heroFOV[c]) hazSeen[c] = Actor.now();
+	}
+	/** Old gas / fire memories out of sight cleared; any cleared? */
+	static boolean hazAge() {
+		if (hazSeen == null || Assist.hazMem == null || hazSeen.length != Assist.hazMem.length) return false;
+		boolean any = false;
+		for (int c = 0; c < L.length(); c++) if (Assist.hazMem[c] && !L.heroFOV[c] && Actor.now() - hazSeen[c] > HAZAGE) { Assist.hazMem[c] = false; any = true; }
+		return any;
+	}
 	static Target stuck(Target planA) {
 		if (!STUCK || planA == null || seenFoe || inDanger) return null;
 		boolean srch = SEARCH_ACT.equals(planA.action) || planA.why.startsWith("search") || planA.why.startsWith("dead end");
 		if (!srch) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
+		// gas or fire remembered where it was last seen, behind a door shut since: it never clears, and the only way on
+		// stays shut for good (K6-b1: 800 searches in a shop, the corridor's toxic gas remembered). Gone by now.
+		if (hazAge()) return null;
 		if (Dungeon.branch != 0) {
 			for (com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr : L.transitions) if (tr.type == com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition.Type.BRANCH_ENTRANCE && known[tr.cell()])
 				return tr.cell() == hp ? new Target(hp, PICKUP, "stuck: out of the branch") : walk(tr.cell()) < INF ? new Target(tr.cell(), GO, "stuck: out of the branch") : null;

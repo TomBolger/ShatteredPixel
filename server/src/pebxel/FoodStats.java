@@ -102,6 +102,18 @@ final class FoodStats {
 			for (Map.Entry<String, Integer> e : f.why.entrySet()) if (e.getValue() > 0) sb.append(' ').append(e.getKey()).append(':').append(e.getValue()).append(',');
 			System.out.println(sb);
 		}
+		if ("1".equals(System.getenv("MAPDUMP")) && Dungeon.level != null) {   // (debugging: the known map, # wall, . floor, + door, D locked, ~ water, ^ trap, : pit, > exit, < entrance, @ hero)
+			Level L = Dungeon.level; StringBuilder sb = new StringBuilder();
+			for (int y = 0; y < L.height(); y++) { StringBuilder row = new StringBuilder();
+				for (int x = 0; x < L.width(); x++) { int c = x + y * L.width(); char ch;
+					if (Dungeon.hero != null && c == Dungeon.hero.pos) ch = '@';
+					else if (!(L.visited[c] || L.mapped[c])) ch = ' ';
+					else { int t = L.map[c];
+						ch = c == L.exit() ? '>' : c == L.entrance() ? '<' : L.pit[c] ? ':' : t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.LOCKED_DOOR || t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.CRYSTAL_DOOR ? 'D' : t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.DOOR || t == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.OPEN_DOOR ? '+' : L.water[c] ? '~' : L.traps.get(c) != null && L.traps.get(c).visible ? '^' : L.solid[c] ? '#' : L.passable[c] ? '.' : '?'; }
+					row.append(ch); }
+				if (row.toString().trim().length() > 0) sb.append("MAP ").append(row).append('\n'); }
+			System.out.print(sb);
+		}
 		if (!"died".equals(end)) return;
 		Hero h = Dungeon.hero; if (h == null) return;
 		int heal = 0, unkP = 0, unkS = 0, esc = 0, wands = 0;
