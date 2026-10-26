@@ -1008,7 +1008,8 @@ public final class Assist {
 		for (Blob b : L.blobs.values()) {
 			if (b == null || b.volume <= 0 || b.cur == null || c >= b.cur.length || b.cur[c] <= 0) continue;
 			if (b instanceof ToxicGas || b instanceof CorrosiveGas || b instanceof ConfusionGas || b instanceof Fire || b instanceof ParalyticGas
-					|| b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing) return true;
+					|| b instanceof StenchGas || b instanceof Electricity || b instanceof Inferno || b instanceof Blizzard || b instanceof Freezing
+					|| b instanceof com.shatteredpixel.shatteredpixeldungeon.levels.rooms.special.MagicalFireRoom.EternalFire) return true;   // (the magical fire room's wall burns as fire does: K5)
 		}
 		return false;
 	}
