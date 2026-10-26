@@ -248,5 +248,47 @@ final class AsFire {
 		return t;
 	}
 
+	// =============================================================================================================
+	// the engagement (CB-v3: K6's caster tactic flipped between "close in" and "out of its bolts' way" as its death
+	// odds crossed 40%, a bolt a turn either way, and its hiding places were often in the line still): in a coming
+	// caster's line, the bolts each way are counted, the hero's steps as the casters see them, and the cheaper taken:
+	//   hide: the walk to the nearest cell out of every line, each step's cell's bolts added (out of it: none);
+	//   charge: the steps to beside the nearest, each but the last a cell in its line.
+	// Out of its line, it comes (the rows above hold him there). A choice is kept for that caster unless the other
+	// is much cheaper (no flip-flop).
+	// =============================================================================================================
+	static final boolean ENGAGE = opt("FIREENGAGE", true);
+	static final int HIDEMAX = optInt("FIREHIDE", 6);
+	static int engId = -1; static boolean engCharge; static float engAt = -99;
+	static Target engage() {
+		if (!ON || !ENGAGE) return null;
+		Hero h = Dungeon.hero; int hp = h.pos; if (h.rooted) return null;
+		note(); float now = Actor.now();
+		Seen c = null; int cw = INF;
+		for (Seen s : seen.values()) if (s.comes && s.at == now && fireLine(s, hp)) { int w = walk(s.pos); if (w < cw) { cw = w; c = s; } }
+		if (c == null) return null;
+		double here = fireAt(hp, false);
+		// hide: least bolts to a cell out of every line (Dijkstra over the known free cells, within HIDEMAX steps)
+		int N = L.length(), W = L.width(); double[] cost = new double[N]; int[] st = new int[N], first = new int[N];
+		Arrays.fill(cost, Double.MAX_VALUE); cost[hp] = 0; st[hp] = 0; first[hp] = -1;
+		PriorityQueue<double[]> q = new PriorityQueue<>((a, b) -> Double.compare(a[0], b[0])); q.add(new double[]{0, hp});
+		int hide = -1; double hc = Double.MAX_VALUE; Map<Integer, Double> fc = new HashMap<>();
+		while (!q.isEmpty()) { double[] e = q.poll(); int u = (int) e[1]; if (e[0] > cost[u]) continue;
+			if (u != hp && fc.get(u) <= 0) { hide = u; hc = cost[u]; break; }
+			if (st[u] >= HIDEMAX) continue;
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || !free(v)) continue;
+				Double f = fc.get(v); if (f == null) { f = fireAt(v, false); fc.put(v, f); }
+				double nc = cost[u] + f + 0.01;
+				if (nc < cost[v]) { cost[v] = nc; st[v] = st[u] + 1; first[v] = u == hp ? v : first[u]; q.add(new double[]{nc, v}); } } }
+		double cc = cw >= INF ? Double.MAX_VALUE : Math.max(0, cw - 2) * here;
+		boolean charge = hide < 0 || cc < hc;
+		if (engId == c.m.id() && now - engAt <= 3 && engCharge != charge) charge = engCharge ? !(hc < cc * 0.6) : !(cc < hc * 0.6);   // (kept unless the other way is much cheaper)
+		if (charge && cw > 12) return null;
+		engId = c.m.id(); engCharge = charge; engAt = now;
+		if (charge) return new Target(c.pos, ENEMY, "caster: at it (" + Math.round(cc) + " to take on the way, hiding " + (hide < 0 ? "nowhere" : Math.round(hc)) + ")");
+		return new Target(first[hide] >= 0 ? first[hide] : hide, GO, "caster: out of its line (" + Math.round(hc) + " to take on the way, " + Math.round(cc) + " charging); it must come round");
+	}
+
 	static void reset() { seen.clear(); seenL = null; noteT = -1; notePos = -1; }
 }
