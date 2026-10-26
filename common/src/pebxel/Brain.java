@@ -106,15 +106,6 @@ final class Brain {
 		return t;
 	}
 
-	/** The skill files that came after the hooks were laid down (AsItems, agent K5): found by name, so that each can be
-	 *  merged on its own; static Target suggest(Target planA). */
-	static Target extra(Target planA) {
-		if (extraM == null) { extraM = new ArrayList<>(); for (String n : new String[]{"pebxel.AsItems"}) try { java.lang.reflect.Method m = Class.forName(n).getDeclaredMethod("suggest", Target.class); m.setAccessible(true); extraM.add(m); } catch (Throwable e) { } }
-		for (java.lang.reflect.Method m : extraM) try { Object t = m.invoke(null, planA); if (t instanceof Target) return (Target) t; } catch (Throwable e) { Assist.lastError = e; }
-		return null;
-	}
-	static List<java.lang.reflect.Method> extraM;
-
 	/** Is c vetoed (and the brain on)? */
 	static boolean screened(Cand c) {
 		try {

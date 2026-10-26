@@ -91,10 +91,12 @@ public final class Identify {
 		return best;
 	}
 
-	/** Keep this unknown potion for an emergency rather than drink-test it now (likely Healing, health good). */
+	/** Keep this unknown potion for an emergency rather than drink-test it now (likely Healing, health near full). */
 	public static boolean keep(Hero h, Item i) {
 		observe(h);
-		return i instanceof Potion && !((Potion) i).isKnown() && pHeal(i) >= Tune.KEEP && h.HP * 2 > h.HT;
+		return i instanceof Potion && !((Potion) i).isKnown() && pHeal(i) >= Tune.KEEP && h.HP * 100 >= h.HT * Tune.KEEPHP;   // (MT: was above half health, which is
+		// just where the bot drink-tests (at half health or more): a likely Healing was never tested, never known, so never drunk in a fight;
+		// now it is tested once hurt, where it heals if it is one)
 	}
 
 	/** A cell to drink-test on: in water or beside it, nothing that burns on or beside it. */
