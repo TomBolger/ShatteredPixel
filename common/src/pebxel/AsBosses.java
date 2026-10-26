@@ -155,7 +155,7 @@ final class AsBosses {
 			if (obj < 0) obj = out != null && !out.isEmpty() ? (out.get(0).obj >= 0 ? out.get(0).obj : out.get(0).cell) : -1;
 			if (obj == hp) obj = -1;
 			int best = -1, bk = INF;
-			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null) {
+			for (int c = 0; c < LEN; c++) if (dist[c] < INF && dist[c] > 0 && !dz[c] && !foul(c) && L.passable[c] && !L.avoid[c] && seenChar(c) == null && !bad.containsKey(c)) {   // (bad: a walk there did nothing: K8)
 				int k = (dist[c] == 1 ? (obj >= 0 ? L.distance(c, obj) : 0) : 100 + dist[c] * 8) + (soon[c] ? 4 : 0);   // (out of a shocker's ring, not to its other half)   // (a step at a time: the game's own walk of two might cut through the lit ones)
 				if (k < bk) { bk = k; best = c; } }
 			if (best >= 0) return new Target(best, GO, "boss: out of the blow's way");
