@@ -155,6 +155,7 @@ final class AsItems {
 			if (ph != null && ph.isKnown() && hpf * 100 < Assist.HEALBOSS && (dying || hard)) return null;   // (the hands drink it first)
 			if (dying && (t = escapes()) != null) return t;
 			if ((t = hasteRun()) != null) return t;
+			if ((t = plantStep()) != null) return t;
 			if ((t = antiMagic()) != null) return t;
 			if (hard && (t = hardFight()) != null) return t;
 			if ((t = trapOnFoes()) != null) return t;
@@ -170,6 +171,7 @@ final class AsItems {
 			if (Assist.foul(hp) || Assist.burning()) return null;
 			Target t;
 			if (!near.isEmpty()) return null;   // (a fight on: urgent's)
+			if ((t = plantStep()) != null) return t;
 			if ((t = trapCrossing(planA)) != null) return t;
 			if ((t = puzzles()) != null) return t;
 			if ((t = imbue()) != null) return t;
@@ -423,6 +425,41 @@ final class AsItems {
 		// tipped darts on the strong one, seeds into its path
 		Target d = tipped(s); if (d != null) return d;
 		Target sd = seedPath(); if (sd != null) return sd;
+		return null;
+	}
+
+	/** A plant beside the hero that helps whoever steps on it (Plant.activate; the Warden gets more): stepped onto.
+	 *  Before a hard fight with the foes still a few steps off: a Starflower or Earthroot seed thrown beside him first. */
+	static Target plantStep() {
+		boolean warden = H.subClass == HeroSubClass.WARDEN, debuff = false;
+		for (Buff b : H.buffs()) if (b instanceof Poison || b instanceof Bleeding || b instanceof Cripple || b instanceof Weakness || b instanceof Vertigo) debuff = true;
+		int best = -1, bs = 0;
+		for (int k = -1; k < 8; k++) {
+			int c = k < 0 ? hp : hp + Assist.N8[k]; if (k >= 0 && (!Assist.nb(hp, c) || !Assist.open[c] || Actor.findChar(c) != null)) continue;
+			if (c == hp) continue;   // (standing on one: it went off already, or was planted here)
+			Plant p = L.plants.get(c); if (p == null) continue;
+			int v = 0;
+			if (p instanceof Sungrass && hpf < 0.6f && adj.isEmpty()) v = 3;
+			if (p instanceof Earthroot && (hard || warden)) v = 4;
+			if (p instanceof Starflower) v = 3;
+			if (p instanceof Swiftthistle && hard) v = 2;
+			if (p instanceof Mageroyal && debuff) v = 3;
+			if (warden && p instanceof Blindweed && hard) v = 4;
+			if (warden && p instanceof Stormvine) v = 1;
+			if (p instanceof Fadeleaf && dying) v = 5;
+			if (v > bs) { bs = v; best = c; }
+		}
+		if (best >= 0) { Target t = new Target(best, Assist.GO, IT + "plant: step on the " + L.plants.get(best).getClass().getSimpleName()); t.obj = best; return t; }
+		if (near.isEmpty() && hpf < 0.6f && L.plants.get(hp) instanceof Sungrass) {   // (planted where he stands: it goes off when stepped onto, so off it and back)
+			for (int k = 0; k < 8; k++) { int c = hp + Assist.N8[k]; if (Assist.nb(hp, c) && Assist.open[c] && Actor.findChar(c) == null && L.plants.get(c) == null && L.traps.get(c) == null) { Target t = new Target(c, Assist.GO, IT + "plant: off the Sungrass, to step back on"); t.obj = c; return t; } }
+		}
+		if (hard && adj.isEmpty()) {
+			int close = 99; for (Mob m : near) close = Math.min(close, Assist.walk(m.pos));
+			if (close >= 3 && close < Assist.INF) for (Class<? extends Plant.Seed> sc : Arrays.asList(Starflower.Seed.class, Earthroot.Seed.class)) {
+				Plant.Seed sd = H.belongings.getItem(sc); if (sd == null || !ok(sd, Item.AC_THROW)) continue;
+				for (int k = 0; k < 8; k++) { int c = hp + Assist.N8[k]; if (Assist.nb(hp, c) && Assist.open[c] && Actor.findChar(c) == null && L.plants.get(c) == null && L.traps.get(c) == null && L.heaps.get(c) == null && lands(c)) return use(sd, Item.AC_THROW, c, "plant: " + sc.getEnclosingClass().getSimpleName() + " beside, to step on"); }
+			}
+		}
 		return null;
 	}
 
