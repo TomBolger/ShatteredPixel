@@ -87,6 +87,222 @@ final class AsBasics {
 		return null;
 	}
 
+	// =============================================================================================================
+	// the Great Crab's dead ends (it blocks every blow it sees coming: cornered beside it with no way out, the fight
+	// never ends). Away from it, and to wait for it, only where there's room to slip off again.
+	// =============================================================================================================
+	static final boolean CRABEND = opt("BCRABEND", true);
+	static int crabPos = -1; static float crabSeenAt = -99; static Level crabL;
+
+	/** Plan A taking the hero into (or keeping it in) a dead end with the crab hunting it: a cell with room instead. */
+	static Target crab(Target planA) {
+		if (!CRABEND || planA == null) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		Mob cr = null; for (Mob m : mobs()) if (m instanceof GreatCrab && enemy(m) && hunting(m)) cr = m;
+		if (crabL != L) { crabL = L; crabSeenAt = -99; }
+		if (cr != null) { crabPos = cr.pos; crabSeenAt = Actor.now(); }
+		else if (Actor.now() - crabSeenAt > 20 || L.heroFOV[crabPos]) return null;   // (out of sight lately, hunting: where it was seen, coming)
+		if (h.rooted) return null;
+		int crp = crabPos;
+		int goal = planA.kind == WAIT || planA.kind == ENEMY || planA.kind == USE ? hp : planA.obj >= 0 && planA.obj < L.length() ? planA.obj : planA.cell;
+		if (goal < 0) return null;
+		int[] cd = crabDist(crp);
+		boolean pk = pocket(goal, crp, cd);
+		if (DBG) System.out.println("    CRAB at " + crp + " plan " + planA.why + "@" + goal + " pocket " + pk);
+		if (!pk) return null;
+		if (adjacent(crp, hp) && goal == hp && planA.kind == ENEMY) return null;   // (beside it already: the ambush blow, or the stall rules)
+		int best = -1, bs = -INF;
+		for (int c = 0; c < L.length(); c++) if (dist[c] >= 1 && dist[c] <= 8 && open[c] && seenChar(c) == null && !danger[c] && !adjacent(c, crp) && dist[c] < cd[c] * 3 / 2 + 1) {
+			int sc = 3 * Math.min(distance(c, crp), 5) - 2 * dist[c] + (sight(crp, c) ? 0 : 12);
+			if (sc > bs && !pocket(c, crp, cd)) { bs = sc; best = c; } }
+		if (best < 0) return null;
+		return new Target(best, GO, "the crab: not into a dead end");
+	}
+
+	/** A move into a pocket with the crab hunting the hero (seen in the last 20 turns). */
+	static boolean crabVeto(Target t) {
+		if (!CRABEND || t == null || t.kind != GO || t.cell < 0 || crabL != L || Actor.now() - crabSeenAt > 20 || crabPos < 0) return false;
+		boolean v = pocket(t.cell, crabPos, crabDist(crabPos)) && !pocket(Dungeon.hero.pos, crabPos, crabDist(crabPos));
+		if (DBG && v) System.out.println("    CRAB veto " + t.why + "@" + t.cell);
+		return v;
+	}
+
+	/** Steps from the crab (it walks round walls), INF where it can't go. */
+	static int[] crabDist(int from) {
+		int N = L.length(), W = L.width(); int[] d = new int[N]; Arrays.fill(d, INF); ArrayDeque<Integer> q = new ArrayDeque<>();
+		d[from] = 0; q.add(from);
+		while (!q.isEmpty()) { int u = q.poll(); if (d[u] >= 40) continue;
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || d[v] < INF || !L.passable[v] || !(known[v] || L.heroFOV[v])) continue;
+				d[v] = d[u] + 1; q.add(v); } }
+		return d;
+	}
+
+	/** Is c a pocket: with the crab come up beside it (on the side it comes from), few cells left to step off to (14
+	 *  or fewer within 6 steps of c, none beside the crab)? There every blow is seen and blocked for good. (Any cell
+	 *  within 3 that would corner c, not just the one on the crab's way, made most cells pockets: 60 games, no better.) */
+	static boolean pocket(int c, int crab, int[] cd) {
+		int N = L.length(), W = L.width(), qc = crab;
+		if (!adjacent(c, crab)) { int b = INF; for (int k : PathFinder.NEIGHBOURS8) { int v = c + k; if (v >= 0 && v < N && Math.abs(v % W - c % W) <= 1 && L.passable[v] && cd[v] < b) { b = cd[v]; qc = v; } } if (b >= INF) return false; }
+		return cornered(c, qc);
+	}
+	/** The crab at x: 14 or fewer cells left to c, none beside x, within 6 steps. */
+	static boolean cornered(int c, int x) {
+		int N = L.length(), W = L.width(); int[] d = new int[N]; Arrays.fill(d, -1); ArrayDeque<Integer> q = new ArrayDeque<>();
+		d[c] = 0; q.add(c); int n = 0;
+		while (!q.isEmpty()) { int u = q.poll(); if (++n > 14) return false; if (d[u] >= 6) continue;
+			for (int k : PathFinder.NEIGHBOURS8) { int v = u + k;
+				if (v < 0 || v >= N || Math.abs(v % W - u % W) > 1 || d[v] >= 0 || !L.passable[v] || !(known[v] || L.heroFOV[v]) || distance(v, x) <= 1) continue;
+				d[v] = d[u] + 1; q.add(v); } }
+		return true;
+	}
+
+	// =============================================================================================================
+	// piranhas (60 honest games to depth 5: 6 of 16 deaths): the plan walked into their water, fled a bite to dry
+	// land out of reach, and walked back in, over and over. Piranhas can't leave the water: from the shore, a blow at
+	// one beside the hero; a way on through the water waits on the shore for the one that's after the hero.
+	// =============================================================================================================
+	static final boolean FISH = opt("BFISH", true);
+	static final int FISHWAIT = optInt("BFISHWAIT", 12);   // turns waited on the shore for one piranha
+	static final Map<Integer, Integer> fishWaited = new HashMap<>(); static float fishLast = -99, fishTurn = -1; static Level fishL;
+
+	static Target piranha(Target planA) {
+		if (!FISH || planA == null) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (fishL != L) { fishL = L; fishWaited.clear(); fishLast = -99; }
+		Mob adj = null, near = null; int nd = INF;
+		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { fishLast = Actor.now();
+			if (adjacent(m.pos, hp)) adj = m; if (distance(m.pos, hp) < nd) { nd = distance(m.pos, hp); near = m; } }
+		if (L.water[hp] || h.rooted) return null;   // (in the water: out of it, Assist's own rules)
+		if (adj != null) return h.HP * 10 >= h.HT * 4 ? new Target(adj.pos, ENEMY, "piranha: strike it from the shore") : null;
+		if (Actor.now() - fishLast > 10 || (planA.kind != GO && planA.kind != PICKUP)) return null;
+		int t = planA.obj >= 0 && planA.obj < L.length() ? planA.obj : planA.cell;
+		if (t < 0 || dist[t] >= INF) return null;
+		// the way there: the last dry cell before the water
+		List<Integer> path = new ArrayList<>(); int c = t;
+		while (c != hp && dist[c] > 0 && dist[c] < INF && path.size() < 200) { path.add(0, c); int b = -1;
+			for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && dist[n] == dist[c] - 1) { b = n; break; } }
+			if (b < 0) break; c = b; }
+		int shore = hp; boolean wet = false;
+		for (int p : path) { if (L.water[p] || (near != null && distance(p, near.pos) <= 2 && shoreCell(p))) { wet = true; break; } shore = p; }   // (the water, or the shore within its reach)
+		if (!wet) return null;
+		int key = near != null ? near.id() : -1;
+		int w = fishWaited.getOrDefault(key, 0);
+		boolean hurt = h.HP * 2 < h.HT;
+		if (w >= (hurt ? FISHWAIT * 5 : FISHWAIT)) return null;   // (it isn't coming: on)
+		if (hurt && !shoreCell(hp)) {   // (hurt: off the shore, the wounds closing, till it goes)
+			if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
+			Target r = new Target(hp, WAIT, "piranha: hurt, wait off the shore"); r.action = WAIT_ACT; return r;
+		}
+		if (shore != hp) return new Target(shore, GO, "piranha: to the shore, for it to come");
+		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
+		Target r = new Target(hp, WAIT, "piranha: wait on the shore for it"); r.action = WAIT_ACT; return r;
+	}
+
+	// =============================================================================================================
+	// demon spawners (depths 21-24; strategy-reference 4.5: "kill the demon spawners on 21-24 first"): each one left
+	// alive is a ripper demon in Yog's summons in place of a larva, and it drops a Healing potion. It never moves and
+	// never strikes: the bot passed it by as a foe that can't come. Struck at good health with nothing else about.
+	// =============================================================================================================
+	static final boolean SPAWNERS = opt("BSPAWN", true);
+	static final int SPAWNHP = optInt("BSPAWNHP", 70);   // health share to start on one (it sends a ripper as it's hurt)
+	static final Set<Integer> spawnAt = new HashSet<>(); static Level spawnL;
+
+	static Target spawner(Target planA) {
+		if (!SPAWNERS) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (spawnL != L) { spawnL = L; spawnAt.clear(); }
+		for (Mob m : mobs()) if (m instanceof DemonSpawner && m.isAlive() && L.heroFOV[m.pos]) spawnAt.add(m.pos);
+		spawnAt.removeIf(c -> L.heroFOV[c] && !(Actor.findChar(c) instanceof DemonSpawner));   // (seen gone)
+		if (spawnAt.isEmpty()) return null;
+		for (Mob m : mobs()) if (enemy(m) && hostile(m) && !(m instanceof DemonSpawner) && (hunting(m) || adjacent(m.pos, hp))) return null;   // (a fight on: the usual rules)
+		if (inDanger || h.rooted) return null;
+		int best = -1, bd = INF;
+		for (int c : spawnAt) { int w = AsBosses.walkNear(c); if (w < bd) { bd = w; best = c; } }
+		if (best < 0) return null;
+		Char sp = Actor.findChar(best);
+		boolean fighting = adjacent(best, hp) && sp instanceof DemonSpawner && sp.HP < sp.HT;
+		if (h.HP * 100 < h.HT * (fighting ? 40 : SPAWNHP)) return null;   // (rest first: Assist's own rules)
+		if (adjacent(best, hp)) return sp instanceof DemonSpawner ? new Target(best, ENEMY, "spawner: destroy it") : null;
+		if (bd >= INF) return null;
+		int st = AsBosses.besideStep(best);
+		return st >= 0 ? new Target(st, GO, "spawner: to it (Yog's demons, a Healing potion)") : null;
+	}
+
+	// =============================================================================================================
+	// a chasm as the way out (Chasm.heroLand: the fall costs at least half the health left, with bleeding and a limp,
+	// and foes don't follow): only when losing a fight beside one, with no Healing known (the hands' escapes go first)
+	// =============================================================================================================
+	static final boolean CHASM = opt("BCHASM", true);
+	static final int CHASMHP = optInt("BCHASMHP", 35);   // health share at least: the landing can kill below it
+
+	static Target chasm() {
+		if (!CHASM || Dungeon.bossLevel() || Dungeon.depth >= 25) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.rooted || h.HP * 100 < h.HT * CHASMHP || h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Levitation.class) != null) return null;
+		boolean adj = false; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) adj = true;
+		if (!adj) return null;
+		com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing heal = bag(com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfHealing.class);
+		if (heal != null && heal.isKnown()) return null;
+		int pit = -1; for (int k : PathFinder.NEIGHBOURS8) { int c = hp + k; if (c >= 0 && c < L.length() && L.pit[c] && !L.solid[c] && known[c] && Actor.findChar(c) == null) pit = c; }
+		if (pit < 0 || !(OFIGHT ? oLosing(OESC) : h.HP * 2 < h.HT)) return null;
+		return new Target(pit, GO, "losing: down the chasm (half the health left, but out)");
+	}
+
+	// =============================================================================================================
+	// the sacrificial fire (SacrificeRoom): a foe killed while beside the altar's fire feeds it (2-3x its experience);
+	// fed 6 + 4 a depth, it gives a prize. Foes fought from the altar itself are all beside it.
+	// =============================================================================================================
+	static final boolean SACRIFICE = opt("BSACRIFICE", true);
+	static final int SACWALK = optInt("BSACWALK", 8);   // steps to the altar at most, with a foe coming
+
+	static Target sacrifice(Target planA) {
+		if (!SACRIFICE || Dungeon.bossLevel()) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		com.shatteredpixel.shatteredpixeldungeon.actors.blobs.Blob f = L.blobs.get(com.shatteredpixel.shatteredpixeldungeon.actors.blobs.SacrificialFire.class);
+		if (f == null || f.volume <= 0 || f.cur == null) return null;
+		int alt = -1; for (int c = 0; c < L.length() && c < f.cur.length; c++) if (f.cur[c] > 0 && known[c]) alt = c;
+		if (alt < 0 || h.rooted || h.HP * 2 < h.HT) return null;
+		Mob near = null; int nd = INF; boolean adjFoe = false;
+		for (Mob m : mobs()) if (hostile(m) && hunting(m) && !(m instanceof Piranha)) { int w = walk(m.pos); if (w < nd) { nd = w; near = m; } adjFoe |= adjacent(m.pos, hp); }
+		if (near == null) return null;
+		if (hp == alt) {   // on the altar: strike what's beside it (all of it is in the fire's reach), else let it come
+			Mob o = null; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp) && (o == null || m.HP < o.HP)) o = m;
+			if (o != null) return new Target(o.pos, ENEMY, "sacrificial fire: strike it beside the altar");
+			Target t = new Target(hp, WAIT, "sacrificial fire: let it come to the altar"); t.action = WAIT_ACT; return t;
+		}
+		if (adjFoe || walk(alt) > SACWALK || walk(alt) >= nd + 2 || seenChar(alt) != null || bad.containsKey(alt)) return null;   // (to the altar ahead of it, not past it)
+		return new Target(alt, GO, "sacrificial fire: to the altar, to fight there");
+	}
+
+	// =============================================================================================================
+	// sleepers (Pebble PD's bot): a blow at a sleeping foe always lands (a surprise), and one left asleep wakes later on
+	// its own and comes hunting at a bad time. Crept up on and struck first, when the fight model says it's an easy one.
+	// =============================================================================================================
+	static final boolean SNEAK = opt("BSNEAK", false);   // (off: 60 honest games to depth 5, deaths 6 -> 8 on, 8 with 1% risk and 6 steps: waking foes better left asleep)
+	static final int SNEAKWALK = optInt("BSNEAKWALK", 10), SNEAKRISK = optInt("BSNEAKRISK", 3);   // steps; the fight's chance of death (percent) at most
+
+	static Target sleeper(Target planA) {
+		if (!SNEAK || planA == null || planA.kind == ENEMY || planA.kind == USE || Dungeon.bossLevel()) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (h.HP * 10 < h.HT * 7 || inDanger || h.rooted || seenFoe && anyAwake()) return null;
+		Mob best = null; int bw = INF;
+		for (Mob m : mobs()) {
+			if (!enemy(m) || m.state != m.SLEEPING || m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.NPC || m instanceof Piranha || m instanceof Mimic || Char.hasProp(m, Char.Property.IMMOVABLE) || Char.hasProp(m, Char.Property.BOSS) || Char.hasProp(m, Char.Property.MINIBOSS)) continue;
+			int w = AsBosses.walkNear(m.pos);
+			if (w > SNEAKWALK || w >= bw) continue;
+			if (pebxel.bot.FightModel.evaluate(h, Collections.singletonList(m)).pDeath * 100 > SNEAKRISK) continue;
+			bw = w; best = m;
+		}
+		if (best == null) return null;
+		if (adjacent(best.pos, hp)) return new Target(best.pos, ENEMY, "sleeper: a sure first blow");
+		int st = AsBosses.besideStep(best.pos);
+		return st >= 0 ? new Target(st, GO, "sleeper: creep up on it") : null;
+	}
+	static boolean anyAwake() { for (Mob m : mobs()) if (hostile(m)) return true; return false; }
+
+	static boolean shoreCell(int c) { for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && L.water[n]) return true; } return false; }
+
 	/** A missile or a charged attack wand at m, if the way is clear. */
 	static Target rangedAt(Mob m) {
 		Hero h = Dungeon.hero;
@@ -150,10 +366,33 @@ final class AsBasics {
 		if (!FOOD || hk == null) return false;
 		Hero h = Dungeon.hero;
 		if (hk.kind == WAIT && REST_ACT.equals(hk.action) && hk.why.startsWith("hurt")) {
-			if (h.HP * 4 < h.HT || L.locked) return false;
-			return foodTurns() < restTurns() + FOODRESERVE;
+			if (h.HP * 4 < h.HT || L.locked) return stairsRest(hk);
+			if (foodTurns() < restTurns() + FOODRESERVE) return true;
+			return stairsRest(hk);
 		}
 		return false;
+	}
+
+	// =============================================================================================================
+	// resting on the stairs up (Pebble PD's bot): a long rest where a foe that turns up can be left behind (only allies
+	// follow up the stairs: strategy-reference 2.3, Assist.upstairs), when the stairs are a short walk off.
+	// =============================================================================================================
+	static final boolean STAIRSREST = opt("BSTAIRSREST", true);
+	static final int STAIRSWALK = optInt("BSTAIRSWALK", 12);   // steps walked to rest on the stairs
+	static float stairsAt = -1; static int stairsCell = -1;
+
+	/** The rest vetoed for the walk to the stairs up first (AsBasics.restStairs suggests it). */
+	static boolean stairsRest(Target hk) {
+		if (!STAIRSREST || Dungeon.depth <= 1 || Dungeon.bossLevel() || seenFoe || inDanger) return false;
+		int ent = L.entrance(), hp = Dungeon.hero.pos;
+		if (ent < 0 || ent >= L.length() || ent == hp || !known[ent] || walk(ent) > STAIRSWALK || bad.containsKey(ent)) return false;
+		if (Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) return false;
+		stairsAt = Actor.now(); stairsCell = ent;
+		return true;
+	}
+	static Target restStairs() {
+		if (stairsAt != Actor.now() || stairsCell < 0) return null;
+		return new Target(stairsCell, GO, "hurt: rest on the stairs up (a way out if one comes)");
 	}
 
 	/** Short of food: plan A on grass, a look round or a search is put off for the way on, when that's known. */
