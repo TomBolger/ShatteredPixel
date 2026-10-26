@@ -141,6 +141,7 @@ final class AsBosses {
 		for (Mob m : mobs()) {
 			if (m instanceof DM300 && PYLON) t = dm300((DM300) m);
 			else if (m instanceof DwarfKing && KING2) t = king((DwarfKing) m);
+			else if (m instanceof Goo && GOOWATER) t = goo((Goo) m);
 			else if (m instanceof YogDzewa && FISTS && !YOG) t = yog((YogDzewa) m);
 			if (t != null) return t;
 		}
@@ -195,6 +196,25 @@ final class AsBosses {
 		int s1 = kingStep(best, -1); if (s1 < 0) return null;
 		if (L.distance(best, hp) <= 1) tenguLooked.add(best);
 		return new Target(s1, GO, "Tengu: look for him");
+	}
+
+	/** Goo heals in water (Goo.act: +1 a turn while it stands there, and the floor's lock gives the time back): beside
+	 *  the hero in water, a step to a dry cell not beside it, where every cell it can step to beside the hero is dry
+	 *  (strategy-reference 4.1); it follows out of the water. Not while it's pumped up (Assist.tactics keeps out of
+	 *  its reach then). */
+	static final boolean GOOWATER = opt("BGOOWATER", true);
+	static Target goo(Goo g) {
+		Hero h = Dungeon.hero; int hp = h.pos;
+		if (!enemy(g) || !L.water[g.pos] || g.HP >= g.HT || !L.adjacent(g.pos, hp) || h.rooted || Assist.pumped(g)) return null;
+		int best = -1, bk = INF;
+		for (int k : PathFinder.NEIGHBOURS8) { int n = hp + k;
+			if (n < 0 || n >= L.length() || !open[n] || L.water[n] || danger[n] || seenChar(n) != null || L.adjacent(n, g.pos)) continue;
+			boolean dry = true; int opts = 0;
+			for (int j : PathFinder.NEIGHBOURS8) { int c = n + j; if (c < 0 || c >= L.length() || !L.adjacent(c, g.pos) || !L.passable[c] || c == hp) continue; opts++; if (L.water[c]) dry = false; }
+			if (!dry && L.water[hp]) continue;
+			int sc = (dry ? 0 : 10) + adjFoes(n) * 3;
+			if (dry && opts > 0 && sc < bk) { bk = sc; best = n; } }
+		return best >= 0 ? new Target(best, GO, "boss: Goo out of the water (it heals there)") : null;
 	}
 
 	/** A blow coming at the hero's cell (a beam, a leap, a bomb...): the nearest cell it misses. */
