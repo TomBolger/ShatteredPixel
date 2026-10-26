@@ -61,7 +61,7 @@ final class AsAbilities {
 	static final boolean PATIENT = Assist.opt("PATIENT", false);
 	static final boolean SNEAKSLEEP = Assist.opt("SNEAKSLEEP", false), SNEAKUP = Assist.opt("SNEAKUP", true), OPENERS = Assist.opt("OPENERS", true);
 	public static final String AB = "ab:";
-	static final boolean ESCAPE = Assist.opt("CLOAKESC", true);
+	static final boolean ESCAPE = Assist.opt("CLOAKESC", true), PREPWAIT = Assist.opt("PREPWAIT", true);
 
 	// ---- per turn ----
 	static Hero H; static Level L; static int hp; static float hpf;
@@ -178,6 +178,7 @@ final class AsAbilities {
 			if ((t = snipe()) != null) return t;
 			if ((t = snipeMark()) != null) return t;
 			if ((t = preparation()) != null) return t;
+			if (PREPWAIT && (t = prepWait()) != null) return t;
 			return null;
 		} catch (Throwable e) { Assist.lastError = e; return null; }
 	}
@@ -413,6 +414,23 @@ final class AsAbilities {
 		}
 		if (best == null) return null;
 		return ab(carrier(), AB + "prep", best.pos, "prep: blink and strike (level " + lvl + (p.canKO(best) ? ", a kill" : "") + ")");
+	}
+
+	/** The Assassin unseen with a strong foe in sight that hasn't got him: a few turns' wait build the preparation
+	 *  (level 3 at 5 turns unseen: a big blow and a blink, a kill below 20-50% of its health) before the blink-strike,
+	 *  rather than walking up for a level-1 blow. Not with the cloak nearly spent. */
+	static Target prepWait() {
+		Preparation p = H.buff(Preparation.class); if (p == null || !adj.isEmpty() || H.invisible <= 0 || p.attackLevel() >= 3) return null;
+		Mob s = null;
+		for (Mob m : foes) if (!Assist.boss(m) && !(m instanceof NPC) && strong(m) && L.heroFOV[m.pos] && Assist.distance(m.pos, hp) <= 6 && !p.canKO(m)) s = m;
+		if (s == null) return null;
+		com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = H.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.class);
+		Object ch = ck == null ? null : Assist.field(ck, "charge");
+		if (H.buff(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.cloakStealth.class) != null && ch instanceof Integer && (Integer) ch < 2) return null;
+		if (s.id() != waitId) { waitId = s.id(); waits = 0; }
+		if (++waits > 6) return null;
+		Item k = carrier(); if (k == null) return null;
+		return ab(k, AB + "wait", -1, "prepwait: unseen, the preparation builds (level " + p.attackLevel() + ")");
 	}
 
 	/** The Freerunner: freerun to get away when low and chased (plan A walks off). */
