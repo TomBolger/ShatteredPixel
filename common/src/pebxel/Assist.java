@@ -586,7 +586,7 @@ public final class Assist {
 		int kk = com.shatteredpixel.shatteredpixeldungeon.Statistics.enemiesSlain; boolean kill = killKey >= 0 && kk != killKey; killKey = kk;
 		if (f) foeAt = Actor.now();
 		fight = f;
-		if ((!combatHeld.isEmpty() || grassHeld) && !f && (kill || Actor.now() - foeAt >= CALM)) { combatHeld.clear(); grassHeld = false; }
+		if ((!combatHeld.isEmpty() || grassHeld) && !f && (kill || Actor.now() - foeAt >= CALM)) { AsIntent.afterFight(combatHeld); combatHeld.clear(); grassHeld = false; }
 		remember();
 		// the last act did nothing (no time passed, nowhere moved): that target is no use for a while
 		if (actTime >= 0 && actPos == hp && Actor.now() == actTime && actCell >= 0 && actKind != USE && actKind != WAIT) {

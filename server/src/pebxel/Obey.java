@@ -28,7 +28,7 @@ final class Obey {
 		if (t == null) return "";
 		switch (t.kind) {
 			case Assist.USE: return "use:" + (t.item == null ? "-" : System.identityHashCode(t.item)) + ":" + t.action + (t.item == null ? ":" + t.why.replaceAll("[^a-z]", "") : "");
-			case Assist.GO: case Assist.PICKUP: return "go:" + (t.obj >= 0 ? t.obj : t.cell);
+			case Assist.GO: case Assist.PICKUP: return "go:" + (t.obj >= 0 ? t.obj : t.cell) + (t.src != null ? ":" + t.src : "");   // (a skill's step: the same skill's; another reason that leads there is another suggestion)
 			case Assist.WAIT: return "wait:" + t.action + ":" + t.cell;
 			default: return "";
 		}

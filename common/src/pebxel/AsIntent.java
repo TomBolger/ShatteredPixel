@@ -38,15 +38,18 @@ final class AsIntent {
 	/** His liking per kind of entry (picked over plan A +1, passed over -1; each choice decays the rest a little). */
 	static final Map<String, Double> like = new HashMap<>();
 	/** What he passed over, by objective: how many times, when, and whether the once-more on the way was used. */
-	static final class Skip { int n; float at; boolean again, combat; String why; int kind; }
+	static final class Skip { int n; float at; boolean again, combat; String why, cat; int kind; }
 	static final Map<Integer, Skip> skips = new HashMap<>();
-	static final int AGAIN_AFTER = 10, DETOUR = 2, AGAIN_NEAR = 8;
+	static final int AGAIN_AFTER = 10, DETOUR = 2, AGAIN_NEAR = 8, NEAR = 3;
+	/** Passed over in a fight that is now over: plan A again once, when it lies close by (NEAR steps) or on the way. */
+	static final Set<Integer> postFight = new HashSet<>();
+	static void afterFight(Set<Integer> held) { if (ON) postFight.addAll(held); }
 	/** Counters (tests, the bot's report): lists reordered by his way or liking, plans A held back as disliked, once-mores. */
 	static long ranked, disliked, again;
 
 	static void newFloor() {
 		if (floor == L) return;
-		floor = L; dir = -1; skips.clear();
+		floor = L; dir = -1; skips.clear(); postFight.clear();
 	}
 
 	/** The kind of an entry, for his liking. */
@@ -97,7 +100,7 @@ final class AsIntent {
 		if (e.kind != GO && e.kind != PICKUP) { if (optional(cat(e))) liked(cat(e), -0.5); return; }
 		int o = e.obj >= 0 ? e.obj : e.cell; if (o < 0) return;
 		Skip s = skips.computeIfAbsent(o, k -> new Skip());
-		s.n++; s.at = Actor.now(); s.combat = fight || seenFoe; s.why = e.why; s.kind = e.kind;
+		s.n++; s.at = Actor.now(); s.combat = fight || seenFoe; s.why = e.why; s.kind = e.kind; s.cat = cat(e);
 		if (optional(cat(e)) && !s.combat) liked(cat(e), -0.5);
 	}
 	/** How much longer an objective passed over again stays held back (Assist.pass's demotion): 1, 3, 9 times. */
@@ -112,12 +115,25 @@ final class AsIntent {
 		boolean calm = !seenFoe && !inDanger;
 		Target a = out.get(0);
 		boolean walkA = (a.kind == GO || a.kind == PICKUP) && !a.why.startsWith("escape") && !a.why.startsWith("your") && a.src == null;
+		// 0. passed over in the fight just over: plan A once more only close by or on the way, else after the rest
+		if (calm && !postFight.isEmpty()) {
+			int ao = a.obj >= 0 ? a.obj : a.cell;
+			if (postFight.contains(ao) && (a.kind == GO || a.kind == PICKUP)) {
+				boolean near = walk(ao) <= NEAR;
+				boolean onWay = false;
+				for (int j = 1; j < out.size() && !near; j++) { Target e = out.get(j); int eo = e.obj >= 0 ? e.obj : e.cell;
+					if ((e.kind == GO || e.kind == PICKUP) && eo >= 0 && eo < dist.length && !postFight.contains(eo) && walk(eo) < INF) { onWay = walk(ao) + distance(ao, eo) - walk(eo) <= DETOUR; break; } }
+				if (near || onWay) postFight.remove(ao);
+				else for (int j = 1; j < out.size(); j++) { Target e = out.get(j); int eo = e.obj >= 0 ? e.obj : e.cell; if (e.kind != ENEMY && !postFight.contains(eo)) { out.add(0, out.remove(j)); a = out.get(0); break; } }
+			}
+		}
 		// 1. once more, on the way: a thing passed over, a while ago, a step or two off the way to plan A's objective
 		if (calm && walkA) {
 			int ao = a.obj >= 0 ? a.obj : a.cell, best = -1, bd = INF; Skip bs = null;
 			for (Map.Entry<Integer, Skip> e : skips.entrySet()) {
 				Skip s = e.getValue(); int o = e.getKey();
 				if (s.n != 1 || s.again || s.combat || now - s.at < AGAIN_AFTER || o == ao || o == heroPos() || o < 0 || o >= dist.length) continue;
+				if (optional(s.cat) && like(s.cat) <= -2) continue;   // (a kind he doesn't care for: not even on the way)
 				int w = walk(o); if (w >= INF || w > AGAIN_NEAR) continue;
 				if (s.kind == PICKUP && seenHeap(o) == null) continue;   // (gone meanwhile)
 				if (s.why != null && s.why.contains("grass") && L.map[o] != Terrain.HIGH_GRASS) continue;
@@ -190,5 +206,5 @@ final class AsIntent {
 		StringBuilder b = new StringBuilder(); for (Map.Entry<String, Double> e : new TreeMap<>(like).entrySet()) b.append(e.getKey()).append(String.format(Locale.ROOT, "%+.1f", e.getValue())).append(' ');
 		return "ranked " + ranked + " disliked " + disliked + " again " + again + " like " + b.toString().trim();
 	}
-	static void reset() { like.clear(); skips.clear(); dir = -1; planAs = 0; floor = null; ranked = disliked = again = 0; }
+	static void reset() { like.clear(); skips.clear(); postFight.clear(); dir = -1; planAs = 0; floor = null; ranked = disliked = again = 0; }
 }

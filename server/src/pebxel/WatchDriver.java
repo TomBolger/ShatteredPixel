@@ -379,6 +379,7 @@ public final class WatchDriver {
 		wilfulDecisions++;
 		if (!calm || h == null) return selectOnly(t);
 		Assist.Target a = ps.get(0);
+		if (VW) System.out.println("    wilful: list " + ps.subList(0, Math.min(4, ps.size())) + " whim " + whim + " hero " + h.pos + " t" + Math.round(com.shatteredpixel.shatteredpixeldungeon.actors.Actor.now()) + " like " + AsIntent.like + " dir " + AsIntent.dir);
 		calmA++; if (wilfulDecisions < 1500) calmA1++;
 		boolean dis = AsIntent.cat(a).equals(dislike);
 		if (dis) { dislikedA++; if (wilfulDecisions < 1500) dislikedA1++; }
