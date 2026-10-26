@@ -28,9 +28,9 @@ final class AsGear {
 
 	static final boolean ON = Assist.opt("ARMPLAN", true);
 	static { pebxel.bot.GearValue.armorElsewhere = ON; }
-	static final int FUT = Assist.optInt("ARMFUT", 2);          // (the scrolls still to come counted in the comparison)
+	static final int FUT = Assist.optInt("ARMFUT", 1);          // (the scrolls still to come counted in the comparison)
 	static final int HYST = Assist.optInt("ARMHYST", 50);       // (hundredths of a block point a new armour must win by)
-	static final int ENCMAX = Assist.optInt("ARMENC", 0);      // (STR points short a piece may be worn at now)
+	static final int ENCMAX = Assist.optInt("ARMENC", 1);      // (STR points short a piece may be worn at now)
 	static final boolean HOLD1 = Assist.opt("ARMHOLD1", false); // (hold the scrolls while only cloth is worn, till the boss)
 
 	static final boolean DBG = System.getenv("ARMDBG") != null;
