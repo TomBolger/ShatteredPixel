@@ -66,7 +66,7 @@ final class Rules {
 				&& (pebxel.bot.HeroView.dot(H()) > 0 || H().HP * 100 < H().HT * Math.max(pebxel.bot.Tune.HEALLOW, 40)), 99),
 		// a fight seen going nowhere (AsBasics: blows that never lower its health): the basics' way out stands; the
 		// lookahead only has the numbers, the stall was seen (BR-a3: a Rogue kept hitting the Great Crab for 1,100 turns)
-		boost("rescue: the basics' way out of a stalled fight", c -> c.t.why.startsWith("stalled"), 99),
+		boost("rescue: the basics' way out of a stalled fight", c -> c == Rules.planA && c.t.why.startsWith("stalled"), 99),
 		// never die holding Healing (BR-a2: deaths with 5 to 11 known Healing left, burning or under warlocks' bolts: the
 		// hands give nothing while the hero burns, "out of the fire first"): the next round's worst (the blows of those
 		// beside him at their most, the bolts of the shooters in line, a third of the harm to come) could kill: drink
