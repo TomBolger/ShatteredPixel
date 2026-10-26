@@ -248,6 +248,7 @@ public class AssistBot {
 				depth = Dungeon.depth; branch = Dungeon.branch; floorDecisions = 0; floorFrames = 0; maxD = Math.max(maxD, depth); floorStart = Statistics.duration;
 				GLog.update.remove(logL); GLog.update.add(logL);
 				System.out.printf("depth %d  turn %.0f  hp %d/%d  lvl %d  str %d  %.1fs%n", depth, Statistics.duration, Dungeon.hero.HP, Dungeon.hero.HT, Dungeon.hero.lvl, Dungeon.hero.STR(), (ms() - t0) / 1000.0);
+				if (AsAscent.on()) System.out.println("  ascent: curse " + AsAscent.stacks() + " food " + AsAscent.foodLeft() + " hunger " + Assist.hunger());
 				if (depth > maxDepth) { end = "depth limit"; break; }
 				if (v) { StringBuilder sb = new StringBuilder("  level: heaps"); for (Heap h : Dungeon.level.heaps.valueList()) sb.append(' ').append(h.pos).append(':').append(h.peek().getClass().getSimpleName());
 					sb.append(" mobs"); for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) sb.append(' ').append(m.pos).append(':').append(m.getClass().getSimpleName()); System.out.println(sb); }
@@ -385,6 +386,7 @@ public class AssistBot {
 		System.out.println(BotItems.artLine());
 		if (Sense.ON) System.out.println(Sense.line());
 		System.out.println("BRAIN " + Brain.stats());
+		if (Dungeon.hero != null && Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) System.out.println("ASCENT stacks " + AsAscent.stacks() + " " + AsAscent.stats()); else AsAscent.reset();
 		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
 				cls, seed, end, Dungeon.depth, maxD, Statistics.duration, Dungeon.hero == null ? 0 : Dungeon.hero.lvl, Dungeon.hero == null ? 0 : Dungeon.hero.HP, Dungeon.hero == null ? 0 : Dungeon.hero.HT,

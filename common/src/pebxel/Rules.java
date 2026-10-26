@@ -86,6 +86,22 @@ final class Rules {
 		veto("stairs: no chained escapes", c -> (c.role == Role.UP || c.role == Role.DOWN) && Actor.now() - Brain.fledAt < 30 && Actor.now() >= Brain.fledAt),
 		propose("fled: rest before going back", c -> (stairsDown(c) || stairsUp(c)) && Brain.fledFrom >= 0 && Math.abs(Brain.fledFrom - Dungeon.depth) == 1
 				&& H().HP * 10 < H().HT * 9 && calm() && !Assist.starving() && !Assist.declined(null, Assist.REST_ACT), PREP, Rules::restTarget),
+		// -- the climb with the Amulet (agent K7: AsAscent) ------------------------------------------------------------
+		// (K5: up to 8 games of a run died climbing; K7-base: 6 of 6 from depth 26 died on 24, the first floor up, 250
+		// turns spent there picking up, holding doorways for foes the curse calls without end, resting.) Off the way up:
+		// no item hunting, exploring or searching; no rest while the curse (8+) takes more a turn than resting gives.
+		veto("ascent: nothing off the way", AsAscent::offWay),
+		veto("ascent: never down", AsAscent::down),
+		veto("ascent: no rest under the curse's harm", AsAscent::restHarm),
+		// -- shooters' bolts (agent K7: AsBolts) ------------------------------------------------------------------------
+		// an eye's charged beam (shown: the charge, aimed where the hero stood) fires through its line for 30-50: off it
+		propose("bolts: off the eye's beam", AsBolts::inBeam, 0, AsBolts::offBeam),
+		// two shooters or more: the step out of the nearest's line went into the other's and back (K7: a Cleric between
+		// two scorpios lost 150 health in 12 turns): out of every line at once
+		veto("bolts: out of one line into another", AsBolts::intoAnother),
+		propose("bolts: out of every line", AsBolts::manyLines, 0, AsBolts::outOfAll),
+		// a scorpio hunting backs off (Scorpio.getCloser): waiting round the corner for it waits for nothing
+		veto("bolts: no waiting for a scorpio", AsBolts::waitScorpio),
 		// -- the boss ahead: arrive whole, with the scrolls read ---------------------------------------------------
 		// (strategy-reference 4.x: every boss guide starts "full health, upgrades in"; Thomas: "boss preparation")
 		propose("boss next: rest first", c -> stairsDown(c) && bossNext() && calm() && H().HP * 100 < H().HT * 95 && !Assist.starving()
