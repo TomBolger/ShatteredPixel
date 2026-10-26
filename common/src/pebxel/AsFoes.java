@@ -53,7 +53,7 @@ final class AsFoes {
 	static final int STATP = optInt("FSTATP", 2);      // statue: the fight model's odds of death at most (%)
 	static final int STATL = optInt("FSTATL", 50);     // statue: the health it's expected to cost at most (% of the health now)
 	static final int STATHP = optInt("FSTATHP", 70);   // statue: the hero's health share at least
-	static final int CHASE = optInt("FCHASE", 12);     // thief: turns it's chased out of sight
+	static final int CHASE = optInt("FCHASE", 20);     // thief: turns it's chased out of sight
 	static final int SECRETN = optInt("FSECRETN", 5);  // secrets: dead ends searched a floor
 	static final int BURNTN = optInt("FBURNTN", 8);    // burnt rooms: searches a floor
 	static final int WAITN = optInt("FWAITN", 4);      // swarm / bat / fire elemental: turns waited for it at the spot
