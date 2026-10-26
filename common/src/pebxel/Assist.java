@@ -403,6 +403,7 @@ public final class Assist {
 			if (!h.ready) return false;
 			switch (t.kind) {
 				case USE: {
+					if (t.item != null) { useActKey = System.identityHashCode(t.item) + ":" + t.action; useActAt = Actor.now(); }
 					if (AsAbilities.mine(t)) return AsAbilities.act(t, player);   // (subclass buttons, spells, waits: AsAbilities)
 					if (t.item == null || t.action == null) return false;
 					if (Wand.AC_ZAP.equals(t.action) || MagesStaff.AC_ZAP.equals(t.action)) zapped.put(t.item, Actor.now());
@@ -843,7 +844,19 @@ public final class Assist {
 	 *  fro): the hero back on the same cell with the same plan A three times in OSCN decisions is a dither; that plan
 	 *  A is then kept first till it is reached (or OSCT turns), as long as no foe is in sight. */
 	static void commit() {
+		// an item use that did nothing (no time passed, the hero where he was: magic-immune, a staff that won't zap...)
+		// offered a third time at one moment is held back 20 turns (K8: the staff "zap point blank" with no time
+		// passing, 50 times; the cloak's likewise)
+		float now0 = Actor.now();
+		useBan.values().removeIf(t -> t < now0);
+		if (!useBan.isEmpty()) out.removeIf(t -> t.kind == USE && t.item != null && useBan.containsKey(System.identityHashCode(t.item) + ":" + t.action));
 		if (out.isEmpty()) return;
+		Target u = out.get(0);
+		if (u.kind == USE && u.item != null) {
+			String k = System.identityHashCode(u.item) + ":" + u.action;
+			if (k.equals(useKey) && now0 == useAt && hp == usePos && k.equals(useActKey) && useActAt == now0) {   /* (acted on, and nothing changed) */ if (++useN >= 2) { useBan.put(k, now0 + 20); out.remove(0); useKey = null; if (out.isEmpty()) return; } }
+			else { useKey = k; useAt = now0; usePos = hp; useN = 0; }
+		}
 		Target a = out.get(0); int ao = a.obj >= 0 ? a.obj : a.cell; float now = Actor.now();
 		boolean walkA = (a.kind == GO || a.kind == PICKUP) && ao >= 0 && !a.why.startsWith("escape") && !a.why.startsWith("boss") && !a.why.contains("bomb") && !a.why.startsWith("your ");   // (never over the player's own choice)
 		if (comL != L) { comL = L; oscHist.clear(); comObj = -1; oscPos = -1; }
@@ -860,6 +873,7 @@ public final class Assist {
 		oscHist.addLast(key); while (oscHist.size() > OSCN) oscHist.removeFirst();
 		if (n >= 2 && comObj < 0) { comObj = ao; comUntil = now + OSCT; comWhy = a.why; oscHist.clear(); }
 	}
+	static final Map<String, Float> useBan = new HashMap<>(); static String useKey, useActKey; static float useAt, useActAt = -1; static int usePos, useN;
 	static final ArrayDeque<Long> oscHist = new ArrayDeque<>(); static Level comL; static int comObj = -1, oscPos = -1; static float comUntil; static String comWhy = "";
 	static final int OSCN = optInt("OSCN", 40), OSCT = optInt("OSCT", 40);
 
