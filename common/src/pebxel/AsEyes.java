@@ -6,6 +6,7 @@ import com.shatteredpixel.shatteredpixeldungeon.actors.Char;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Eye;
 import com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob;
+import com.shatteredpixel.shatteredpixeldungeon.items.Item;
 import com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfTeleportation;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Level;
 import com.shatteredpixel.shatteredpixeldungeon.levels.Terrain;
@@ -229,7 +230,12 @@ final class AsEyes {
 			double k = d[c] * 10 + melee(c) * 8 + (L.water[c] ? 2 : 0);
 			if (k < bk) { bk = k; best = c; }
 		}
-		if (best < 0) return null;
+		if (best < 0) {   // (no cover in reach and its beam could kill: a known way out, unseen or elsewhere)
+			if (h.HP > beamHi() * 1.1) return null;
+			Item w = AsStealth.way(); if (w == null) return null;
+			Target t = use(w, w instanceof com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion ? com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.AC_DRINK : com.shatteredpixel.shatteredpixeldungeon.items.scrolls.Scroll.AC_READ, -1, "eye: away, its beam would kill (no cover near)");
+			t.hint = Math.max(1, Brain.R) * 0.6; return t;
+		}
 		Target t = new Target(best, GO, "eye: to cover before it charges (" + d[best] + " steps)");
 		t.hint = 0.3 + Math.max(1, Brain.R) * Math.min(1, 40.0 / Math.max(1, h.HP)) * 0.6;
 		return t;
