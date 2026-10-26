@@ -388,6 +388,7 @@ public class AssistBot {
 		if (Sense.ON) System.out.println(Sense.line());
 		System.out.println("BRAIN " + Brain.stats());
 		System.out.println("ECON " + AsEconomy.stats());
+		System.out.println("FOES " + AsFoes.stats());
 		if (Dungeon.hero != null && Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) != null) System.out.println("ASCENT stacks " + AsAscent.stacks() + " " + AsAscent.stats()); else AsAscent.reset();
 		if (HumanTalents.ON && Dungeon.hero != null) System.out.println("BUILD " + HumanTalents.summary(Dungeon.hero));
 		System.out.printf("RESULT class %s seed %d: %s depth %d (max %d) turns %.0f lvl %d hp %d/%d picked %d stuck %d actfails %d windows %d decisions %d frames %d  %.1fs%s%n",
