@@ -58,13 +58,17 @@ final class AsWeapon {
 	// it), and worn once it hits as hard as the worn one does now.
 	static final boolean PLAN = opt("MDWPLAN", true);
 	static { if (PLAN && ON) pebxel.bot.GearValue.weaponElsewhere = true; }
-	static final int FUT = optInt("MDWFUT", 2), HYST = optInt("MDWHYST", 10);   // (scrolls ahead counted; percent a new one must win by)
+	static final int FUT = optInt("MDWFUT", 2), HYST = optInt("MDWHYST", 10), DRK = optInt("MDWDR", 50);   // (scrolls ahead counted; percent a new one must win by)
 
 	/** A blow's worth: mean damage (and the STR to spare) times accuracy over delay, the STR it lacks costing both. */
 	static double worth(Hero h, MeleeWeapon m, int lvl) {
 		int enc = m.STRReq(lvl) - h.STR();
 		if (enc >= 2) return -1;
 		double dmg = (m.min(lvl) + m.max(lvl)) / 2.0 + (enc < 0 ? -enc / 2.0 : 0);
+		// less the foes' armour: about depth / 2 a blow on average (prison skeletons 0-5, golems 0-12, demons more):
+		// fast weak blows lose most to it (MD-bf1: a Huntress kept her Gloves, two blows a turn for nothing, over a
+		// known Sickle +2, and fought two foes for 2,000 decisions)
+		dmg = Math.max(0.5, dmg - Dungeon.depth * DRK / 100.0);
 		double v = dmg * m.ACC / m.DLY;
 		if (enc == 1) v /= 1.5 * 1.2;
 		return v;
