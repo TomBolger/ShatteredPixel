@@ -168,39 +168,65 @@ final class AsBasics {
 	// =============================================================================================================
 	static final boolean FISH = opt("BFISH", true);
 	static final int FISHWAIT = optInt("BFISHWAIT", 12);   // turns waited on the shore for one piranha
-	static final Map<Integer, Integer> fishWaited = new HashMap<>(); static float fishLast = -99, fishTurn = -1; static Level fishL;
+	static final Map<Integer, Integer> fishWaited = new HashMap<>(); static float fishLast = -99, fishTurn = -1; static int fishPos = -1; static Level fishL;
 
 	static Target piranha(Target planA) {
 		if (!FISH || planA == null) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		if (fishL != L) { fishL = L; fishWaited.clear(); fishLast = -99; }
-		Mob adj = null, near = null; int nd = INF;
+		Mob near = null; int nd = INF; List<Mob> adj = new ArrayList<>();
 		for (Mob m : mobs()) if (m instanceof Piranha && enemy(m)) { fishLast = Actor.now();
-			if (adjacent(m.pos, hp)) adj = m; if (distance(m.pos, hp) < nd) { nd = distance(m.pos, hp); near = m; } }
+			if (adjacent(m.pos, hp)) adj.add(m); if (distance(m.pos, hp) < nd) { nd = distance(m.pos, hp); near = m; } }
+		if (near != null) fishPos = near.pos;
+		int np = near != null ? near.pos : Actor.now() - fishLast <= 20 ? fishPos : -1;   // (out of sight lately: where it was last seen)
 		if (L.water[hp] || h.rooted) return null;   // (in the water: out of it, Assist's own rules)
-		if (adj != null) return h.HP * 10 >= h.HT * 4 ? new Target(adj.pos, ENEMY, "piranha: strike it from the shore") : null;
-		if (Actor.now() - fishLast > 10 || (planA.kind != GO && planA.kind != PICKUP)) return null;
+		// (EG: 9 of 96 honest deaths, most at full health: "strike it from the shore" at depth 1-4 traded blows with a
+		// fish of 15-30 health that bites for 1-12 at accuracy 20+; it can't leave the water, so a step off the shore ends
+		// the fight for free.) From the shore only a fight the model says is cheap (its meat is food); else off the shore.
+		if (!adj.isEmpty()) {
+			if (fishCheap(h, adj)) return new Target(adj.get(0).pos, ENEMY, "piranha: strike it from the shore (an easy kill)");
+			int dry = dryCell(hp);
+			if (dry >= 0) return new Target(dry, GO, "piranha: off the shore (it can't follow)");
+			return new Target(adj.get(0).pos, ENEMY, "piranha: strike it from the shore (no way off)");
+		}
+		if (Actor.now() - fishLast > 20 || (planA.kind != GO && planA.kind != PICKUP)) return null;
 		int t = planA.obj >= 0 && planA.obj < L.length() ? planA.obj : planA.cell;
 		if (t < 0 || dist[t] >= INF) return null;
-		// the way there: the last dry cell before the water
+		// the way there: the last cell out of its reach before the water
 		List<Integer> path = new ArrayList<>(); int c = t;
 		while (c != hp && dist[c] > 0 && dist[c] < INF && path.size() < 200) { path.add(0, c); int b = -1;
 			for (int k : PathFinder.NEIGHBOURS8) { int n = c + k; if (n >= 0 && n < L.length() && Math.abs(n % L.width() - c % L.width()) <= 1 && dist[n] == dist[c] - 1) { b = n; break; } }
 			if (b < 0) break; c = b; }
-		int shore = hp; boolean wet = false;
-		for (int p : path) { if (L.water[p] || (near != null && distance(p, near.pos) <= 2 && shoreCell(p))) { wet = true; break; } shore = p; }   // (the water, or the shore within its reach)
-		if (!wet) return null;
-		int key = near != null ? near.id() : -1;
-		int w = fishWaited.getOrDefault(key, 0);
-		boolean hurt = h.HP * 2 < h.HT;
-		if (w >= (hurt ? FISHWAIT * 5 : FISHWAIT)) return null;   // (it isn't coming: on)
-		if (hurt && !shoreCell(hp)) {   // (hurt: off the shore, the wounds closing, till it goes)
-			if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
-			Target r = new Target(hp, WAIT, "piranha: hurt, wait off the shore"); r.action = WAIT_ACT; return r;
+		int stop = shoreCell(hp) ? -1 : hp, wetAt = -1, wetN = 0, fd = INF;
+		for (int p : path) {
+			boolean wp = L.water[p] || (np >= 0 && distance(p, np) <= 3 && shoreCell(p));   // (the water, or the shore within its reach)
+			if (wp) { if (wetAt < 0) wetAt = p; wetN++; if (np >= 0) fd = Math.min(fd, distance(p, np)); }
+			else if (wetAt < 0 && !shoreCell(p)) stop = p;
+			else if (wetAt >= 0 && !shoreCell(p)) break;
 		}
-		if (shore != hp) return new Target(shore, GO, "piranha: to the shore, for it to come");
-		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(key, w + 1); }
-		Target r = new Target(hp, WAIT, "piranha: wait on the shore for it"); r.action = WAIT_ACT; return r;
+		if (AsHealth.DBG) System.out.println("EGP t " + Actor.now() + " hp " + hp + " t " + t + " cell " + planA.cell + " path " + path + " wetAt " + wetAt + " n " + wetN + " fd " + fd + " near " + (near == null ? -1 : near.pos) + " stop " + stop + " w " + fishWaited.getOrDefault(-1, 0) + " danger " + (planA.cell >= 0 ? danger[planA.cell] : false));
+		if (wetAt < 0) return null;
+		if (np < 0 || fd >= 2 * wetN + 3) return null;   // (out of sight, or too far to reach the hero before he's across: it swims two cells a turn)
+		int w = fishWaited.getOrDefault(-1, 0);
+		if (w >= FISHPATIENCE) {   // (a floor's patience spent: what lies past its water is skipped if the way on is known; if not, on, the plan's own rules in the water)
+			int ex = L.exit();
+			if (ex >= 0 && ex < L.length() && known[ex] && walk(ex) < INF && t != ex) { Assist.bad.put(t, Actor.now() + 300); if (planA.cell >= 0 && planA.cell != hp) Assist.bad.put(planA.cell, Actor.now() + 300); return null; }
+			if (fd >= 4 || w >= 3 * FISHPATIENCE) return null;   // (the only way on: across once it isn't at the crossing itself)
+		}
+		if (Actor.now() != fishTurn) { fishTurn = Actor.now(); fishWaited.put(-1, w + 1); }
+		if (stop >= 0 && stop != hp) return new Target(stop, GO, "piranha: wait out of its reach for it to go");
+		if (stop < 0) { int dry = dryCell(hp); if (dry >= 0) return new Target(dry, GO, "piranha: off the shore (it can't follow)"); return null; }
+		Target r = new Target(hp, WAIT, "piranha: wait out of its reach for it to go"); r.action = WAIT_ACT; return r;
+	}
+	static final int FISHPATIENCE = optInt("BFISHPAT", 150), FISHRISK = optInt("BFISHRISK", 2), FISHLOSS = optInt("BFISHLOSS", 30);   // (percent: the death odds and the share of health a shore fight may cost)
+	static boolean fishCheap(Hero h, List<Mob> fish) {
+		try { pebxel.bot.FightModel.Result r = pebxel.bot.FightModel.evaluate(h, fish); return r.pDeath * 100 <= FISHRISK && r.loss90 * 100 <= h.HP * FISHLOSS; } catch (Throwable e) { return false; }
+	}
+	/** The nearest cell the hero can walk to that no water touches (a piranha's bite can't reach it), within 6 steps, or -1. */
+	static int dryCell(int from) {
+		int best = -1, bd = 7;
+		for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < bd && L.passable[c] && !L.water[c] && !shoreCell(c) && !L.avoid[c] && Actor.findChar(c) == null && !Assist.bad.containsKey(c)) { bd = dist[c]; best = c; }
+		return best;
 	}
 
 	// =============================================================================================================

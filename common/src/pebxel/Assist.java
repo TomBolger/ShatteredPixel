@@ -846,6 +846,7 @@ public final class Assist {
 			out.add(out.remove(0));
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
+		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
