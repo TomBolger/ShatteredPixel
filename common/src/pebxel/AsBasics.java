@@ -41,6 +41,7 @@ final class AsBasics {
 	/** planA strikes the same foe again and again and its health never goes lower: something else. */
 	static Target fightLoop(Target planA) {
 		bossDown();   // (the bosses in sight noted, each decision: AsBasics.restUnaffordable)
+		foodSeen();
 		if (!LOOPS) return null;
 		Hero h = Dungeon.hero; int hp = h.pos;
 		// the blows struck (Assist.act's last act a blow, once a turn), not what plan A would do: the tactics may move instead
@@ -524,6 +525,17 @@ final class AsBasics {
 		return new Target(stairsCell, GO, "hurt: rest on the stairs up (a way out if one comes)");
 	}
 
+	/** Each regular floor holds one food at least (Level.create: a FOOD item on every floor but the bosses', two on a
+	 *  large one): picked up here yet? (What the hero carries, before and after: no peeking at the floor.) */
+	static Level foodL; static int foodPack = -1; static boolean foodHere;
+	static void foodSeen() {
+		int pk = 0; for (Item i : Dungeon.hero.belongings) if (i instanceof Food && !(i instanceof Blandfruit) && !(i instanceof com.shatteredpixel.shatteredpixeldungeon.items.food.MysteryMeat)) pk += i.quantity();
+		if (foodL != L) { foodL = L; foodHere = Dungeon.bossLevel() || Dungeon.branch != 0; foodPack = pk; return; }
+		if (pk > foodPack) foodHere = true;
+		foodPack = pk;
+	}
+	static final boolean FLOORFOOD = opt("BFLOORFOOD", true);
+
 	/** Short of food: plan A on grass, a look round or a search is put off for the way on, when that's known. */
 	static Target hurry(Target planA) {
 		if (!FOOD || planA == null || !shortOfFood() || Dungeon.bossLevel()) return null;
@@ -531,6 +543,7 @@ final class AsBasics {
 		if (!(w.startsWith("look") || w.equals("grass") || w.startsWith("search") || w.startsWith("dead end"))) return null;
 		int st = L.exit();
 		if (st < 0 || st >= L.length() || !known[st] || walk(st) >= INF || L.map[st] == Terrain.LOCKED_EXIT) return null;
+		if (w.startsWith("look") && !w.contains("grass") && FLOORFOOD && !foodHere) return null;   // (the floor's food not found yet: it is somewhere unexplored)
 		if (w.startsWith("look") && !w.contains("grass")) {   // (a room left unexplored may hold food: only a far one is given up)
 			int near = INF; for (int c = 0; c < L.length(); c++) if (dist[c] > 0 && dist[c] < near && unseenBy(c)) near = dist[c];
 			if (near <= 12) return null;
