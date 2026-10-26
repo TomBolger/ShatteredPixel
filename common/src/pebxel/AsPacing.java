@@ -30,8 +30,19 @@ final class AsPacing {
 	}
 
 	static int fired;
+	static final int EATSTARVE = optInt("MDEATSTARVE", 20);
+	static float fedAt = -1;
+	/** Starving for EATSTARVE turns or more: a meal with a foe near (not beside) is worth its 3 turns. MD-he1: of 30 heroes
+	 *  who died to the King, most starved through the fight (hundreds of turns, up to 844) with food in the pack, the hands
+	 *  never eating with a foe within 3. Starving takes HT/1000 a turn and stops regeneration. */
+	static boolean starvedLong() {
+		float now = Actor.now();
+		if (fedAt > now) fedAt = now;   // (a new game)
+		return starving() && now - fedAt >= EATSTARVE;
+	}
 	/** The last pass over plan A (after AsHealth's): a wait gone on too long goes to the back of the list. */
 	static void after(java.util.List<Target> out) {
+		if (!starving() || fedAt > Actor.now()) fedAt = Actor.now();
 		if (out.size() < 2 || !veto(out.get(0))) return;
 		Target w = out.remove(0); out.add(w); fired++;
 		Target a = out.get(0); if (a.why != null && !a.why.endsWith("]")) a.why = a.why + " [a wait that has not paid: on]";

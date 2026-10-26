@@ -1867,7 +1867,7 @@ public final class Assist {
 		// eat once starving (never with one within 3); starving, the stairs next: down first
 		int st = bag(Amulet.class) != null ? L.entrance() : L.exit();
 		boolean down = planA != null && (planA.obj == st || planA.cell == st) && H.HP * 2 >= H.HT && !seen;
-		boolean eat = starving() && !near && !down;
+		boolean eat = starving() && (!near || (!adj && AsPacing.starvedLong())) && !down;   // (MD: starving a while, a foe near but not beside: eat (heroes starved through 600-turn King fights with food held))
 		int band = H.HP * 4 < H.HT ? 2 : H.HP * 2 < H.HT ? 1 : 0;
 		boolean passedEat = declinedAny(Food.AC_EAT);
 		if (!passedEat) eatBand = 0;
