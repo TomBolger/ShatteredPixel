@@ -24,6 +24,7 @@ public final class Tune {
 	public static final boolean HEALTICK = on("OHEALTICK", true);   // (MT: Healing heals over turns, as the game's Healing buff does)
 	public static final boolean UPSEEN = on("OUPSEEN", true);   // (MT: the upgrades put into an unknown piece counted)
 	public static final double UPLOW = get("OUPLOW", 35);   // (MT: up the stairs below this share of health with a foe after the hero, whatever the fight's odds)
+	public static final double GAMBLE = get("OGAMBLE", 35);   // (MT: losing beside a foe, unknown potions and scrolls tried only below this share of health)
 	public static final boolean SLOTS = on("OSLOTS", true);   // (MT: FightModel counts the room beside the hero)
 	public static final boolean HEAL2 = on("OHEAL2", true);   // (off: O's first rule, P(death) >= ODEATH)
 	public static final double RESTK = get("ORESTK", 130) / 100, RESTLO = get("ORESTLO", 50) / 100, RESTHI = get("ORESTHI", 70) / 100;

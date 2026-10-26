@@ -1743,9 +1743,11 @@ public final class Assist {
 			Class<?>[] esc = { ScrollOfTeleportation.class, PotionOfInvisibility.class, ScrollOfTerror.class, ScrollOfLullaby.class, ScrollOfMirrorImage.class };
 			for (Class<?> c : esc) { @SuppressWarnings("unchecked") Item i = bag((Class<Item>) c);
 				if (i != null && known(i) && (i instanceof Potion || scrollsOk)) return use(i, i instanceof Potion ? Potion.AC_DRINK : Scroll.AC_READ, -1, "dying: escape"); }
+			if (!OFIGHT || H.HP * 100 < H.HT * Tune.GAMBLE) {   // (MT: the unknowns only when low: the model's 30% came at two thirds of health, 226 times in 120 games)
 			if (OIDENT) { Item g = Identify.bestGamble(H); if (g != null) return use(g, Potion.AC_DRINK, -1, "dying: gamble"); }
 			for (Item i : H.belongings.backpack) if (i instanceof Potion && !known(i)) return use(i, Potion.AC_DRINK, -1, "dying: gamble");
 			if (scrollsOk) for (Item i : H.belongings.backpack) if (i instanceof Scroll && !known(i)) return use(i, Scroll.AC_READ, -1, "dying: gamble");
+			}
 		}
 		if (seen && CLOAK) {   // the Rogue: unseen, the next blow is a sure surprise one (attacking ends it: one charge, one blow)
 			com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows ck = bag(com.shatteredpixel.shatteredpixeldungeon.items.artifacts.CloakOfShadows.class);
