@@ -19,7 +19,7 @@ final class AsPacing {
 	private AsPacing() {}
 
 	static final boolean ON = opt("MDWAIT", true);
-	static final int WAITCAP = optInt("MDWAITCAP", 15), WAITFED = optInt("MDWAITFED", 60), WAITOFF = optInt("MDWAITOFF", 40);
+	static final int WAITCAP = optInt("MDWAITCAP", 15), WAITFED = optInt("MDWAITFED", 200), WAITOFF = optInt("MDWAITOFF", 40);
 	static float streak0 = -1, last = -1, offUntil = -1; static Level lvl;
 
 	static boolean waiting(Target t) {
