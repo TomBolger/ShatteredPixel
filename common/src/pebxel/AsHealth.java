@@ -198,12 +198,12 @@ final class AsHealth {
 	// floor once awake, and a sealed floor stops regeneration)
 	// ---------------------------------------------------------------------------------------------------------
 	static final boolean BOSSREST = opt("EGBOSSREST", true);
-	static final int BOSSPCT = optInt("EGBOSSPCT", 90);
+	static final int BOSSPCT = optInt("EGBOSSPCT", 90), BOSSFOOD = optInt("EGBOSSFOOD", 60);
 	static Target bossRest(Hero H, Target a) {
 		if (!Dungeon.bossLevel() || L.locked || bag(Amulet.class) != null || H.HP * 100 >= H.HT * BOSSPCT || seenFoe || threatNear || starving() || declined(null, REST_ACT)) return null;
 		if (!(a.kind == GO || a.kind == PICKUP || a.kind == ENEMY && a.action == null || (a.kind == WAIT && !REST_ACT.equals(a.action)))) return null;
 		for (Mob m : mobs()) if (enemy(m) && m.state != m.SLEEPING) return null;
-		if (AsBasics.foodTurns() < AsBasics.restTurns() + 30) return null;   // (the rest mustn't starve him)
+		if (AsBasics.foodTurns() < BOSSFOOD) return null;   // (all the food it takes, short of starving: EG-v2 g82 met Tengu at 17 of 70, the rest priced out)
 		Target r = new Target(H.pos, WAIT, String.format(Locale.ROOT, "boss floor: rest to full first (%d/%d); it seals the floor when it wakes", H.HP, H.HT)); r.action = REST_ACT; r.obj = -1;
 		return r;
 	}
@@ -236,7 +236,7 @@ final class AsHealth {
 	// surprises): skipped for a ranged blow to hand, and any thrown stone in the pack counted as one. EGAMB: only a
 	// real one (the bow, a charged staff or wand, Guiding Light) skips it.
 	// ---------------------------------------------------------------------------------------------------------
-	static final boolean AMB = opt("EGAMB", false);
+	static final boolean AMB = opt("EGAMB", true);   // (EG-v4, 288 honest games: 7.27 against 6.81, ahead in each block of 96)
 	static boolean strongRanged() {
 		Hero H = Dungeon.hero;
 		if (bag(com.shatteredpixel.shatteredpixeldungeon.items.weapon.SpiritBow.class) != null) return true;

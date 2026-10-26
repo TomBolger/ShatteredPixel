@@ -187,7 +187,7 @@ public final class Assist {
 	// blow is to hand (AMBRANGED), the wait for an unseen one AMBWAIT turns, for one seen at most AMBSEEN + its distance.
 	static final boolean AMBUSH = opt("AMBUSH", true);
 	static final boolean AMBRANGED = opt("AMBRANGED", true);
-	static final int AMBWAIT = optInt("AMBWAIT", 4), AMBSEEN = optInt("AMBSEEN", 2);
+	static final int AMBWAIT = optInt("AMBWAIT", 8), AMBSEEN = optInt("AMBSEEN", 4);   // (EG-v4: 8 / 4 with EGAMB, 288 honest games +0.46 mean depth)
 	static final int DOORW = optInt("DOORW", 10);    // doors this walk off listed even out of view (Pebble PD: in view only)
 	static final int GRASSD = optInt("GRASSD", 8);   // tall grass walked to within this many steps (dew, seeds); 0 none
 	static final int DEWKEEP = optInt("DEWKEEP", 5);  // drops kept in the waterskin when dew stands in for a rest
