@@ -44,6 +44,7 @@ final class AsFire {
 	static final boolean ON = opt("FIRE", true);
 	static final int MEM = optInt("FIREMEM", 10), RANGE = optInt("FIRERANGE", 9);
 	static final boolean STEP = opt("FIRESTEP", true), FIGHT = opt("FIREFIGHT", true), OUT = opt("FIREOUT", true);
+	static final boolean CLOSE = opt("FIRECLOSE", true), CURSE = opt("FIRECURSE", true), WAITA = opt("FIREWAIT", true), NEAR = opt("FIRENEAR", true), REACH = opt("FIREREACH", true);
 
 	/** A shooter as last seen. comes: it walks round to the hero when out of its line (not a scorpio, which backs off,
 	 *  nor anything rooted). */
@@ -63,7 +64,7 @@ final class AsFire {
 			Fighter f = FoeView.of(m, Dungeon.hero);
 			double d = f.zapDmg != null ? f.zapDmg.mean() : f.burstDmg != null ? f.burstDmg.mean() / 3 : f.rangedDmg != null ? f.rangedDmg.mean() : f.dmg.mean();
 			if (m instanceof Elemental) d /= 4;
-			if (!Tune.ASCEND) d *= com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.statModifier(m);   // (the climb's curse, shown on the hero: FoeView leaves it out by default)
+			if (!Tune.ASCEND && CURSE) d *= com.shatteredpixel.shatteredpixeldungeon.actors.buffs.AscensionChallenge.statModifier(m);   // (the climb's curse, shown on the hero: FoeView leaves it out by default)
 			return d;
 		} catch (Throwable e) { return 10; }
 	}
@@ -152,7 +153,7 @@ final class AsFire {
 	static boolean stepVeto(Cand c) {
 		if (!ON || !STEP) return false;
 		Target t = c.t; if (t == null || t.cell < 0) return false;
-		if (t.kind == ENEMY && t.why != null && t.why.startsWith("caster: close in")) return closeVeto(t);
+		if (t.kind == ENEMY && t.why != null && t.why.startsWith("caster: close in")) return CLOSE && closeVeto(t);
 		if (t.kind != GO && t.kind != PICKUP) return false;
 		note(); if (!any(true)) return false;
 		int hp = Dungeon.hero.pos;
@@ -173,7 +174,7 @@ final class AsFire {
 	/** PROPOSE: plan A held back by that: wait where he is, out of its line. */
 	static boolean holdWhen(Cand c) { return ON && STEP && c == Rules.planA && c.veto && c.note.contains(NOSTEP); }
 	static Target holdTarget() {
-		Target t = new Target(Dungeon.hero.pos, WAIT, "fire: wait out of its line (it must come round)"); t.action = WAIT_ACT; t.obj = -1;
+		Target t = new Target(Dungeon.hero.pos, WAIT, "fire: wait out of its line (it must come round)"); t.action = WAITA ? WAIT_ACT : SEARCH_ACT; t.obj = -1;
 		t.hint = 0.25;
 		return t;
 	}
@@ -214,7 +215,7 @@ final class AsFire {
 		if (own(c.t) || c.t.kind == USE && c.t.why != null && c.t.why.startsWith("ascent: drink")) return false;
 		note(); if (seen.isEmpty() || !adjFoe()) return false;
 		int hp = Dungeon.hero.pos;
-		for (Seen s : seen.values()) if (fireLine(s, hp) && distance(s.pos, hp) <= 2 && s.at == Actor.now()) return false;   // (a shooter a step off: at it, not a dance round it)
+		if (NEAR) for (Seen s : seen.values()) if (fireLine(s, hp) && distance(s.pos, hp) <= 2 && s.at == Actor.now()) return false;   // (a shooter a step off: at it, not a dance round it)
 		return fireAt(hp, false) > 0 && fightCell() >= 0;
 	}
 	static int fightCell() {
@@ -226,7 +227,7 @@ final class AsFire {
 			double f = fireAt(n, false); if (f >= here / 3) continue;
 			int keep = 0, adj = 0; for (Mob m : adjNow) if (adjacent(m.pos, n)) keep++;
 			for (Mob m : mobs()) if (hostile(m) && !shooter(m) && adjacent(m.pos, n)) adj++;
-			double s = f * 3 + reach(n) + adj * 6 - keep * 4;
+			double s = f * 3 + (REACH ? reach(n) : 0) + adj * 6 - keep * 4;
 			if (s < bk) { bk = s; best = n; } }
 		return best;
 	}
