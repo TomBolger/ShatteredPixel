@@ -416,7 +416,7 @@ final class AsAscent {
 	/** Every trap a depth-26 trap on the climb: the way over a known trap only whole (90%+), with no foe about, and never
 	 *  over the deadly kinds (the trap's kind shows once it's known). */
 	static boolean trap(Brain.Cand c) {
-		if (!TRAPS || !on() || !begun()) return false;
+		if (!TRAPS || !on() || !begun() || c != Rules.planA) return false;
 		Target t = c.t; if (t.kind != GO && t.kind != PICKUP) return false;
 		int cell = t.why.equals("over the trap") || t.why.equals("the key, over the trap") ? t.cell : t.cell >= 0 && t.cell < L.length() && L.traps.get(t.cell) != null && L.traps.get(t.cell).visible ? t.cell : -1;
 		if (cell < 0) return false;
@@ -433,8 +433,8 @@ final class AsAscent {
 	 *  worst round doesn't know the multipliers yet). */
 	static boolean drinkLow(Brain.Cand c) {
 		Hero h = Dungeon.hero;
-		return on() && begun() && c == Rules.planA && c.role != Brain.Role.HEAL && Brain.fight && Brain.healing == 0 && Rules.healPot() != null
-				&& h.HP * 100 < h.HT * DRINK && h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class) == null && !declined(PotionOfHealing.class, com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.AC_DRINK);
+		return on() && begun() && c == Rules.planA && c.role != Brain.Role.HEAL && (Brain.fight || seenFoe || threatNear) && Rules.healPot() != null
+				&& h.HP * 100 < h.HT * DRINK && h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class) == null;   // (not "declined": the hands' heal passed over in a fight stays declined; AS2-a, deaths with 5-7 Healing)
 	}
 	static Target drinkTarget() {
 		Target t = use(Rules.healPot(), com.shatteredpixel.shatteredpixeldungeon.items.potions.Potion.AC_DRINK, -1, "ascent: drink, the blows multiplied");
