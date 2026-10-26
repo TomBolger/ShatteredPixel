@@ -410,6 +410,9 @@ public class Gallery {
 			case "sadghost": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndSadGhost(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Ghost(), 1);
 			case "guess": return new com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfIntuition().new WndGuess(new com.shatteredpixel.shatteredpixeldungeon.items.potions.PotionOfStrength());
 			case "subclass": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndChooseSubclass(new com.shatteredpixel.shatteredpixeldungeon.items.TengusMask(), Dungeon.hero);
+			case "shopbuy": { com.shatteredpixel.shatteredpixeldungeon.items.Heap hp = new com.shatteredpixel.shatteredpixeldungeon.items.Heap(); hp.type = com.shatteredpixel.shatteredpixeldungeon.items.Heap.Type.FOR_SALE; hp.drop(new com.shatteredpixel.shatteredpixeldungeon.items.wands.WandOfFireblast().identify()); return new com.shatteredpixel.shatteredpixeldungeon.windows.WndTradeItem(hp); }
+			case "blacksmith": com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith.Quest.favor = 2000; return new com.shatteredpixel.shatteredpixeldungeon.windows.WndBlacksmith(new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.npcs.Blacksmith(), h);
+			case "upgrade": return new com.shatteredpixel.shatteredpixeldungeon.windows.WndUpgrade(new com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade(), h.belongings.weapon, false);
 			default: return new com.shatteredpixel.shatteredpixeldungeon.windows.WndMessage(n);
 		}
 	}
