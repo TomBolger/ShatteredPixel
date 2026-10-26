@@ -191,6 +191,7 @@ final class AsAbilities {
 			Target t;
 			if (foes.isEmpty() && (t = crown()) != null) return t;
 			if (foes.isEmpty() && (t = second()) != null) return t;
+			if (foes.isEmpty() && (t = beacon()) != null) return t;
 			if ((t = battery()) != null) return t;
 			if ((t = liquidWillpower()) != null) return t;
 			if ((t = pointBlank()) != null) return t;
@@ -234,6 +235,7 @@ final class AsAbilities {
 				return true;
 			}
 			if (a.equals("second")) { if (!(t.item instanceof KindOfWeapon) || h.subClass != HeroSubClass.CHAMPION || !h.belongings.backpack.contains(t.item)) return false; return ((KindOfWeapon) t.item).equipSecondary(h); }
+			if (a.equals("beaconclear")) { Buff b = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class); if (b == null) return false; b.detach(); return true; }   // (its window's Clear)
 			if (a.equals("wait")) { h.rest(false); return true; }
 			if (a.equals("sneak")) { if (t.cell < 0) return false; GameScene.handleCell(t.cell); return true; }
 		} catch (Throwable e) { Assist.lastError = e; return false; }
@@ -555,7 +557,7 @@ final class AsAbilities {
 		} else if (LUNGE.contains(n)) {
 			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) == 2 && (strong(m) || full || FoeView.shooter(m)) && lungeOk(m)) { cell = m.pos; why = "lunge"; break; }
 		} else if (SPIKE.contains(n)) {
-			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && H.canAttack(m) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
+			if (adj.isEmpty()) for (Mob m : near) if (Assist.distance(m.pos, hp) >= 2 && w.canReach(H, m.pos) && (strong(m) || full)) { cell = m.pos; why = "spike"; break; }
 		} else if (SNEAK.contains(n)) {
 			if (e != null && hpf < 0.3f && losing()) { cell = away(5, false); why = "sneak away"; }
 			else if (SNEAKUP && adj.isEmpty() && H.invisible <= 0 && hpf > 0.6f) for (Mob m : near) if (strong(m) && Assist.distance(m.pos, hp) >= 2 && (cell = beside(m, 5)) >= 0) { why = "sneak up: a surprise blow"; break; }
@@ -575,7 +577,7 @@ final class AsAbilities {
 			int spins = sp instanceof Integer ? (Integer) sp : 0;
 			if (adj.isEmpty() && spins < 3) for (Mob m : near) if (Assist.hunting(m) && Assist.walk(m.pos) <= 4 && !FoeView.shooter(m) && (spins > 0 || strong(m) || full)) { cell = hp; why = "spin (" + (spins + 1) + ")"; break; }
 		} else if (n.equals("Whip")) {
-			int r = 0; for (Mob m : foes) if (H.canAttack(m)) r++;
+			int r = 0; for (Mob m : foes) if (w.canReach(H, m.pos)) r++;
 			if (r >= 2 || (r >= 1 && (st || full))) { cell = hp; why = "lash"; }
 		}
 		if (why == null || cell < 0) return null;
@@ -737,6 +739,33 @@ final class AsAbilities {
 	static ClassArmor classArmor() { return H.belongings.armor() instanceof ClassArmor ? (ClassArmor) H.belongings.armor() : null; }
 	static boolean abilityReady(ClassArmor ca) { ArmorAbility a = H.armorAbility; return ca != null && a != null && ca.charge >= a.chargeUse(H) && ok(ca, "ABILITY"); }
 
+	/** Feint's cell: an empty one beside the hero, still beside e if there is one (the hero strikes on from it). */
+	static int feintCell(Mob e) {
+		int best = -1;
+		for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (!L.passable[c] || L.solid[c] || L.avoid[c] || Actor.findChar(c) != null) continue;
+			if (best < 0 || (Assist.distance(c, e.pos) <= 1 && Assist.distance(best, e.pos) > 1)) best = c; }
+		return best;
+	}
+
+	/** The Warp Beacon: set where the hero stands when nothing is about (it costs no charge), moved to each new floor (a
+	 *  beacon on another floor can't be reached without Longrange Warp); used as an escape by {@link #escapeAbility}. */
+	static Target beacon() {
+		ClassArmor ca = classArmor(); if (ca == null || H.armorAbility == null || !H.armorAbility.getClass().getSimpleName().equals("WarpBeacon") || !ok(ca, "ABILITY")) return null;
+		Buff tr = H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class);
+		if (tr != null) {
+			Object d = Assist.field(tr, "depth");
+			if (d instanceof Integer && (Integer) d != Dungeon.depth && !H.hasTalent(Talent.LONGRANGE_WARP) && !Dungeon.bossLevel()) return ab(ca, AB + "beaconclear", -1, "beacon: cleared (it's on another floor)");
+			return null;
+		}
+		if (ca.charge < H.armorAbility.chargeUse(H) || Dungeon.bossLevel()) return null;   // (the ability needs the charge to be used at all)
+		return Assist.use(ca, "ABILITY", hp, AB + "armor:WarpBeacon set: a way out for later");
+	}
+	static Buff beaconHere() {
+		Buff tr = H.buff(com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.mage.WarpBeacon.WarpBeaconTracker.class);
+		Object d = tr == null ? null : Assist.field(tr, "depth"), p = tr == null ? null : Assist.field(tr, "pos");
+		return d instanceof Integer && (Integer) d == Dungeon.depth && p instanceof Integer && Assist.distance((Integer) p, hp) > 6 ? tr : null;
+	}
+
 	/** Dying beside a foe with no Healing: Heroic Leap or Smoke Bomb away. */
 	static Target escapeAbility() {
 		ClassArmor ca = classArmor(); if (!abilityReady(ca) || adj.isEmpty() || hpf >= 0.3f || !losing()) return null;
@@ -744,6 +773,11 @@ final class AsAbilities {
 		String n = H.armorAbility.getClass().getSimpleName(); int c = -1;
 		if (n.equals("HeroicLeap")) c = away(8, true);
 		else if (n.equals("SmokeBomb")) c = away(6, false);
+		else if (n.equals("WarpBeacon") && beaconHere() != null) {
+			int bp = (Integer) Assist.field(beaconHere(), "pos"); boolean foeThere = false;
+			for (Mob m : foes) foeThere |= Assist.distance(m.pos, bp) <= 2;
+			if (!foeThere) c = hp;   // (its window: Teleport)
+		}
 		if (c < 0) return null;
 		return Assist.use(ca, "ABILITY", c, AB + "armor:" + n + " away");
 	}
@@ -774,7 +808,14 @@ final class AsAbilities {
 				if (!ally) { cell = hp; if (H.armorAbility.targetingPrompt() != null) for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (L.passable[c] && Actor.findChar(c) == null) { cell = c; break; } } }
 				break;
 			}
-			default: break;   // (Warp Beacon, Feint, Trinity, Power of Many, and the escapes: not in a fight's middle)
+			case "Feint": if (e != null && strong(e)) cell = feintCell(e); break;   // (a step aside: the afterimage takes the blows)
+			case "PowerOfMany": {   // (an ally made or empowered: its kills count on the climb, strategy-v4 3.3)
+				if (com.shatteredpixel.shatteredpixeldungeon.actors.hero.abilities.cleric.PowerOfMany.getPoweredAlly() != null) break;
+				for (Mob m : Assist.mobs()) if (m.alignment == Char.Alignment.ALLY && L.heroFOV[m.pos] && Assist.distance(m.pos, hp) <= 6) { cell = m.pos; break; }
+				if (cell < 0) for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int c = hp + k; if (L.passable[c] && !L.avoid[c] && Actor.findChar(c) == null) { cell = c; if (Assist.distance(c, s.pos) < Assist.distance(hp, s.pos)) break; } }
+				break;
+			}
+			default: break;   // (Warp Beacon: set and used as an escape, {@link #beacon}; Trinity's forms: not yet; the escapes: not in a fight's middle)
 		}
 		if (cell < 0) return null;
 		return Assist.use(ca, "ABILITY", cell, AB + "armor:" + n);
