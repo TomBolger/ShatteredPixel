@@ -55,7 +55,7 @@ final class AsGear {
 		if (!worn && a.cursedKnown && a.cursed && !liftable(h)) return -1;
 		int lv = HeroView.visLevel(a); if (lv < 0 && !a.levelKnown) lv = 0;
 		boolean lng = Dungeon.depth >= LONGD;
-		int k = sou(h) + (lng ? LFUT : FUT), at = Math.max(0, lv + k);
+		int k = sou(h) + (lng ? (LFUT >= 0 ? LFUT : pebxel.bot.ScrollPlan.ahead(h, -LFUT)) : FUT), at = Math.max(0, lv + k);   // (UP: LFUT -n: the scrolls the run's rate brings over the next n floors)
 		int enc = a.STRReq(at) - h.STR() - (lng ? LSTR : 0);   // (long: the Strength potions ahead too, 2 a region)
 		if (enc >= 2) return -1;
 		double v = block(a.tier, at);

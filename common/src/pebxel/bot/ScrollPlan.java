@@ -100,6 +100,11 @@ public final class ScrollPlan {
 		return Math.max(SOUR, (seen + SOUR * 4) / (fl + 4.0));
 	}
 
+	/** (for the armour plan's commit) The Upgrades the armour can count on over the next floors: the run's rate, the
+	 *  regular floors, the armour's share (FSH) of them. */
+	public static int ahead(Hero h, int floors) { observe(h); return (int) Math.round(rate() * reg(Dungeon.depth, floors) * FSH); }
+	static final double FSH = Tune.get("UPFSH", 70) / 100;
+
 	// ---- the projection context: one per state (depth, gear, scrolls); its floor values memoised ----
 	static final class Ctx {
 		Hero h; int d0, K, kh; int[] str; double[] m; long key;
