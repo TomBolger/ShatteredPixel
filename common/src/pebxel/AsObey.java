@@ -36,7 +36,10 @@ final class AsObey {
 		float now = Actor.now();
 		if (e.kind == WAIT && !REST_ACT.equals(e.action)) waits.put(waitKey(e), now + (SEARCH_ACT.equals(e.action) || e.action == null ? DEMOTE : WAIT_TURNS));
 		int o = e.obj >= 0 ? e.obj : e.cell;
-		if (e.kind == PICKUP && o >= 0 && o == heroPos()) skillWalks.put(o, now + WAIT_TURNS);   // (what lies underfoot, passed over: Assist.pass leaves it, the hero being there)
+		if (e.kind == PICKUP && o >= 0 && o == heroPos()) {   // (what lies underfoot, passed over: Assist.pass leaves it, the hero being there; as any thing passed over)
+			skillWalks.put(o, now + WAIT_TURNS);
+			if (fight || seenFoe) combatHeld.add(o); else if (!keyAt(o)) skippedHeaps.add(o);
+		}
 		if ((e.kind == GO || e.kind == PICKUP) && o >= 0 && o != heroPos()) {
 			if (fight || seenFoe) fightWalks.put(o, now + FIGHT_TURNS);
 			if (e.src != null) skillWalks.put(o, now + WAIT_TURNS);   // (a skill's step (a puzzle's, a ritual's, a quest's) passed over: a while, whichever way the hero went)
@@ -63,7 +66,8 @@ final class AsObey {
 			}
 			case GO: case PICKUP: {
 				int o = a.obj >= 0 ? a.obj : a.cell;
-				Float s = a.src != null || (a.kind == PICKUP && o == heroPos()) ? skillWalks.get(o) : null; if (s != null && s >= now) return true;
+				if (a.kind == PICKUP && skippedHeaps.contains(o) && o != heroPos()) return true;   // (a thing passed over: the brain's weighing brought it back first now and then)
+				Float s = skillWalks.get(o); if (s != null && s >= now) return true;   // (a skill's step, or what lay underfoot, passed over: wherever he is now)
 				if (!seenFoe && !inDanger) return false;   // (out of a fight Assist.demote has the rest)
 				Float u = fightWalks.get(o); return u != null && u >= now;
 			}

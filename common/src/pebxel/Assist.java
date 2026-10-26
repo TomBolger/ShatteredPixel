@@ -1738,6 +1738,7 @@ public final class Assist {
 				int c = mindObj[j]; int g = mindWalk[j] - (c >= 0 && c < LEN ? walk(c) : INF);
 				if (j == 0 && c < 0) break;
 				if (g > 0) { if (j == 0) break; if ((c == EXIT || c == ENT) && floorLeft()) continue;   // (walking past the stairs isn't wanting them, with the floor not done)
+					if (demoted(c) || skippedHeaps.contains(c)) continue;   // (DS: nor walking past a thing he passed over)
 					up = true; if (g >= 2 && (od < 0 || off(c, od) <= 8)) { pr = c; up = false; break; } }
 			}
 		}
