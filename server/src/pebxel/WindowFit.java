@@ -53,6 +53,7 @@ public final class WindowFit {
 		wins.put("journal", pebxel.ui.WndWatchRecords::journal);
 		wins.put("badges", () -> { WndJournal.last_index = 4; return new WndJournal(); });
 		wins.put("guide", () -> { WndJournal.last_index = 1; return new WndJournal(); });
+		wins.put("alchemy guide", () -> { WndJournal.last_index = 2; return new WndJournal(); });
 		wins.put("settings", WndSettings::new);
 		wins.put("challenges", () -> new WndChallenges(0, false));
 		wins.put("hero info", () -> new WndHeroInfo(HeroClass.WARRIOR));

@@ -64,6 +64,7 @@ public final class SceneFit {
 			if (!(p.g instanceof Component) || p.g.camera() == null || p.g instanceof com.shatteredpixel.shatteredpixeldungeon.ui.ExitButton && false) continue;
 			Component k = (Component) p.g;
 			if (k.width() < 1 || k.height() < 1) continue;
+			if (k.camera() != Camera.main && k.camera() != com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.uiCamera) continue;   // (inside a scroll pane: the pane is checked)
 			float[] r = rect(k);
 			if (r[2] < 0 || r[0] > Screen.w || r[3] < 0 || r[1] > Screen.h) continue;   // (not on this screen at all: a hidden one)
 			WindowFit.inside(r, name + ": " + (p.button ? "button " : "text '") + (p.text.length() > 20 ? p.text.substring(0, 20) : p.text) + "'");
@@ -82,7 +83,7 @@ public final class SceneFit {
 		List<Ui.Part> bs = Controls.buttons(sc);
 		if (bs.isEmpty()) return;
 		Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-		for (int i = 0; i <= bs.size() + 1; i++) {
+		for (int i = 0; i <= bs.size() + 1 + (sc instanceof com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene ? 12 : 0); i++) {
 			oc.button(Controls.DOWN); frame.run();
 			Component f = oc.focused();
 			if (f == null) continue;
@@ -198,8 +199,81 @@ public final class SceneFit {
 		});
 	}
 
+	/** The records the rankings need: eleven games, every class, wins and deaths, causes short and long, a challenge, a custom seed. */
+	static void records() {
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass keep = h.heroClass;
+		Class<?>[] causes = {com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Goo.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.GnollGeomancer.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat.class,
+				com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Succubus.class, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Burning.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.DwarfKing.class,
+				com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Crab.class, com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Hunger.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.YogDzewa.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Eye.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Scorpio.class};
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass[] cls = com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass.values();
+		h.belongings.backpack.items.clear(); stock();
+		for (int i = 0; i < causes.length; i++) {
+			h.heroClass = cls[i % cls.length]; h.lvl = 3 + i * 2;
+			com.shatteredpixel.shatteredpixeldungeon.Statistics.deepestFloor = 1 + i * 2; com.shatteredpixel.shatteredpixeldungeon.Statistics.goldCollected = 500 + i * 900;
+			Dungeon.challenges = i == 2 ? 3 : 0; Dungeon.customSeedText = i == 4 ? "ABC-DEF-GHI" : "";
+			com.shatteredpixel.shatteredpixeldungeon.Rankings.INSTANCE.submit(i == 5, causes[i]);
+		}
+		Dungeon.challenges = 0; Dungeon.customSeedText = ""; h.heroClass = keep;
+	}
+
+	static void amulet(Runnable frame, Controls oc) {
+		run("amulet", frame, oc, () -> Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene.class), () -> {
+			Scene sc = Game.scene();
+			layout("amulet", sc);
+			com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene am = (com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene) sc;
+			check(am.pebxelPane != null, "amulet: its story is in a scrolling pane");
+			float[] pr = rect(am.pebxelPane); WindowFit.inside(pr, "amulet: the story's pane");
+			for (Ui.Part p : Controls.buttons(sc)) check(!over(rect((Component) p.g), pr, 1), "amulet: button '" + p.text + "' clear of the story");
+			float h0 = am.pebxelPane.content().height(), vis = am.pebxelPane.height();
+			check(h0 > vis, "amulet: the story is longer than its pane here (" + h0 + " in " + vis + ")");
+			int n = 0; while (am.pebxelScroll(1) && n < 20) n++;
+			check(n >= 1 && !am.pebxelScroll(1), "amulet: Down reads the story to its end (" + n + " pages)");
+			while (am.pebxelScroll(-1) && n-- > -20) { }
+			check(am.pebxelAtTop(), "amulet: Up reads back to its top");
+			reach("amulet", sc, frame, oc);
+			check(find(sc, "") != null && Controls.buttons(sc).size() >= 2, "amulet: Leave and Stay both pressable");
+		});
+	}
+
+	static void others(Runnable frame, Controls oc) {
+		for (String n : new String[]{"StartScene", "SurfaceScene"}) {
+			run(n, frame, oc, () -> { try { Game.switchScene(Class.forName(P + "scenes." + n).asSubclass(Scene.class)); } catch (Exception e) { throw new RuntimeException(e); } }, () -> {
+				Scene sc = Game.scene(); layout(n, sc); reach(n, sc, frame, oc);
+			});
+		}
+	}
+
+	/** The rankings, several entries; a row's detail window, each of its tabs; Back out. Then the game-over road to them. */
+	static void rankings(Runnable frame, Controls oc) {
+		run("rankings", frame, oc, () -> { records(); Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene.class); }, () -> {
+			Scene sc = Game.scene();
+			layout("rankings", sc); reach("rankings", sc, frame, oc);
+			int rows = 0; Ui.Part first = null;
+			for (Ui.Part p : Controls.buttons(sc)) if (p.g.getClass().getSimpleName().equals("Record")) { rows++; if (first == null) first = p; }
+			check(rows >= 5, "rankings: several rows are there (" + rows + ")");
+			// a row opens the detail window; its tabs
+			Ui.press(first.g); for (int i = 0; i < 10; i++) frame.run();
+			Window w = Ui.topWindow(); check(w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndRanking, "rankings: a row opens its game");
+			List<Component> tabs = WindowFit.tabs(w);
+			String[] tn = {"stats", "talents", "items", "badges", "challenges"};
+			for (int t = 0; t < tabs.size(); t++) {
+				Ui.press(tabs.get(t)); for (int i = 0; i < 6; i++) frame.run();
+				win("ranking " + tn[Math.min(t, 4)], frame, oc, false);
+				w = Ui.topWindow();
+			}
+			oc.button(Controls.BACK); for (int i = 0; i < 4; i++) frame.run();
+			check(Ui.topWindow() == null, "rankings: Back closes the game's window");
+			oc.button(Controls.BACK); for (int i = 0; i < 30; i++) frame.run();
+			check(!(Game.scene() instanceof com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene), "rankings: Back leaves the rankings (" + Game.scene().getClass().getSimpleName() + ")");
+		});
+	}
+
 	public static void check(Runnable frame, Controls oc) {
 		alchemy(frame, oc);
+		amulet(frame, oc);
+		others(frame, oc);
+		rankings(frame, oc);
 		if (!fails.isEmpty()) throw new AssertionError(fails.size() + " scenes fail: " + fails);
 	}
 }

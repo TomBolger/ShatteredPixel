@@ -275,6 +275,12 @@ public class Controls {
 			else if (b == SELECT && n.focused() != null) { if (held) Ui.hold(n.focused()); else Ui.press(n.focused()); }
 			return;
 		}
+		// the Amulet's story (a pane longer than the screen): Down reads on a page at a time before it goes to the buttons;
+		// Up goes back up a page from the first button
+		if (menu instanceof com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene && (b == UP || b == DOWN)) {
+			com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene am = (com.shatteredpixel.shatteredpixeldungeon.scenes.AmuletScene) menu;
+			if (b == DOWN ? am.pebxelScroll(1) : focus == 0 && am.pebxelScroll(-1)) return;
+		}
 		if (b == UP || b == DOWN) {
 			// a window taller than the screen scrolls half a screen at a time towards the next button
 			int next = bs.isEmpty() ? -1 : b == UP ? (focus + bs.size() - 1) % bs.size() : (focus + 1) % bs.size();
