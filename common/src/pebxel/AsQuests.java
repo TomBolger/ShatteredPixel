@@ -61,6 +61,7 @@ final class AsQuests {
 			b = AsBasics.crab(planA);
 			if (b == null) b = AsBasics.piranha(planA);
 			if (b == null) b = AsBasics.spawner(planA);
+			if (b == null) b = AsBasics.sacrifice(planA);
 			if (b == null) b = AsBasics.sleeper(planA);
 			if (b != null) return b;
 			if (!ON) return AsBasics.hurry(planA);

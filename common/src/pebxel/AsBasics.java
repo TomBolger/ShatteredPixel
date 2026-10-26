@@ -230,6 +230,32 @@ final class AsBasics {
 	}
 
 	// =============================================================================================================
+	// the sacrificial fire (SacrificeRoom): a foe killed while beside the altar's fire feeds it (2-3x its experience);
+	// fed 6 + 4 a depth, it gives a prize. Foes fought from the altar itself are all beside it.
+	// =============================================================================================================
+	static final boolean SACRIFICE = opt("BSACRIFICE", true);
+	static final int SACWALK = optInt("BSACWALK", 8);   // steps to the altar at most, with a foe coming
+
+	static Target sacrifice(Target planA) {
+		if (!SACRIFICE || Dungeon.bossLevel()) return null;
+		Hero h = Dungeon.hero; int hp = h.pos;
+		com.shatteredpixel.shatteredpixeldungeon.actors.blobs.Blob f = L.blobs.get(com.shatteredpixel.shatteredpixeldungeon.actors.blobs.SacrificialFire.class);
+		if (f == null || f.volume <= 0 || f.cur == null) return null;
+		int alt = -1; for (int c = 0; c < L.length() && c < f.cur.length; c++) if (f.cur[c] > 0 && known[c]) alt = c;
+		if (alt < 0 || h.rooted || h.HP * 2 < h.HT) return null;
+		Mob near = null; int nd = INF; boolean adjFoe = false;
+		for (Mob m : mobs()) if (hostile(m) && hunting(m) && !(m instanceof Piranha)) { int w = walk(m.pos); if (w < nd) { nd = w; near = m; } adjFoe |= adjacent(m.pos, hp); }
+		if (near == null) return null;
+		if (hp == alt) {   // on the altar: strike what's beside it (all of it is in the fire's reach), else let it come
+			Mob o = null; for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp) && (o == null || m.HP < o.HP)) o = m;
+			if (o != null) return new Target(o.pos, ENEMY, "sacrificial fire: strike it beside the altar");
+			Target t = new Target(hp, WAIT, "sacrificial fire: let it come to the altar"); t.action = WAIT_ACT; return t;
+		}
+		if (adjFoe || walk(alt) > SACWALK || walk(alt) >= nd + 2 || seenChar(alt) != null || bad.containsKey(alt)) return null;   // (to the altar ahead of it, not past it)
+		return new Target(alt, GO, "sacrificial fire: to the altar, to fight there");
+	}
+
+	// =============================================================================================================
 	// sleepers (Pebble PD's bot): a blow at a sleeping foe always lands (a surprise), and one left asleep wakes later on
 	// its own and comes hunting at a bad time. Crept up on and struck first, when the fight model says it's an easy one.
 	// =============================================================================================================
