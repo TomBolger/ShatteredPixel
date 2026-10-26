@@ -44,7 +44,7 @@ final class AsFire {
 	static final boolean ON = opt("FIRE", true);
 	static final int MEM = optInt("FIREMEM", 10), RANGE = optInt("FIRERANGE", 9);
 	static final boolean STEP = opt("FIRESTEP", true), FIGHT = opt("FIREFIGHT", true), OUT = opt("FIREOUT", true);
-	static final boolean CLOSE = opt("FIRECLOSE", true), CURSE = opt("FIRECURSE", true), WAITA = opt("FIREWAIT", true), NEAR = opt("FIRENEAR", false), NEARONLY = opt("FIRENEARONLY", true), REACH = opt("FIREREACH", true);
+	static final boolean CLOSE = opt("FIRECLOSE", true), CURSE = opt("FIRECURSE", true), WAITA = opt("FIREWAIT", true), NEAR = opt("FIRENEAR", false), NEARONLY = opt("FIRENEARONLY", false), REACH = opt("FIREREACH", true);
 
 	/** A shooter as last seen. comes: it walks round to the hero when out of its line (not a scorpio, which backs off,
 	 *  nor anything rooted). */
