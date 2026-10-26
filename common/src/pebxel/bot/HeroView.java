@@ -1,5 +1,6 @@
 package pebxel.bot;
 
+import java.util.*;
 import com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Barkskin;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero;
 import com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass;
@@ -32,7 +33,32 @@ public final class HeroView {
 	public static int visLevel(Item i) {
 		if (i == null) return 0;
 		int bonus = i.buffedLvl() - i.level();
-		return (i.levelKnown ? i.level() : 0) + bonus;
+		return (i.levelKnown ? i.level() : Tune.UPSEEN ? upgraded(i) : 0) + bonus;
+	}
+
+	// (MT) the upgrades the player put into a piece whose level isn't known: a Scroll of Upgrade doesn't show the level
+	// (Item.upgrade), so the models saw an unknown piece at +0 however many scrolls went into it, and the next scroll
+	// and the gear sums never counted them. The player knows: one known scroll fewer, and the piece it was read on.
+	static final List<Item> upI = new ArrayList<>(); static final List<int[]> upN = new ArrayList<>();
+	static final List<Item> seenI = new ArrayList<>(); static final List<Integer> seenL = new ArrayList<>();
+	static int souWas = -1; static Hero upHero;
+	public static int upgraded(Item i) { for (int k = 0; k < upI.size(); k++) if (upI.get(k) == i) return upN.get(k)[0]; return 0; }
+
+	/** Each plan: a known Scroll of Upgrade gone since the last look, and a piece now one level up: that piece. */
+	public static void observe(Hero h) {
+		if (upHero != h) { upHero = h; upI.clear(); upN.clear(); seenI.clear(); seenL.clear(); souWas = -1; }
+		com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade s = h.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.scrolls.ScrollOfUpgrade.class);
+		int sou = s != null && s.isKnown() ? s.quantity() : 0;
+		if (souWas >= 0 && sou < souWas) {
+			for (int k = 0; k < seenI.size(); k++) { Item i = seenI.get(k);
+				if (!i.levelKnown && i.level() == seenL.get(k) + 1) {   // (only the delta the reading made, as the player saw it read on that piece)
+					int u = -1; for (int j = 0; j < upI.size(); j++) if (upI.get(j) == i) u = j;
+					if (u < 0) { upI.add(i); upN.add(new int[]{ 1 }); } else upN.get(u)[0]++;
+					break;
+				} }
+		}
+		souWas = sou; seenI.clear(); seenL.clear();
+		for (Item i : h.belongings) if (i instanceof com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.wands.Wand) { seenI.add(i); seenL.add(i.level()); }
 	}
 
 	/** The hero's base accuracy and evasion (Hero.attackSkill / defenseSkill fields: 10 / 5, +1 a level). */

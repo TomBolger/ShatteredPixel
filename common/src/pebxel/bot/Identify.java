@@ -50,6 +50,7 @@ public final class Identify {
 	/** Called each plan: new copies of an unknown label in the pack count as found. */
 	public static void observe(Hero h) {
 		ensure(h);
+		HeroView.observe(h);
 		maxDepth = Math.max(maxDepth, Dungeon.depth);
 		Map<Class<?>, Integer> now = new HashMap<>();
 		for (Item i : h.belongings) if ((i instanceof Potion && !((Potion) i).isKnown()) || (i instanceof Scroll && !((Scroll) i).isKnown())) now.merge(i.getClass(), i.quantity(), Integer::sum);
