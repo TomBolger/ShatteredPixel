@@ -187,7 +187,7 @@ public final class Assist {
 	// blow is to hand (AMBRANGED), the wait for an unseen one AMBWAIT turns, for one seen at most AMBSEEN + its distance.
 	static final boolean AMBUSH = opt("AMBUSH", true);
 	static final boolean AMBRANGED = opt("AMBRANGED", true);
-	static final int AMBWAIT = optInt("AMBWAIT", 4), AMBSEEN = optInt("AMBSEEN", 2);
+	static final int AMBWAIT = optInt("AMBWAIT", 8), AMBSEEN = optInt("AMBSEEN", 4);   // (EG-v4: 8 / 4 with EGAMB, 288 honest games +0.46 mean depth)
 	static final int DOORW = optInt("DOORW", 10);    // doors this walk off listed even out of view (Pebble PD: in view only)
 	static final int GRASSD = optInt("GRASSD", 8);   // tall grass walked to within this many steps (dew, seeds); 0 none
 	static final int DEWKEEP = optInt("DEWKEEP", 5);  // drops kept in the waterskin when dew stands in for a rest
@@ -652,7 +652,7 @@ public final class Assist {
 				if (L.map[c] == Terrain.EMPTY_SP && distance(c, s) <= 12 && sight(s, c)) sentryZone[c] = true;
 		}
 		anyDanger = false;
-		for (int c = 0; c < LEN; c++) { danger[c] = AsBosses.danger(c) || hazMem[c] || sentryZone[c] || (water && wet(c)) || (TRAPMEM && trapMem[c] && c != hp); anyDanger |= danger[c] && known[c]; }
+		for (int c = 0; c < LEN; c++) { danger[c] = AsBosses.danger(c) || AsHealth.danger(c) || hazMem[c] || sentryZone[c] || (water && wet(c)) || (TRAPMEM && trapMem[c] && c != hp); anyDanger |= danger[c] && known[c]; }
 		inDanger = danger[hp];
 		for (int c = 0; c < LEN; c++) {
 			boolean ok = L.passable[c] && !L.avoid[c];
@@ -846,6 +846,7 @@ public final class Assist {
 			out.add(out.remove(0));
 			if (out.size() == 1) { Target w = new Target(hp, WAIT, "look round"); w.action = WAIT_ACT; w.obj = -1; out.add(0, w); }
 		}
+		if (mode() != 0) AsHealth.after(out);   // (agent EG: the health policy, a last pass over plan A)
 		if (mode() != 0) commit();
 		if (anyDanger && !inDanger) for (Target t : out) if (t.kind != USE && t.kind != WAIT && t.cell >= 0) t.cell = safeWay(t.cell);
 		demote();
@@ -1364,7 +1365,7 @@ public final class Assist {
 					int sc0 = -1, sd = 1; for (int k = 0; k < 8; k++) { int c = hp + N8[k]; if (nb(hp, c) && open[c] && seenChar(c) == null && !danger[c] && distance(c, m.pos) > sd) { sd = distance(c, m.pos); sc0 = c; } }
 					if (sc0 >= 0) { kind[0] = GO; why[0] = "off the crab's side"; return sc0; }
 				} }
-			int amb = AMBUSH && !crab && !(AMBRANGED && rangedToHand()) && bk >= 1000 && w <= 8 && hunting(m) && !held(m) && !ranged(m) && !fast && !Char.hasProp(m, Char.Property.IMMOVABLE) ? ambushSpot(m) : -1;
+			int amb = AMBUSH && !crab && !(AMBRANGED && (AsHealth.AMB ? AsHealth.strongRanged() : rangedToHand()) && !(m instanceof Snake)) && bk >= 1000 && w <= 8 && hunting(m) && !held(m) && !ranged(m) && !fast && !Char.hasProp(m, Char.Property.IMMOVABLE) ? ambushSpot(m) : -1;
 			if (amb == hp && waitId == m.id() && waitCount > AMBSEEN + w) amb = -1;   // (it isn't coming)
 			if (amb == hp) { waitF[0] = true; if (waitId == m.id()) waitCount++; else { waitId = m.id(); waitCount = 1; } why[0] = "ambush: wait unseen"; ambushing = true; return best; }
 			if (amb >= 0) { kind[0] = GO; why[0] = "ambush: a step out of its sight"; ambushing = true; return amb; }
@@ -1460,6 +1461,7 @@ public final class Assist {
 			bk = INF;
 			for (int c = 0; c < LEN; c++) {   // a known trap the only way on: over it
 				if (!known[c] || !L.avoid[c] || L.pit[c] || L.solid[c] || L.traps.get(c) == null || walk(c) >= bk || !ahead(c) || bad.containsKey(c)) continue;
+				if (way && (!mild(L.traps.get(c)) || L.traps.get(c).getClass().getSimpleName().equals("AlarmTrap"))) continue;   // (EG: the way on known, only a harmless trap is crossed to explore: a summoning trap's pack killed a full-health Mage on 2)
 				for (int k = 0; k < 8; k++) { int n = c + N8[k]; if (nb(c, n) && (!known[n] || (open[n] && dist[n] >= INF))) { bk = walk(c); best = c; break; } }
 			}
 			if (best >= 0) { why[0] = "over the trap"; return best; }
