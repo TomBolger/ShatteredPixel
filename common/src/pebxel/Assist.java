@@ -441,6 +441,9 @@ public final class Assist {
 					break;
 			}
 			if (t.cell < 0) return false;
+			// (rooted, a walk goes nowhere and no time passes: the roots never wore off, and Select did nothing for ever
+			// (DS-sel1: two select-only games stuck on the stairs). A search spends the turn)
+			if ((t.kind == GO || t.kind == PICKUP) && h.rooted && t.cell != h.pos && Actor.findChar(t.cell) == null) { noteSearch(); h.search(true); return true; }
 			if ((t.kind == GO || t.kind == PICKUP || t.kind == ENEMY) && setupOk(Dungeon.level) && hp == h.pos) {   // (an ally on the only good way: swap places first)
 				int sw = swapStep(t.cell);
 				if (sw >= 0 && sw != swapFrom && Actor.now() != swapAt) { swapFrom = h.pos; swapAt = Actor.now(); GameScene.handleCell(sw); return true; }   // (once a moment, never back to the cell just left: the Rogue's clone swaps in no time)

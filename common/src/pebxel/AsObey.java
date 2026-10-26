@@ -91,7 +91,7 @@ final class AsObey {
 		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero;
 		if (h == null || c == null) return 0;
 		if (Potion.class.isAssignableFrom(c) && Potion.AC_DRINK.equals(a)) return (h.HT - h.HP) * 4 / Math.max(1, h.HT);
-		if (Food.class.isAssignableFrom(c) && Food.AC_EAT.equals(a)) return (starving() ? 8 + (h.HT - h.HP) * 4 / Math.max(1, h.HT) : hungry() ? 4 : 0);   // (starving costs health: each quarter lost, offered again)
+		if (Food.class.isAssignableFrom(c) && Food.AC_EAT.equals(a)) return starving() ? 8 + (int) (Actor.now() / 20) : hungry() ? 4 : 0;   // (starving costs health: offered again every 20 turns)
 		return 0;
 	}
 }

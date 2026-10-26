@@ -546,7 +546,7 @@ public class Controls {
 		if (h == null || !h.ready || h.sprite == null || c == null) return;
 		PointF r = restCentre(c), hc = heroCentre(c, c.zoom);
 		if (Math.abs(r.x - hc.x) > 2 || Math.abs(r.y - hc.y) > 2) { zman = false; view(-1, TURN); return; }
-		if (h.pos == Dungeon.level.exit() || Dungeon.level.heaps.get(h.pos) != null) GameScene.handleCell(h.pos);
+		if (!h.rooted && (h.pos == Dungeon.level.exit() || Dungeon.level.heaps.get(h.pos) != null)) GameScene.handleCell(h.pos);   // (rooted on the stairs: nothing happened and no time passed, for ever)
 		else if (!GameScene.cancel()) h.search(true);
 		targetsStale = true; acted();
 	}
