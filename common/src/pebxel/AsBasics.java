@@ -463,7 +463,7 @@ final class AsBasics {
 		if (!CASTER || t == null || t.kind != WAIT || REST_ACT.equals(t.action)) return false;
 		int hp = Dungeon.hero.pos;
 		for (Mob m : mobs()) if (hostile(m) && adjacent(m.pos, hp)) return false;
-		if (t.why != null && t.why.startsWith("caster")) return false;
+		if (t.why != null && (t.why.startsWith("caster") || t.why.startsWith("fire"))) return false;   // (AsFire's wait out of every line known)
 		if (shotLately()) return true;
 		for (Mob m : mobs()) if (caster(m) && hostile(m) && bolts(m.pos, hp)) return true;
 		return false;
