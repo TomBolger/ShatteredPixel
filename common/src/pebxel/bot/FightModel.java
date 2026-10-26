@@ -231,7 +231,8 @@ public final class FightModel {
 		double best = r0.pDeath, bk = 0;
 		for (double k : HEALAT) {
 			Result r = simulate(me, fs, k, runs, sd);
-			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
+			double sc = r.pDeath + Tune.HEALCOST * r.healsUsed * (1 - r.pDeath);
+			if (r0.pDeath >= 0.5 && r.healsUsed > 0) sc -= Tune.HOPE;   // (MT: a fight it likely loses: drinking buys turns the simulation doesn't use (a step away, the stairs, an ally): near-ties go to drinking)   // (MT: a potion is only worth keeping to a hero who lives: in a fight it would lose, it was never drunk)
 			if (sc < best - 1e-9) { best = sc; bk = k; }
 		}
 		return planC = bk;
