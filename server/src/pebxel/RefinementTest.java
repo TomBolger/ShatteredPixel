@@ -758,6 +758,43 @@ public final class RefinementTest {
         System.out.println("abilities: a meal before a fight (a ration when hungry, the Horn's snack), a Duelist's ability on a strong foe, Berserk when low (not at full health), the Crown put on: ok");
     }
 
+    static Assist.Target arts() throws Exception {
+        Method setup = Assist.class.getDeclaredMethod("setup", java.util.function.IntPredicate.class);
+        setup.setAccessible(true); setup.invoke(null, new Object[]{null});
+        Assist.Target u = AsArtifacts.urgent(null); return u != null ? u : AsArtifacts.suggest(null);
+    }
+    /** AsArtifacts: an identified useful ring is put on, an unknown one that may be cursed isn't; the Chalice isn't
+     *  pricked hurt (and is at full health); the Horn is eaten from when hungry. */
+    static void artifacts(Hero h) throws Exception {
+        WatchSettings.assist(2); Assist.reset();
+        h.HP = h.HT = 100; h.buff(Hunger.class).satisfy(1000);
+        com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring might = new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfMight();
+        might.identify(); h.belongings.backpack.items.add(might);
+        Assist.Target t = arts();
+        check(t != null && t.item == might && com.shatteredpixel.shatteredpixeldungeon.items.EquipableItem.AC_EQUIP.equals(t.action), "an identified Ring of Might is put on: " + t);
+        if (System.getenv("RINGS") != null) for (Class<?> c : com.shatteredpixel.shatteredpixeldungeon.items.Generator.Category.RING.classes) {   // (calibration: each kind's worth here)
+            com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring r = (com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring) c.getDeclaredConstructor().newInstance(); r.identify();
+            System.out.println("ring worth " + c.getSimpleName() + " " + AsArtifacts.worth(r)); }
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.items.rings.Ring unk = new com.shatteredpixel.shatteredpixeldungeon.items.rings.RingOfEvasion();
+        h.belongings.backpack.items.add(unk);
+        t = arts(); check(t == null || t.item != unk, "an unknown ring that may be cursed isn't put on without a Remove Curse: " + t);
+        h.belongings.backpack.items.clear();
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.ChaliceOfBlood ch = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.ChaliceOfBlood();
+        ch.identify(); h.belongings.misc = ch; ch.activate(h);
+        h.HP = 30; t = arts();
+        check(t == null || t.item != ch, "the Chalice isn't pricked hurt: " + t);
+        h.HP = 100; t = arts();
+        check(t != null && t.item == ch && "PRICK".equals(t.action), "the Chalice is pricked at full health, safe: " + t);
+        ch.doUnequip(h, false); h.belongings.misc = null;
+        com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty horn = new com.shatteredpixel.shatteredpixeldungeon.items.artifacts.HornOfPlenty();
+        horn.identify(); h.belongings.misc = horn; horn.activate(h); horn.charge(h, 12);
+        t = arts(); check(t == null || t.item != horn || !"EAT".equals(t.action), "not hungry: no eating from the horn: " + t);
+        h.buff(Hunger.class).affectHunger(-Hunger.HUNGRY - 10);
+        t = arts(); check(t != null && t.item == horn && ("EAT".equals(t.action) || "SNACK".equals(t.action)), "hungry: eat from the horn: " + t);
+        horn.doUnequip(h, false); h.belongings.misc = null;
+        h.buff(Hunger.class).satisfy(1000); h.belongings.backpack.items.clear(); h.HP = h.HT;
+    }
     public static void main(String[] args) {
         try { run(); } catch (Throwable e) { e.printStackTrace(); System.exit(1); }
     }
@@ -801,6 +838,7 @@ public final class RefinementTest {
         ScrollOfUpgrade up = new ScrollOfUpgrade(); up.identify(); h.belongings.backpack.items.add(up);
         t = hands(); check(t != null && t.item == up && t.on == h.belongings.weapon, "Mage invests in the staff first");
         h.belongings.backpack.items.clear();
+        artifacts(h);
         obedience(app);
         buttons(app);
         places();
