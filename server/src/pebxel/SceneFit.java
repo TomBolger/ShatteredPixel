@@ -43,7 +43,7 @@ public final class SceneFit {
 			Scene sc = Game.scene();
 			System.out.println("  camera " + Camera.main.width + "x" + Camera.main.height + " zoom " + Camera.main.zoom + " at " + Camera.main.x + "," + Camera.main.y + " screen " + Screen.w + "x" + Screen.h + " insets " + com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.class.getSimpleName());
 			shot("scene_" + name);
-			List<Ui.Part> bs = Controls.buttons(sc);
+			List<Ui.Part> bs = sc instanceof GameScene ? new ArrayList<>() : Controls.buttons(sc);   // (the game's own HUD is the sweep's)
 			StringBuilder sb = new StringBuilder();
 			for (Ui.Part p : bs) {
 				if (((Component) p.g).width() < 1) continue;
@@ -118,7 +118,7 @@ public final class SceneFit {
 				WindowFit.usable(w, n, oc, frame);
 				System.out.println("    win: " + n + ": fits");
 			} else {
-				for (int end : new int[]{100000, -100000}) { Controls.scroll(w, end); frame.run(); frame.run(); WindowFit.edges(w, n + " scrolled " + end, oc); }
+				for (int end : new int[]{100000, -100000}) { Controls.scroll(w, end); frame.run(); frame.run(); WindowFit.edges(w, n + " scrolled " + end, oc); if (end == 100000) shot(name.replaceAll("[^A-Za-z0-9]+", "_") + "_top"); }
 				int k = WindowFit.reach(w, n, oc, frame);
 				System.out.println("    win: " + n + ": tall, scrolls, " + k + " buttons reached");
 			}
@@ -211,7 +211,7 @@ public final class SceneFit {
 		for (int i = 0; i < causes.length; i++) {
 			h.heroClass = cls[i % cls.length]; h.lvl = 3 + i * 2;
 			com.shatteredpixel.shatteredpixeldungeon.Statistics.deepestFloor = 1 + i * 2; com.shatteredpixel.shatteredpixeldungeon.Statistics.goldCollected = 500 + i * 900;
-			Dungeon.challenges = i == 2 ? 3 : 0; Dungeon.customSeedText = i == 4 ? "ABC-DEF-GHI" : "";
+			Dungeon.challenges = i >= causes.length - 2 ? 3 : 0; Dungeon.customSeedText = i == 4 ? "ABC-DEF-GHI" : "";
 			com.shatteredpixel.shatteredpixeldungeon.Rankings.INSTANCE.submit(i == 5, causes[i]);
 		}
 		Dungeon.challenges = 0; Dungeon.customSeedText = ""; h.heroClass = keep;
@@ -252,20 +252,49 @@ public final class SceneFit {
 			int rows = 0; Ui.Part first = null;
 			for (Ui.Part p : Controls.buttons(sc)) if (p.g.getClass().getSimpleName().equals("Record")) { rows++; if (first == null) first = p; }
 			check(rows >= 5, "rankings: several rows are there (" + rows + ")");
-			// a row opens the detail window; its tabs
-			Ui.press(first.g); for (int i = 0; i < 10; i++) frame.run();
-			Window w = Ui.topWindow(); check(w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndRanking, "rankings: a row opens its game");
-			List<Component> tabs = WindowFit.tabs(w);
+			// a row opens the detail window; its tabs (the first row, and the row of the game played with challenges)
 			String[] tn = {"stats", "talents", "items", "badges", "challenges"};
-			for (int t = 0; t < tabs.size(); t++) {
-				Ui.press(tabs.get(t)); for (int i = 0; i < 6; i++) frame.run();
-				win("ranking " + tn[Math.min(t, 4)], frame, oc, false);
-				w = Ui.topWindow();
+			boolean five = false; int idx = 0;
+			for (Ui.Part row : new ArrayList<>(Controls.buttons(sc))) {
+				if (!row.g.getClass().getSimpleName().equals("Record")) continue;
+				Ui.press(row.g); for (int i = 0; i < 10; i++) frame.run();
+				Window w = Ui.topWindow(); check(w instanceof com.shatteredpixel.shatteredpixeldungeon.windows.WndRanking, "rankings: a row opens its game");
+				List<Component> tabs = WindowFit.tabs(w);
+				if (idx == 0 || (tabs.size() == 5 && !five)) {
+					five |= tabs.size() == 5;
+					for (int t = 0; t < tabs.size(); t++) {
+						Ui.press(tabs.get(t)); for (int i = 0; i < 6; i++) frame.run();
+						win("ranking " + (tabs.size() == 5 ? "(challenged) " : "") + tn[Math.min(t, 4)], frame, oc, false);
+					}
+				}
+				idx++;
+				oc.button(Controls.BACK); for (int i = 0; i < 4; i++) frame.run();
+				check(Ui.topWindow() == null, "rankings: Back closes the game's window");
 			}
-			oc.button(Controls.BACK); for (int i = 0; i < 4; i++) frame.run();
-			check(Ui.topWindow() == null, "rankings: Back closes the game's window");
+			System.out.println("    rankings: " + idx + " rows opened, a challenged game " + (five ? "seen" : "not among them"));
 			oc.button(Controls.BACK); for (int i = 0; i < 30; i++) frame.run();
 			check(!(Game.scene() instanceof com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene), "rankings: Back leaves the rankings (" + Game.scene().getClass().getSimpleName() + ")");
+		});
+	}
+
+	/** The hero dies: the game-over menu by a button, through to the rankings. */
+	static void gameOver(Runnable frame, Controls oc) {
+		run("game over", frame, oc, () -> {
+			toGame(frame);
+			com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat k = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat();
+			Dungeon.hero.HP = 1; Dungeon.fail(k); Dungeon.hero.die(k);
+			for (int i = 0; i < 200; i++) frame.run();
+		}, () -> {
+			for (int i = 0; i < 3 && Ui.topWindow() == null; i++) { oc.button(Controls.SELECT); for (int j = 0; j < 20; j++) frame.run(); }
+			Window w = Ui.topWindow();
+			System.out.println("    game over: window " + (w == null ? null : w.getClass().getSimpleName()) + " scene " + Game.scene().getClass().getSimpleName());
+			check(w != null, "game over: a button opens the menu");
+			win("game over menu", frame, oc, false);
+			Ui.Part r = findIn(w, "Rankings"); check(r != null, "game over: the menu offers the Rankings");
+			Ui.press(r.g); for (int i = 0; i < 60; i++) frame.run();
+			check(Game.scene() instanceof com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene, "game over: Rankings opens the rankings (" + Game.scene().getClass().getSimpleName() + ")");
+			layout("rankings after a death", Game.scene()); reach("rankings after a death", Game.scene(), frame, oc);
+			shot("scene_rankings_after_death");
 		});
 	}
 
@@ -273,6 +302,7 @@ public final class SceneFit {
 		alchemy(frame, oc);
 		amulet(frame, oc);
 		others(frame, oc);
+		gameOver(frame, oc);
 		rankings(frame, oc);
 		if (!fails.isEmpty()) throw new AssertionError(fails.size() + " scenes fail: " + fails);
 	}

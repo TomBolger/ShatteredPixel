@@ -307,13 +307,14 @@ public final class WindowFit {
 		float l = in[0], t = in[1], r = in[2], b = in[3], x1 = in[4], x0 = in[5], y1 = in[6], y0 = in[7];
 		float[][] border = {{x0, y0, x1, t}, {x0, b, x1, y1}, {x0, t, l, b}, {r, t, x1, b}};
 		java.util.List<Object[]> drawn = new java.util.ArrayList<>();
-		for (Ui.Part p : Controls.buttons(w)) drawn.add(new Object[]{"button " + label(p.g), p.g, null});
+		for (Ui.Part p : Controls.buttons(w)) if (p.g.camera() == w.camera && !inPane(p.g)) drawn.add(new Object[]{"button " + label(p.g), p.g, null});   // (a button inside a scroll pane is cut by the pane's own view)
 		for (Gizmo g : GroupAccess.members(w)) if (g instanceof Controls.CloseTag && g.visible) drawn.add(new Object[]{"exit tag", g, null});
 		Object[] hl = oc.highlight();
 		if (hl != null && hl[0] == w) drawn.add(new Object[]{"highlight box", null, hl[1]});
 		Camera c = w.camera;
 		int[] cut = pebxel.ui.Caps.clip(c);
 		float ct = cut != null ? cut[0] / 2f : -1e9f, cb = cut != null ? cut[1] / 2f : 1e9f;
+		if (cut != null && w instanceof WndTabbed) cb = Math.min(cb, b);   // (a tabbed window's tabs hang under the frame; the foot's backing covers what is under its edge)
 		java.util.List<Component> tabs = w instanceof WndTabbed ? tabs(w) : java.util.Collections.emptyList();
 		for (Object[] d : drawn) {
 			float[] q;
@@ -331,9 +332,11 @@ public final class WindowFit {
 		}
 	}
 
+	static boolean inPane(Gizmo g) { for (Gizmo a = g.parent; a != null; a = a.parent) if (a instanceof com.shatteredpixel.shatteredpixeldungeon.ui.ScrollPane) return true; return false; }
+
 	static String label(Gizmo g) {
-		for (Gizmo m : GroupAccess.members((com.watabou.noosa.Group) g)) if (m instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) return "'" + ((com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) m).text() + "'";
-		return g.getClass().getSimpleName();
+		for (Gizmo m : GroupAccess.members((com.watabou.noosa.Group) g)) if (m instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock && !((com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) m).text().isEmpty()) return "'" + ((com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock) m).text() + "'";
+		return g.getClass().getSimpleName().isEmpty() ? g.getClass().getName() : g.getClass().getSimpleName();
 	}
 
 	@SuppressWarnings("unchecked")
