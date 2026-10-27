@@ -98,6 +98,8 @@ public class Gallery {
 		// talents:N the hero at level N (talent points to spend), the talent page open
 		if (name.startsWith("talents:")) { int lv = Integer.parseInt(name.substring(8)); steps.add(() -> { Dungeon.hero.lvl = lv; Dungeon.hero.exp = 0; pebxel.ui.WndWatchHero.openTalents(); }); return; }
 		if (name.equals("duelist")) { steps.add(() -> { try { dress(HeroClass.DUELIST, 1); } catch (Exception e) { e.printStackTrace(); } }); return; }
+		if (name.equals("alchemy")) { steps.add(() -> { SceneFit.stock(); Dungeon.energy = 60; Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class); }); return; }
+		if (name.equals("rankings")) { steps.add(() -> { SceneFit.records(); Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene.class); }); return; }
 		if (name.equals("die")) {
 			free(() -> { com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat k = new com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat(); Dungeon.hero.HP = 1; Dungeon.fail(k); Dungeon.hero.die(k); });
 			return;

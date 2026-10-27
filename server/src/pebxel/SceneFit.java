@@ -145,7 +145,7 @@ public final class SceneFit {
 		for (int i = 0; i < 600 && !(Game.scene() instanceof GameScene && Dungeon.hero != null && Dungeon.hero.ready); i++) frame.run();
 	}
 
-	static void stock() {
+	public static void stock() {
 		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
 		h.belongings.backpack.items.clear();
 		Item[] its = {new com.shatteredpixel.shatteredpixeldungeon.plants.Sungrass.Seed(), new com.shatteredpixel.shatteredpixeldungeon.plants.Firebloom.Seed(), new com.shatteredpixel.shatteredpixeldungeon.plants.Icecap.Seed(),
@@ -200,7 +200,7 @@ public final class SceneFit {
 	}
 
 	/** The records the rankings need: eleven games, every class, wins and deaths, causes short and long, a challenge, a custom seed. */
-	static void records() {
+	public static void records() {
 		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
 		com.shatteredpixel.shatteredpixeldungeon.actors.hero.HeroClass keep = h.heroClass;
 		Class<?>[] causes = {com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Goo.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.GnollGeomancer.class, com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Rat.class,
