@@ -429,7 +429,22 @@ public class Gallery {
 			if (zi == want) break;
 			controls.button(Controls.UP); frames(40);
 		}
-		if (want == 0 && System.getenv("CENTER") != null) {   // the map's explored part in the middle of the view (as a dragged map)
+		if (want == 0 && System.getenv("HERO") != null) {   // the hero in the frame: MOVE=1 puts him on the floor cell nearest the middle of the explored part, the view centred on him
+			Level L = Dungeon.level; int w = L.width(), x0 = 999, x1 = 0, y0 = 999, y1 = 0;
+			for (int c = 0; c < L.length(); c++) if (L.visited[c] || L.mapped[c]) { x0 = Math.min(x0, c % w); x1 = Math.max(x1, c % w); y0 = Math.min(y0, c / w); y1 = Math.max(y1, c / w); }
+			int mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+			if (System.getenv("MOVE") != null) {
+				int best = -1, bd = Integer.MAX_VALUE;
+				for (int c = 0; c < L.length(); c++) if (c != h.pos && L.visited[c] && L.passable[c] && !L.avoid[c] && !L.solid[c] && Actor.findChar(c) == null) {
+					int dx = c % w - mx, dy = c / w - my, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; }
+				}
+				h.pos = best; h.sprite.place(best); Dungeon.observe();
+			}
+			System.out.println("hero at " + h.pos + " (" + (h.pos % w) + "," + (h.pos / w) + ") explored box x " + x0 + ".." + x1 + " y " + y0 + ".." + y1);
+			Camera.main.panTo(new com.watabou.utils.PointF((h.pos % w + 0.5f) * 8f, (h.pos / w + 0.5f) * 8f), 5f);
+			frames(10);
+			System.out.println("hero on watch " + java.util.Arrays.toString(onWatch(h.sprite)) + " scroll " + Camera.main.scroll + " cam " + Camera.main.x + "," + Camera.main.y + " zoom " + Camera.main.zoom);
+		} else if (want == 0 && System.getenv("CENTER") != null) {   // the map's explored part in the middle of the view (as a dragged map)
 			Level L = Dungeon.level; int w = L.width(), x0 = 999, x1 = 0, y0 = 999, y1 = 0;
 			for (int c = 0; c < L.length(); c++) if (L.visited[c] || L.mapped[c]) { x0 = Math.min(x0, c % w); x1 = Math.max(x1, c % w); y0 = Math.min(y0, c / w); y1 = Math.max(y1, c / w); }
 			Camera.main.panTo(new com.watabou.utils.PointF((x0 + x1 + 1) * 8f, (y0 + y1 + 1) * 8f), 5f);
