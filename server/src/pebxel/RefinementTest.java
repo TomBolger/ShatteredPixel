@@ -991,7 +991,7 @@ public final class RefinementTest {
         }
         check(Game.scene() instanceof GameScene, "game ready");
         while (Ui.topWindow() != null) Ui.topWindow().hide();
-        if (System.getenv("FITONLY") != null) { Gallery.calm(); oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); talentSpent(app); System.exit(0); }   // (quick: the windows only)
+        if (System.getenv("FITONLY") != null) { Gallery.calm(); oc = new Controls(); WindowFit.check(() -> frames(app, 1), oc); talentSpent(app); oc = new Controls(); SceneFit.check(() -> frames(app, 1), oc); System.exit(0); }   // (quick: the windows only)
         Gallery.calm(); Hero h = Dungeon.hero; h.belongings.backpack.items.clear();
         h.HP = 40; h.HT = 100; h.buff(Hunger.class).satisfy(1000);
         WatchSettings.assist(2); Assist.reset();
@@ -1065,6 +1065,7 @@ public final class RefinementTest {
         show(menu, 1); touches.frame(link, controls, 1f/30); PointerEvent.processPointerEvents();
         check(((Map<?,?>)active.get(null)).isEmpty(), "a pending long tap is cancelled on page change");
         menu.hide();
+        oc = new Controls(); SceneFit.check(() -> frames(app, 1), oc);   // (last: its rankings and endings use the game up)
         System.out.println("PASS: assistant policy, menu page stamps, drag move/release/cancel (" + Screen.w + "px)");
         System.exit(0);
     }

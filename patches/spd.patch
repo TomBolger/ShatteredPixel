@@ -557,7 +557,7 @@ index 08021b8..077a8fe 100644
  		if (!Dungeon.LimitedDrops.SCROLL_HOLDER.dropped()) bags.put(new ScrollHolder(), 0);
  		if (!Dungeon.LimitedDrops.POTION_BANDOLIER.dropped()) bags.put(new PotionBandolier(), 0);
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
-index ff17e01..c45646e 100644
+index ff17e01..9d02f9b 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 +++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AlchemyScene.java
 @@ -152,6 +152,8 @@ public class AlchemyScene extends PixelScene {
@@ -569,7 +569,72 @@ index ff17e01..c45646e 100644
  
  		w -= insets.left + insets.right;
  		h -= insets.top + insets.bottom;
-@@ -1005,7 +1007,7 @@ public class AlchemyScene extends PixelScene {
+@@ -186,6 +188,7 @@ public class AlchemyScene extends PixelScene {
+ 		centerW = left + pw/2;
+ 
+ 		int pos = (int)(insets.top) + (h - 120)/2;
++		if (PixelScene.pebxelZoom > 0) pos = (int)(insets.top) + Math.max(24, (h - 170)/2);   //pebxel: higher, for the bigger buttons below
+ 
+ 		if (splitAlchGuide &&
+ 				w >= 300 &&
+@@ -352,7 +355,8 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "cancel");
+ 			}
+ 		};
+-		cancel.setRect(left + 8, pos + 2, 16, 16);
++		int SM = PixelScene.pebxelZoom > 0 ? 24 : 16;   //pebxel: finger-sized small buttons
++		cancel.setRect(left + 8, pos + 2, SM, SM);
+ 		cancel.enable(false);
+ 		add(cancel);
+ 
+@@ -375,7 +379,7 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "repeat");
+ 			}
+ 		};
+-		repeat.setRect(left + 24, pos + 2, 16, 16);
++		repeat.setRect(left + 8 + SM, pos + 2, SM, SM);
+ 		repeat.enable(false);
+ 		add(repeat);
+ 
+@@ -434,7 +438,7 @@ public class AlchemyScene extends PixelScene {
+ 		energyLeft = PixelScene.renderTextBlock(energyText, 9);
+ 		energyLeft.setPos(
+ 				centerW - energyLeft.width()/2,
+-				insets.top + h - 8 - energyLeft.height()
++				insets.top + h - (PixelScene.pebxelZoom > 0 ? 16 : 8) - energyLeft.height()
+ 		);
+ 		energyLeft.hardlight(0x44CCFF);
+ 		add(energyLeft);
+@@ -477,7 +481,7 @@ public class AlchemyScene extends PixelScene {
+ 				return Messages.get(AlchemyScene.class, "energize");
+ 			}
+ 		};
+-		energyAdd.setRect(energyLeft.right(), energyLeft.top() - (16 - energyLeft.height())/2, 16, 16);
++		energyAdd.setRect(energyLeft.right(), energyLeft.top() - (SM - energyLeft.height())/2, SM, SM);
+ 		align(energyAdd);
+ 		add(energyAdd);
+ 
+@@ -496,6 +500,11 @@ public class AlchemyScene extends PixelScene {
+ 				} else {
+ 					clearSlots();
+ 					updateState();
++					if (PixelScene.pebxelZoom > 0) {   //pebxel: the watch's journal window, on the alchemy guide
++						WndJournal.last_index = 2;
++						AlchemyScene.this.addToFront(GameScene.pebxelWindow(new WndJournal()));
++						return;
++					}
+ 					AlchemyScene.this.addToFront(new Window() {
+ 
+ 						{
+@@ -530,6 +539,7 @@ public class AlchemyScene extends PixelScene {
+ 		btnGuide.icon(new ItemSprite(ItemSpriteSheet.ALCH_PAGE));
+ 		btnGuide.setSize(btnGuide.reqWidth()+4, 18);
+ 		btnGuide.setPos(centerW - btnGuide.width()/2f, energyAdd.top()- btnGuide.height()-2);
++		if (PixelScene.pebxelZoom > 0) btnGuide.setPos(repeat.right() + 6, cancel.top() + (SM - btnGuide.height())/2f);   //pebxel: beside the two small ones, clear of the energy and the slots
+ 		align(btnGuide);
+ 		add(btnGuide);
+ 
+@@ -1005,7 +1015,7 @@ public class AlchemyScene extends PixelScene {
  						InputButton.this.item(null);
  						updateState();
  					}
@@ -578,6 +643,72 @@ index ff17e01..c45646e 100644
  				}
  
  				@Override
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AmuletScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AmuletScene.java
+index 94f3b89..3bdb0e0 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AmuletScene.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/AmuletScene.java
+@@ -38,6 +38,8 @@ import com.shatteredpixel.shatteredpixeldungeon.ui.RenderedTextBlock;
+ import com.shatteredpixel.shatteredpixeldungeon.ui.StyledButton;
+ import com.watabou.noosa.Camera;
+ import com.watabou.noosa.Game;
++import com.watabou.noosa.ui.Component;
++import com.shatteredpixel.shatteredpixeldungeon.ui.ScrollPane;
+ import com.watabou.noosa.Image;
+ import com.watabou.noosa.audio.Music;
+ import com.watabou.noosa.tweeners.Delayer;
+@@ -59,6 +61,18 @@ public class AmuletScene extends PixelScene {
+ 		inGameScene = true;
+ 	}
+ 
++	//pebxel: the story's pane on the watch, and a page of it by a button (Up/Down; true if it moved)
++	public com.shatteredpixel.shatteredpixeldungeon.ui.ScrollPane pebxelPane;
++	public boolean pebxelScroll(int dir) {
++		if (pebxelPane == null) return false;
++		com.watabou.noosa.Camera c = pebxelPane.content().camera();
++		float max = Math.max(0, pebxelPane.content().height() - pebxelPane.height()), cur = c.scroll.y;
++		if (dir > 0 ? cur >= max - 0.5f : cur <= 0.5f) return false;
++		pebxelPane.scrollTo(0, cur + dir * pebxelPane.height() * 0.75f);
++		return true;
++	}
++	public boolean pebxelAtTop() { return pebxelPane == null || pebxelPane.content().camera().scroll.y <= 0.5f; }
++
+ 	StyledButton btnExit = null;
+ 	StyledButton btnStay = null;
+ 	
+@@ -126,7 +140,32 @@ public class AmuletScene extends PixelScene {
+ 		int h = (int) (Camera.main.height - insets.top + insets.bottom);
+ 
+ 		float height;
+-		if (noText) {
++		if (PixelScene.pebxelZoom > 0) {
++			//pebxel: the watch: the amulet at the top, the two buttons fixed at the foot, the story between them in a
++			//pane that scrolls (it is longer than the screen); on a round screen the foot is narrower, so the buttons rise
++			int W = Camera.main.width, H = Camera.main.height;
++			int bw = Math.min(WIDTH, W - 24), bh = 22;
++			float bottom = H - 8;
++			if (PixelScene.pebxelRound) bottom = (float) (H / 2f + Math.sqrt((H / 2f) * (H / 2f) - (bw / 2f + 3) * (bw / 2f + 3))) - 2;
++			btnExit.setSize( bw, bh ); btnStay.setSize( bw, bh );
++			btnStay.setPos( (W - bw) / 2f, bottom - bh );
++			btnExit.setPos( btnStay.left(), btnStay.top() - 4 - bh );
++			amulet.x = (W - amulet.width) / 2;
++			amulet.y = PixelScene.pebxelRound ? 22 : 6;
++			align(amulet);
++			if (!noText) {
++				int pw = PixelScene.pebxelRound ? W - 70 : W - 16;
++				text.maxWidth(pw - 6);
++				Component box = new Component();
++				box.add(text);
++				text.setPos(2, 2);
++				box.setSize(pw, text.height() + 6);
++				pebxelPane = new ScrollPane(box);
++				add(pebxelPane);
++				float top = amulet.y + amulet.height + 4;
++				pebxelPane.setRect((W - pw) / 2f, top, pw, btnExit.top() - 4 - top);
++			}
++		} else if (noText) {
+ 			height = amulet.height + LARGE_GAP + btnExit.height() + SMALL_GAP + btnStay.height();
+ 			
+ 			amulet.x = insets.left + (w - amulet.width) / 2;
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/CellSelector.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/CellSelector.java
 index 1debaec..6c12a86 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/CellSelector.java
@@ -984,6 +1115,34 @@ index a3f6715..3293edd 100644
  				if (clickReady) {
  					killTooltip();
  					switch (event.button){
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
+index ef0e910..761e2c8 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/ExitButton.java
+@@ -39,6 +39,23 @@ public class ExitButton extends IconButton {
+ 		height = 20;
+ 	}
+ 
++	//pebxel: on the round watch, the corner it was put in is outside the circle: moved in along the diagonal until
++	//all four corners are inside (a rectangular screen: where it was put)
++	@Override
++	protected void layout() {
++		if (PixelScene.pebxelRound && width > 0) {
++			com.watabou.noosa.Camera c = camera() != null ? camera() : com.watabou.noosa.Camera.main;
++			float cx = c.width / 2f, cy = c.height / 2f, r = Math.min(c.width, c.height) / 2f - 1;
++			for (int i = 0; i < 40; i++) {
++				float fx = x + width / 2f > cx ? x + width : x, fy = y + height / 2f > cy ? y + height : y;
++				float dx = fx - cx, dy = fy - cy, d = (float) Math.sqrt(dx * dx + dy * dy);
++				if (d <= r) break;
++				x += dx > 0 ? -1 : 1; y += dy > 0 ? -1 : 1;
++			}
++		}
++		super.layout();
++	}
++
+ 	@Override
+ 	protected void onClick() {
+ 		if (Game.scene() instanceof TitleScene) {
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java
 index 2dc7887..b2ee4df 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/RenderedTextBlock.java
@@ -1031,8 +1190,21 @@ index 2dcab6a..27a489b 100644
  			quickslotsToShow = 3;
  			startingSlot = swappedQuickslots ? 3 : 0;
  			btnSwap.visible = true;
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/Window.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/Window.java
+index f9d3ca6..df7ba5e 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/Window.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/ui/Window.java
+@@ -104,7 +104,7 @@ public class Window extends Group implements Signal.Listener<KeyEvent> {
+ 		camera = new Camera( 0, 0,
+ 			(int)chrome.width,
+ 			(int)chrome.height,
+-			PixelScene.defaultZoom );
++			PixelScene.pebxelZoom > 0 ? PixelScene.pebxelZoom : PixelScene.defaultZoom );   //pebxel: the watch's windows are one size, whichever screen opens them
+ 		camera.x = (int)(insets.left + (screenW - camera.width * camera.zoom) / 2);
+ 		camera.y = (int)(insets.top + (screenH - camera.height * camera.zoom) / 2);
+ 		camera.y -= yOffset * camera.zoom;
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
-index 6a7280e..51e88ad 100644
+index 6a7280e..1b27315 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
 +++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/IconTitle.java
 @@ -44,6 +44,9 @@ public class IconTitle extends Component {
@@ -1050,7 +1222,7 @@ index 6a7280e..51e88ad 100644
  		int imHeight = (int)Math.max(imIcon.height(), 16);
  
 -		tfLabel.maxWidth((int)(width - (imWidth + GAP)));
-+		tfLabel.maxWidth((int)(width - (imWidth + GAP) - pebxelPad));
++		tfLabel.maxWidth((int)(width - (imWidth + GAP) - (pebxelPad > 0 && com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.defaultZoom > 0 ? (int)Math.ceil(pebxelPad * 3f / com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.defaultZoom) : pebxelPad)));
  		tfLabel.setPos(x + imWidth + GAP,
  						imHeight > tfLabel.height() ? y +(imHeight - tfLabel.height()) / 2 : y);
  		PixelScene.align(tfLabel);
@@ -1076,6 +1248,32 @@ index f4803d6..aa001b2 100644
  	
  	@Override
  	protected int tabHeight() {
+diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
+index 25cccf0..17539c2 100644
+--- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
++++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndClericSpells.java
+@@ -112,10 +112,17 @@ public class WndClericSpells extends Window {
+ 				spellBtns.add(spellBtn);
+ 			}
+ 
+-			int left = 2 + (WIDTH - spellBtns.size() * (BTN_SIZE + 4)) / 2;
+-			for (IconButton btn : spellBtns) {
+-				btn.setRect(left, top, BTN_SIZE, BTN_SIZE);
+-				left += btn.width() + 4;
++			//pebxel: a tier with more spells than fit across wraps to more rows (five a row), each row centred
++			int per = (WIDTH - 2) / (BTN_SIZE + 4);
++			for (int row = 0; row * per < spellBtns.size(); row++) {
++				if (row > 0) top += BTN_SIZE + 4;
++				int inRow = Math.min(per, spellBtns.size() - row * per);
++				int left = 2 + (WIDTH - inRow * (BTN_SIZE + 4)) / 2;
++				for (int k = 0; k < inRow; k++) {
++					IconButton btn = spellBtns.get(row * per + k);
++					btn.setRect(left, top, BTN_SIZE, BTN_SIZE);
++					left += btn.width() + 4;
++				}
+ 			}
+ 
+ 		}
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java
 index f4f2830..5048fac 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/windows/WndEnergizeItem.java
