@@ -297,8 +297,9 @@ public class WndWatchBag extends WatchWindow implements Navigable {
 		ItemSprite s = item != null ? new ItemSprite(item) : new ItemSprite((Integer) o, null);
 		// centred by its own size (Shattered's item pictures aren't all 16x16), on whole pixels
 		s.scale.set(2); s.x = x + Math.round((CELL_W - s.width()) / 2f); s.y = y + Math.round((CELL_H - s.height()) / 2f);
-		if (WatchHud.lost(item)) s.tint(WatchHud.LOST_TINT, WatchHud.LOST_SHADE);   // (after an ankh: darkened until the backpack is back)
 		grid.add(s);
+		// after an ankh, until the backpack is back: a 50% black checker over the picture (the watch dithers a colour block)
+		if (WatchHud.lost(item)) grid.add(new WatchHud.Checker(x, y, CELL_W, CELL_H));
 		if (item == null) return;
 		// Pebble PD's labels (bag.c), Gothic 14 bold, outlined:
 		// top left: how many (when more than one), a wand's charges ("?/3" until known), the waterskin's drops

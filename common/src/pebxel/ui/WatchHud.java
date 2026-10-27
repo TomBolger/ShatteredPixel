@@ -270,9 +270,6 @@ public class WatchHud extends Group {
 	 *  wide and the art looked lumpy). */
 	static float ICON_SCALE = 2f;
 	static float iconScale(int j) { return TB_ICON_AT[j] == TB_BAG ? ICON_SCALE : 2f; }
-	/** How far a lost item is darkened (Visual.tint: 0.5 keeps it readable on the watch's four levels a channel). */
-	public static final int LOST_TINT = 0x555555;   // (faded toward the slot grey, as stock Shattered fades them: Thomas could not tell 50% darker apart)
-	public static final float LOST_SHADE = 0.7f;
 
 	/** After an ankh, until the backpack is picked up again: an item not kept through the loss (Shattered greys it). */
 	public static boolean lost(Item it) {
@@ -304,6 +301,10 @@ public class WatchHud extends Group {
 	public static class HudButton extends Button {
 		@Override protected void layout() { super.layout(); }
 	}
+
+	/** A 50% black block meant to show as the watch's dithered checker even inside a window (Link makes other see-through
+	 *  blocks in windows solid): over items lost to an ankh (Thomas: "just use a dithered black pixel grid"). */
+	public static class Checker extends ColorBlock { public Checker(float x, float y, float w, float h) { super(1, 1, 0xFF000000); this.x = x; this.y = y; size(w, h); alpha(0.5f); } }
 
 	static ColorBlock block(int rgb, float x, float y, float w, float h) {
 		ColorBlock b = new ColorBlock(1, 1, 0xFF000000 | rgb);
@@ -419,11 +420,11 @@ public class WatchHud extends Group {
 			quickText[q].text("");
 			if (it == null) { quickFog[q].visible = false; continue; }
 			quick[q].view(it); quick[q].scale.set(ICON_SCALE);
-			quick[q].resetColor(); if (lost(it)) quick[q].tint(LOST_TINT, LOST_SHADE);   // (darkened while lost)
+			quick[q].resetColor();
 			// centred by its own size (not all item pictures are 16x16)
 			quick[q].x = quickAt[q][0] - Math.round(quick[q].width() / 2); quick[q].y = quickAt[q][1] - Math.round(quick[q].height() / 2);
 			boolean have = Dungeon.quickslot.isNonePlaceholder(q);
-			quickFog[q].visible = !have;
+			quickFog[q].visible = !have || lost(it);   // (the 50% black checker: not in the pack, or lost to an ankh: Thomas, "just use a dithered black pixel grid")
 			if (!have) continue;
 			if (it instanceof Wand && it.levelKnown) {
 				quickText[q].text(it.status()); place(quickText[q], bx + 3, by - 1, bw - 4, 0);

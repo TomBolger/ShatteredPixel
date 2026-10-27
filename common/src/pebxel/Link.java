@@ -785,7 +785,7 @@ public final class Link {
 				float alpha = ((col >>> 24) / 255f) * v.alpha();
 				// (not the shade over the game behind a window, which is on Shattered's interface camera: that one stays
 				// see-through, a checker over the game, as in Pebble PD)
-				if (alpha > 0.05f && alpha < 0.95f && inWindow(g) && v.camera() != com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.uiCamera) {
+				if (alpha > 0.05f && alpha < 0.95f && !(g instanceof pebxel.ui.WatchHud.Checker) && inWindow(g) && v.camera() != com.shatteredpixel.shatteredpixeldungeon.scenes.PixelScene.uiCamera) {
 					// see-through panels inside windows (item slots, list rows) dither into a noisy check on the
 					// watch: make them solid, black or light grey by how light they are
 					int lum = (((col >> 16) & 255) * 3 + ((col >> 8) & 255) * 5 + (col & 255) * 2) / 10;
