@@ -58,6 +58,7 @@ public class Gallery {
 		st("heroes", 6, "heroes", "");
 		st("bossbar", 2, "boss", "Goo");
 		st("windows", 1, "windows", "");
+		st("lostinv", 1, "lostinv", "");   // an ankh's lost backpack: most items lost (greyed), a few kept
 		// the Cracked Spyglass's hidden heaps (drawn at 10% by Shattered), every other one hidden, on each region's floors
 		st("ghosts-sewers", 2, "ghosts", ""); st("ghosts-prison", 7, "ghosts", ""); st("ghosts-caves", 12, "ghosts", "");
 		st("ghosts-city", 17, "ghosts", ""); st("ghosts-halls", 22, "ghosts", "");
@@ -119,6 +120,7 @@ public class Gallery {
 			case "gas": steps.add(Gallery::gas); break;
 			case "plants": steps.add(Gallery::plants); break;
 			case "buffs": steps.add(Gallery::buffs); break;
+			case "lostinv": steps.add(Gallery::lostInv); break;
 		}
 	}
 
@@ -231,6 +233,21 @@ public class Gallery {
 			"wands.WandOfFireblast", "rings.RingOfMight", "artifacts.CloakOfShadows", "food.Food", "food.MysteryMeat", "Gold",
 			"keys.IronKey", "bombs.Bomb", "Honeypot", "stones.StoneOfBlink", "weapon.missiles.Javelin", "Ankh", "Torch",
 			"spells.PhaseShift", "potions.exotic.PotionOfDivineInspiration", "Dewdrop"};
+
+	/** After an ankh: the backpack's items are lost (not the kept ones), the quickslots hold some of each, the worn armour too. */
+	static void lostInv() {
+		Hero h = Dungeon.hero;
+		String[] pack = {"weapon.melee.Longsword", "potions.PotionOfHealing", "potions.PotionOfStrength", "scrolls.ScrollOfUpgrade",
+				"scrolls.ScrollOfIdentify", "wands.WandOfFireblast", "rings.RingOfMight", "food.Food", "Torch", "artifacts.CloakOfShadows"};
+		Item[] got = new Item[pack.length];
+		for (int i = 0; i < pack.length; i++) {
+			try { got[i] = (Item) make(I + pack[i]); got[i].collect(h.belongings.backpack); }
+			catch (Throwable e) { System.out.println("lost " + pack[i] + ": " + e); }
+		}
+		for (int i : new int[]{1, 3, 7}) if (got[i] != null) got[i].keptThoughLostInvent = true;   // kept: healing, upgrade, food
+		h.belongings.lostInventory(true);
+		Dungeon.quickslot.setSlot(0, got[5]); Dungeon.quickslot.setSlot(1, got[1]); Dungeon.quickslot.setSlot(2, got[4]);
+	}
 
 	static void items() {
 		List<Integer> cells = spots(1, ITEMS.length);
@@ -369,6 +386,7 @@ public class Gallery {
 					controls.button(Controls.UP); frames(30); shot(name + "-z32");
 					controls.button(Controls.UP); frames(10); controls.button(Controls.UP); frames(30);
 				}
+				if (kind.equals("lostinv")) { GameScene.show(window("bag")); frames(40); shot("lostinv-bag"); closeAll(); }
 				if (kind.equals("buffs")) { GameScene.show(new com.shatteredpixel.shatteredpixeldungeon.windows.WndHero()); frames(20);
 					controls.button(Controls.DOWN); frames(10); controls.button(Controls.DOWN); frames(30); shot("buffs-hero"); closeAll(); }
 			}

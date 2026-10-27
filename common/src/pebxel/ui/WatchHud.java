@@ -270,6 +270,15 @@ public class WatchHud extends Group {
 	 *  wide and the art looked lumpy). */
 	static float ICON_SCALE = 2f;
 	static float iconScale(int j) { return TB_ICON_AT[j] == TB_BAG ? ICON_SCALE : 2f; }
+	/** How far a lost item is darkened (Visual.tint: 0.5 keeps it readable on the watch's four levels a channel). */
+	public static final int LOST_TINT = 0x555555;   // (faded toward the slot grey, as stock Shattered fades them: Thomas could not tell 50% darker apart)
+	public static final float LOST_SHADE = 0.7f;
+
+	/** After an ankh, until the backpack is picked up again: an item not kept through the loss (Shattered greys it). */
+	public static boolean lost(Item it) {
+		return it != null && Dungeon.hero != null && Dungeon.hero.belongings.lostInventory() && !it.keptThroughLostInventory();
+	}
+
 	static int tbX(int i) { return (W - TB_N * TB_W - TB_GAP) / 2 + i * TB_W + (i >= 2 ? TB_GAP : 0); }   // wait, search | the rest
 	public static int[] buttonRect(int k) {
 		if (round) {
@@ -410,6 +419,7 @@ public class WatchHud extends Group {
 			quickText[q].text("");
 			if (it == null) { quickFog[q].visible = false; continue; }
 			quick[q].view(it); quick[q].scale.set(ICON_SCALE);
+			quick[q].resetColor(); if (lost(it)) quick[q].tint(LOST_TINT, LOST_SHADE);   // (darkened while lost)
 			// centred by its own size (not all item pictures are 16x16)
 			quick[q].x = quickAt[q][0] - Math.round(quick[q].width() / 2); quick[q].y = quickAt[q][1] - Math.round(quick[q].height() / 2);
 			boolean have = Dungeon.quickslot.isNonePlaceholder(q);
