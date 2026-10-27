@@ -1,6 +1,7 @@
 package pebxel;
 
 import com.badlogic.gdx.Files;
+import com.badlogic.gdx.Gdx;
 import com.shatteredpixel.shatteredpixeldungeon.*;
 import com.shatteredpixel.shatteredpixeldungeon.actors.Actor;
 import com.shatteredpixel.shatteredpixeldungeon.actors.blobs.Blob;
@@ -347,6 +348,15 @@ public class Gallery {
 		Dungeon.hero = null; Dungeon.daily = Dungeon.dailyReplay = false; Dungeon.initSeed();
 		Dungeon.seed = Long.parseLong(System.getenv().getOrDefault("SEED", "84"));
 		InterlevelScene.mode = InterlevelScene.Mode.DESCEND;
+		if (System.getenv("LOAD") != null) {   // LOAD=folder (AssistBot's SNAPDIR/save-D): that game goes on, for a photo: NEAR=class (hero beside it), ZOOM=0|2, NAME
+			java.nio.file.Path dst = Gdx.files.external(".pebxel-gallery").file().toPath(), src = java.nio.file.Paths.get(System.getenv("LOAD"));
+			Gdx.files.external(".pebxel-gallery").deleteDirectory();
+			try (java.util.stream.Stream<java.nio.file.Path> w = java.nio.file.Files.walk(src)) {
+				for (java.nio.file.Path q : (Iterable<java.nio.file.Path>) w::iterator) { java.nio.file.Path d = dst.resolve(src.relativize(q).toString()); if (java.nio.file.Files.isDirectory(q)) java.nio.file.Files.createDirectories(d); else java.nio.file.Files.copy(q, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+			}
+			GamesInProgress.curSlot = 1; Dungeon.hero = null;
+			InterlevelScene.mode = InterlevelScene.Mode.CONTINUE;
+		}
 		Game.switchScene(InterlevelScene.class);
 		for (int k = 0; k < 4000 && !(Game.scene() instanceof GameScene && Dungeon.hero != null && Dungeon.hero.ready); k++) {
 			frames(1); Thread.sleep(2);
@@ -354,6 +364,7 @@ public class Gallery {
 		}
 		controls = new Controls();
 		frames(30);
+		if (System.getenv("LOAD") != null) { photo(); System.exit(0); }
 		for (String name : STAGES.keySet()) {
 			if (!only.isEmpty() && !only.contains(name)) continue;
 			stage(name);
@@ -374,6 +385,42 @@ public class Gallery {
 			}
 		}
 		System.exit(0);
+	}
+
+	/** The loaded game's photo: the hero put beside NEAR (a mob or NPC class's simple name, if given), the zoom all in (2) or all out (0). */
+	static void photo() throws Exception {
+		Hero h = Dungeon.hero; String near = System.getenv("NEAR");
+		if (System.getenv("LIST") != null) { StringBuilder sb = new StringBuilder("MOBS d" + Dungeon.depth + " lvl " + Dungeon.hero.lvl + ":"); for (Mob k : Dungeon.level.mobs) sb.append(' ').append(k.getClass().getSimpleName()); System.out.println(sb); return; }
+		if (near != null && !near.isEmpty()) {
+			Mob m = null;
+			for (Mob k : Dungeon.level.mobs) if (k.getClass().getSimpleName().equals(near) || k.getClass().getName().endsWith(near)) { m = k; break; }
+			if (m == null) { System.out.println("no " + near + " on this floor"); System.exit(2); }
+			Level L = Dungeon.level; int w = L.width(), best = -1, bd = 99;
+			for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++) {
+				int c = m.pos + dy * w + dx; if (c < 0 || c >= L.length() || (dx == 0 && dy == 0)) continue;
+				int d = 2 * Math.max(Math.abs(dx), Math.abs(dy)) + (dy != 0 ? 1 : 0);
+				if (L.passable[c] && !L.avoid[c] && Actor.findChar(c) == null && d < bd) { bd = d; best = c; }
+			}
+			h.pos = best; h.sprite.place(best); Dungeon.observe();
+			System.out.println("hero beside " + near + " at " + m.pos + ", hero " + best);
+		}
+		int want = Integer.parseInt(System.getenv().getOrDefault("ZOOM", "2"));
+		frames(60);
+		for (int k = 0; k < 6; k++) {
+			float z = Camera.main.zoom; int zi = z < 1.5f ? 0 : z < 3f ? 1 : 2;
+			if (zi == want) break;
+			controls.button(Controls.UP); frames(40);
+		}
+		if (want == 0 && System.getenv("CENTER") != null) {   // the map's explored part in the middle of the view (as a dragged map)
+			Level L = Dungeon.level; int w = L.width(), x0 = 999, x1 = 0, y0 = 999, y1 = 0;
+			for (int c = 0; c < L.length(); c++) if (L.visited[c] || L.mapped[c]) { x0 = Math.min(x0, c % w); x1 = Math.max(x1, c % w); y0 = Math.min(y0, c / w); y1 = Math.max(y1, c / w); }
+			Camera.main.panTo(new com.watabou.utils.PointF((x0 + x1 + 1) * 8f, (y0 + y1 + 1) * 8f), 5f);
+			frames(10);
+		}
+		frames(120);
+		System.out.println("hero " + h.heroClass + " armor " + h.belongings.armor.name() + " +" + h.belongings.armor.level() + " (tier " + h.belongings.armor.tier + ") weapon " + h.belongings.weapon + " str " + h.STR());
+		System.out.println("zoom " + Camera.main.zoom + " depth " + Dungeon.depth + " lvl " + h.lvl + " hp " + h.HP + "/" + h.HT + " armor " + h.belongings.armor + " gold " + Dungeon.gold);
+		shot(System.getenv().getOrDefault("NAME", "photo"));
 	}
 
 	static void heroTab(int t) throws Exception {

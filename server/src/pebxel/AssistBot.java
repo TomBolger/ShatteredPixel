@@ -292,6 +292,7 @@ public class AssistBot {
 			}
 			readyF = f; readyNow = Actor.now();
 			Coverage.look(); BotWindows.turn(); BotItems.settle();
+			snap();
 			if (Cheat.ON && Dungeon.depth < START_DEPTH && !Dungeon.bossLevel() && Dungeon.hero.belongings.getItem(com.shatteredpixel.shatteredpixeldungeon.items.Amulet.class) == null) {   // (tests: straight down to START_DEPTH)
 				com.shatteredpixel.shatteredpixeldungeon.levels.features.LevelTransition tr = StairsTest.stairs(false);
 				if (tr != null) { Cheat.apply(); StairsTest.jump(tr); continue; }
@@ -421,6 +422,29 @@ public class AssistBot {
 		return end;
 	}
 	static String saveDir, dir0;
+
+	/** SNAPDEPTHS=7,12 SNAPDIR=dir (photo shoots): the first time on each of those floors that nine tenths of it is explored and
+	 *  nothing hostile is in sight, the game is saved and its folder copied to SNAPDIR/save-D (Gallery's LOAD=that loads it). */
+	static final java.util.Set<Integer> snapDone = new java.util.HashSet<>();
+	static void snap() {
+		String ds = System.getenv("SNAPDEPTHS"); if (ds == null || Dungeon.branch != 0) return;
+		boolean want = false; for (String x : ds.split(",")) if (Integer.parseInt(x.trim()) == Dungeon.depth) want = true;
+		if (!want || snapDone.contains(Dungeon.depth)) return;
+		com.shatteredpixel.shatteredpixeldungeon.levels.Level L = Dungeon.level; int n = 0, k = 0;
+		for (int c = 0; c < L.length(); c++) if (L.passable[c]) { n++; if (L.visited[c] || L.mapped[c]) k++; }
+		if (k < 0.9 * n) return;
+		for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : L.mobs) if (m.alignment == com.shatteredpixel.shatteredpixeldungeon.actors.Char.Alignment.ENEMY && L.heroFOV[m.pos]) return;
+		snapDone.add(Dungeon.depth);
+		try {
+			Dungeon.saveAll();
+			java.nio.file.Path src = Gdx.files.external(saveDir).file().toPath(), dst = java.nio.file.Paths.get(System.getenv().getOrDefault("SNAPDIR", "/tmp/claude-0/ss2") + "/save-" + Dungeon.depth);
+			try (java.util.stream.Stream<java.nio.file.Path> w = java.nio.file.Files.walk(src)) {
+				for (java.nio.file.Path q : (Iterable<java.nio.file.Path>) w::iterator) { java.nio.file.Path d = dst.resolve(src.relativize(q).toString()); if (java.nio.file.Files.isDirectory(q)) java.nio.file.Files.createDirectories(d); else java.nio.file.Files.copy(q, d, java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+			}
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
+			System.out.println("SNAP depth " + Dungeon.depth + " class " + h.heroClass + " lvl " + h.lvl + " hp " + h.HP + "/" + h.HT + " armor " + h.belongings.armor + " gold " + Dungeon.gold + " explored " + k + "/" + n);
+		} catch (Throwable e) { e.printStackTrace(System.out); }
+	}
 	/** How many actors were made so far (Actor's numbering), and the floor's mobs in the order its set gives them. */
 	static String actorState() {
 		int h = 1; for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : Dungeon.level.mobs) h = h * 31 + m.pos * 7 + m.HP;
