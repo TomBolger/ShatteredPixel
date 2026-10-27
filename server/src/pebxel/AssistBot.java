@@ -434,6 +434,12 @@ public class AssistBot {
 		for (int c = 0; c < L.length(); c++) if (L.passable[c]) { n++; if (L.visited[c] || L.mapped[c]) k++; }
 		if (k < 0.9 * n) return;
 		for (com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Mob m : L.mobs) if (m.alignment == com.shatteredpixel.shatteredpixeldungeon.actors.Char.Alignment.ENEMY && L.heroFOV[m.pos]) return;
+		if (System.getenv("SNAPMID") != null) {   // (a whole-floor photo as it is played: the hero near the middle of what's explored, in a big lit room; Thomas: no moving him there)
+			int w = L.width(), x0 = 999, x1 = 0, y0 = 999, y1 = 0, seen = 0;
+			for (int c = 0; c < L.length(); c++) { if (L.visited[c] || L.mapped[c]) { x0 = Math.min(x0, c % w); x1 = Math.max(x1, c % w); y0 = Math.min(y0, c / w); y1 = Math.max(y1, c / w); } if (L.heroFOV[c] && !L.solid[c]) seen++; }
+			int hx = Dungeon.hero.pos % w, hy = Dungeon.hero.pos / w;
+			if (Math.abs(hx - (x0 + x1) / 2) > Math.max(3, (x1 - x0) / 6) || Math.abs(hy - (y0 + y1) / 2) > Math.max(3, (y1 - y0) / 6) || seen < Integer.parseInt(System.getenv("SNAPMID"))) return;
+		}
 		snapDone.add(Dungeon.depth);
 		try {
 			Dungeon.saveAll();
