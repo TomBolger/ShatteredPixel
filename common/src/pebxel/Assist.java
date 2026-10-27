@@ -874,6 +874,7 @@ public final class Assist {
 		planned.values().removeIf(t -> t < Actor.now());
 		if (!out.isEmpty() && (out.get(0).kind == GO || out.get(0).kind == PICKUP) && out.get(0).obj >= 0) planned.put(out.get(0).obj, Actor.now() + 30);
 		if (mode() != 0) AsEyes.stepwise(out);   // (ST: in an eye's sight a walk goes a step at a time)
+		try { Brain.watchHealthy(out); } catch (Throwable e) { lastError = e; }
 		return out;
 	}
 

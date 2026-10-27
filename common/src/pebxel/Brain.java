@@ -166,6 +166,7 @@ final class Brain {
 		for (Cand c : cs) if (!c.valued() && !Double.isNaN(c.t.hint)) c.v = c.t.hint;
 		// plan A: the best option when it beats plan A by the margin (carrying on, an entry with no value of its own, is 0)
 		Cand a = cs.get(0), best = null;
+		if (easy && fight && spends(a.t) && !a.veto && !Assist.foul(Assist.heroPos()) && !Assist.burning()) { a.veto = true; a.note += " easy fight: no consumable"; easyVetoes++; }
 		double va = a.veto ? Double.NEGATIVE_INFINITY : a.valued() ? a.v : 0, vb = Double.NEGATIVE_INFINITY;
 		for (Cand c : cs) {
 			if (c == a || c.veto) continue;
@@ -189,7 +190,7 @@ final class Brain {
 
 	/** The fight in sight, as the fight model sees it (Assist.oFight's choice of foes). */
 	static void setupFight() {
-		foes = new ArrayList<>(); fs = new ArrayList<>(); fight = false; base = null;
+		foes = new ArrayList<>(); fs = new ArrayList<>(); fight = false; base = null; easy = false;
 		Hero h = H; int hp = h.pos;
 		com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing hb = h.buff(com.shatteredpixel.shatteredpixeldungeon.actors.buffs.Healing.class);
 		Object hl = hb == null ? null : Assist.field(hb, "healingLeft"); healing = hl instanceof Integer ? (Integer) hl : 0;
@@ -203,7 +204,32 @@ final class Brain {
 		policy = me.heals > 0 ? FightModel.healAt(h, foes) : 0;   // (the drinking policy the hands follow: MT's, FightModel.healAt)
 		base = Look.run(me, fs, plan(), seed);
 		fight = true; fights++;
+		easy = easyFight();
 	}
+
+	/** (AS) A fight the hero clearly wins with his blows at healthy health: the lookahead (his plain way: melee, the wand,
+	 *  a Healing only below the policy's line) has him dying under EASYD percent and ending above EASYL percent of his
+	 *  health, no boss and none of AsAbilities' nasty kinds (the sums undersell them) in it, and he is over EASYHP percent now.
+	 *  In such a fight a potion, scroll, seed, stone or bomb is worth less than it costs kept (Budget.rescue), so none is
+	 *  suggested (AsItems' "hard fight" off; Brain's veto on the rest): Thomas, "wasting all of my resources on a skeleton
+	 *  while I'm at high health". A real risk (a low pDeath is still pDeath), a boss, a dangerous kind: the consumables as before. */
+	static final double EASYD = Assist.optInt("EASYD", 3) / 100.0, EASYL = Assist.optInt("EASYL", 40) / 100.0;
+	static final int EASYHP = Assist.optInt("EASYHP", 70);
+	static boolean easy;
+	static String names() { StringBuilder b = new StringBuilder("("); for (Mob m : foes) b.append(m.getClass().getSimpleName()).append(m.state == m.SLEEPING ? "z" : "").append(Assist.boss(m) ? "!" : "").append(' '); return b.append(')').toString(); }
+	static boolean easyFight() {
+		if (!EASYON || base == null || H.HP * 100 < H.HT * EASYHP) return false;
+		boolean nasty = false;   // (AsAbilities' kinds the sums undersell: the lookahead must be surer: a sixth of the death odds, 60% of health left)
+		for (Mob m : foes) { if (Assist.boss(m) || Char.hasProp(m, Char.Property.BOSS)) return false; nasty |= AsAbilities.NASTY.contains(m.getClass().getSimpleName()); }
+		return nasty ? base.pDeath < EASYD / 6 && base.hpLeft >= H.HT * 0.6 : base.pDeath < EASYD && base.hpLeft >= H.HT * EASYL;
+	}
+	static final boolean EASYON = Assist.opt("EASY", true);
+	/** A thing used up (potion, scroll, seed, stone, bomb, tipped dart): what an easy fight doesn't call for. */
+	static boolean consumable(Item i) {
+		return i instanceof Potion || i instanceof Scroll || i instanceof com.shatteredpixel.shatteredpixeldungeon.plants.Plant.Seed || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb
+			|| i instanceof com.shatteredpixel.shatteredpixeldungeon.items.stones.Runestone || i instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.TippedDart;
+	}
+	static boolean spends(Target t) { return t != null && t.kind == Assist.USE && t.item != null && consumable(t.item) && !EquipableItem.AC_EQUIP.equals(t.action); }
 
 	static double policy;
 	/** The hero's way on after his first move: the hands' drinking policy. */
@@ -251,7 +277,7 @@ final class Brain {
 		c.v = v; c.note = String.format(java.util.Locale.ROOT, "skip pd %.2f share %.2f R %.1f", pd, share, r);
 		cs.add(c); skips++;
 	}
-	static int skips;
+	static int skips, easyVetoes;
 
 	// (M2) from afar or closing in: a caster's bolt ignores armour and the Assist never shoots at casters (Assist.ranged:
 	// "melee from round a corner"); with plan A a walk at a foe not beside the hero, the bow / a charged attack wand at
@@ -429,8 +455,23 @@ final class Brain {
 
 	static final boolean DBG = Assist.opt("ADBG", false) || Assist.opt("BDBG", false);
 	static void dump(List<Cand> cs, Cand pick) {
-		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " [" + Budget.dump(H) + "]" + " foes " + fs.size() + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
+		System.out.println("  BRAIN d" + Dungeon.depth + " t" + (int) Actor.now() + " hp " + H.HP + "/" + H.HT + " R " + String.format("%.2f", R) + " [" + Budget.dump(H) + "]" + " foes " + fs.size() + names() + (easy ? " EASY" : "") + (base != null ? " base " + base : "") + " pick " + (pick == null ? "-" : pick.toString()));
 		for (Cand c : cs) if (c.valued() || c.veto) System.out.println("    " + c + "  " + c.note);
+	}
+
+	/** Diagnostics (HIPOT=1 prints): plan A a consumable (potion, scroll, seed, a thrown potion / stone) with a foe about and health over 70%. */
+	static int healthyUse, healthyPlans, healthyBoss; static final Map<String, Integer> healthyBy = new TreeMap<>();
+	static void watchHealthy(List<Target> out) {
+		if (out.isEmpty() || H == null || !(fight || Assist.seenFoe)) return;
+		Target t = out.get(0); healthyPlans++;
+		if (H.HP * 10 <= H.HT * 7 || t.kind != Assist.USE || t.item == null) return;
+		boolean c = t.item instanceof Potion || t.item instanceof Scroll || t.item instanceof com.shatteredpixel.shatteredpixeldungeon.plants.Plant.Seed
+			|| t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.bombs.Bomb || t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.stones.Runestone || t.item instanceof com.shatteredpixel.shatteredpixeldungeon.items.weapon.missiles.darts.TippedDart;
+		if (!c) return;
+		for (Mob m : foes) if (Assist.boss(m)) { healthyBoss++; return; }
+		healthyUse++; String w = t.why == null ? "" : t.why; int i = w.indexOf(" ["); if (i > 0) w = w.substring(0, i);
+		healthyBy.merge(t.src + "/" + t.item.getClass().getSimpleName() + "/" + t.action + ": " + w, 1, Integer::sum);
+		if (Assist.opt("HIPOT", false)) System.out.println("HIPOT d" + Dungeon.depth + " hp " + H.HP + "/" + H.HT + " " + t.src + " " + t.item.getClass().getSimpleName() + " " + t.action + " " + w + " foes " + names() + " base " + base);
 	}
 
 	/** Plan A's kind, counted (the bot acts on every plan A: equips, drinks, escapes, rests made). */
@@ -445,6 +486,7 @@ final class Brain {
 				decisions == 0 ? 100 : 100.0 * (decisions - overrides) / decisions, vetoes, decisions == 0 ? 0 : nanos / 1e6 / decisions, maxNanos / 1e6, slow, overBy, Rules.fired(), planAs);
 		skips = 0; lastFoeHp.clear(); dithers = zeros = 0; hDepth = -1; commitLeft = 0; zeroVetoLeft = 0; zeroSame = 0; zeroKey = null;
 		decisions = fights = overrides = vetoes = slow = 0; nanos = maxNanos = 0; overBy.clear(); planAs.clear(); Rules.reset(); lastDepth = fledFrom = -1; fledAt = -999; lastPlanRole = null;
+		s += " HEALTHYUSE " + healthyUse + "/" + healthyPlans + " boss " + healthyBoss + " " + healthyBy; healthyUse = healthyPlans = healthyBoss = 0; healthyBy.clear();
 		return s;
 	}
 }

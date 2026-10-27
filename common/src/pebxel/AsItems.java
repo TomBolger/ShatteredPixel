@@ -91,7 +91,7 @@ final class AsItems {
 		for (Mob m : near) bossNear |= Assist.boss(m);
 		if (!near.isEmpty()) {
 			try { FightModel.Result r = Assist.oFight(); pDeath = r == null ? 0 : r.pDeath; } catch (Throwable e) { pDeath = 0; }
-			hard = AsAbilities.strongFight() || pDeath * 100 >= SPEND || bossNear;
+			hard = (AsAbilities.strongFight() && !Brain.easy) || pDeath * 100 >= SPEND || bossNear;   // (AS: a strong foe by the duel sums, but the lookahead has him winning at healthy health: not a fight for consumables)
 		}
 		dying = !adj.isEmpty() && (pDeath * 100 >= Tune.ESC || hpf < 0.25f);
 		return true;

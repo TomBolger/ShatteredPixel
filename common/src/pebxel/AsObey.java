@@ -27,13 +27,31 @@ final class AsObey {
 	/** Plans held back here (tests). */
 	static long held;
 
-	static void newFloor(Object l) { if (floor != l) { floor = l; waits.clear(); fightWalks.clear(); skillWalks.clear(); } }
+	/** (AS) A consumable (potion, scroll, seed, stone, bomb, dart) suggested in a fight and passed over: no consumable is
+	 *  suggested again in that fight (a seed of another kind, a potion after a seed: the player wants none of them), until
+	 *  the danger rises clearly (health a quarter of the bar lower than when he passed it, under 40%, or the lookahead's
+	 *  odds of dying 10% or worse) or the fight is over. Health when passed over (-1: none passed). */
+	static int usePassedHp = -1;
+	static final int USE_DROP = 25, USE_LOW = 40; static final double USE_PD = 0.10;
+
+	static void newFloor(Object l) { if (floor != l) { floor = l; waits.clear(); fightWalks.clear(); skillWalks.clear(); usePassedHp = -1; } }
+
+	/** The fight's consumables still declined: passed over this fight, nothing clearly worse since. */
+	static boolean usesDeclined() {
+		com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero;
+		if (usePassedHp < 0 || h == null) return false;
+		if (!(fight || seenFoe || inDanger)) { usePassedHp = -1; return false; }   // (the fight is over)
+		if (h.HP * 100 < h.HT * USE_LOW || (usePassedHp - h.HP) * 100 >= h.HT * USE_DROP) { usePassedHp = -1; return false; }   // (worse off: offered again)
+		if (Brain.fight && Brain.base != null && Brain.base.pDeath >= USE_PD) { usePassedHp = -1; return false; }
+		return true;
+	}
 
 	static String waitKey(Target t) { String w = t.why == null ? "" : t.why; int c = w.indexOf(':'); return (c > 0 ? w.substring(0, c) : w) + "@" + t.cell + ":" + t.action; }
 
 	/** Assist.pass: the entry e was passed over (went: where the hero went, from: where he was). */
 	static void passed(Target e, int went, int from) {
 		float now = Actor.now();
+		if (e.kind == USE && Brain.spends(e) && (fight || seenFoe || inDanger) && !safety(e)) usePassedHp = com.shatteredpixel.shatteredpixeldungeon.Dungeon.hero.HP;
 		if (e.kind == WAIT && !REST_ACT.equals(e.action)) waits.put(waitKey(e), now + (SEARCH_ACT.equals(e.action) || e.action == null ? DEMOTE : WAIT_TURNS));
 		int o = e.obj >= 0 ? e.obj : e.cell;
 		if (e.kind == PICKUP && o >= 0 && o == heroPos()) {   // (what lies underfoot, passed over: Assist.pass leaves it, the hero being there; as any thing passed over)
@@ -57,6 +75,7 @@ final class AsObey {
 		switch (a.kind) {
 			case USE: {
 				if (a.item == null || a.action == null) return false;
+				if (Brain.spends(a) && usesDeclined()) return true;   // (a fight's consumable, one passed over lately: the fight's other consumables wait too)
 				if (a.cell >= 0 && a.cell != heroPos() && Actor.findChar(a.cell) != null) return false;   // (a throw or zap at a foe: the fight's)
 				return declined(a.item.getClass(), a.action);
 			}
