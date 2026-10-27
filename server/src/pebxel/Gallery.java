@@ -441,8 +441,8 @@ public class Gallery {
 				h.pos = best; h.sprite.place(best); Dungeon.observe();
 			}
 			System.out.println("hero at " + h.pos + " (" + (h.pos % w) + "," + (h.pos / w) + ") explored box x " + x0 + ".." + x1 + " y " + y0 + ".." + y1);
-			Camera.main.panTo(new com.watabou.utils.PointF((h.pos % w + 0.5f) * 8f, (h.pos / w + 0.5f) * 8f), 5f);
-			frames(10);
+			Camera.main.snapTo(h.sprite.center());   // (on the hero's own picture: map cells are 16 units, not 8)
+			frames(30);
 			System.out.println("hero on watch " + java.util.Arrays.toString(onWatch(h.sprite)) + " scroll " + Camera.main.scroll + " cam " + Camera.main.x + "," + Camera.main.y + " zoom " + Camera.main.zoom);
 		} else if (want == 0 && System.getenv("CENTER") != null) {   // the map's explored part in the middle of the view (as a dragged map)
 			Level L = Dungeon.level; int w = L.width(), x0 = 999, x1 = 0, y0 = 999, y1 = 0;
