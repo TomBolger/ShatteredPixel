@@ -790,7 +790,7 @@ index 179e9e8..62d0339 100644
  			cancel();
  
 diff --git a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/InterlevelScene.java b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/InterlevelScene.java
-index 463b529..5b4af78 100644
+index 463b529..30453af 100644
 --- a/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/InterlevelScene.java
 +++ b/core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/scenes/InterlevelScene.java
 @@ -101,6 +101,14 @@ public class InterlevelScene extends PixelScene {
@@ -834,7 +834,7 @@ index 463b529..5b4af78 100644
  
  		String text = Messages.get(Mode.class, mode.name());
  		
-@@ -273,31 +286,57 @@ public class InterlevelScene extends PixelScene {
+@@ -273,31 +286,64 @@ public class InterlevelScene extends PixelScene {
  				insets.left + w - loadingText.width() - 12,
  				insets.top + h - loadingText.height() - 6
  		);
@@ -874,7 +874,14 @@ index 463b529..5b4af78 100644
 +								storyMessage.text(pages[page[0]]);
 +								storyMessage.setPos(storyMessage.left(), bottom - storyMessage.height());
 +								storyBG.boxRect(storyMessage.left()-10, storyMessage.top()-10, storyMessage.width()+20, storyMessage.height()+20);
-+								if (page[0] == pages.length - 1) text(Messages.get(InterlevelScene.class, "continue"));
++								if (page[0] == pages.length - 1) {
++									text(Messages.get(InterlevelScene.class, "continue"));
++									//pebxel: the box was sized for "More"; "Continue" is longer and touched its edge on the watch: wider, on the same centre
++									float mid = left() + width()/2f;
++									setSize(Math.max(width(), reqWidth() + 10), height());
++									setPos(mid - width()/2f, top());
++									btnHideStory.setRect(right()+2, top(), 20, 21);
++								}
 +								return;
 +							}
  							phase = Phase.FADE_OUT;
@@ -895,7 +902,7 @@ index 463b529..5b4af78 100644
  					btnContinue.icon(Icons.STAIRS.get());
  					btnContinue.setSize(btnContinue.reqWidth()+10, 22);
  					btnContinue.visible = false;
-@@ -316,7 +355,7 @@ public class InterlevelScene extends PixelScene {
+@@ -316,7 +362,7 @@ public class InterlevelScene extends PixelScene {
  										protected void updateValues(float progress) {
  											float uiAlpha = progress;
  											btnContinue.alpha(uiAlpha);
@@ -904,7 +911,7 @@ index 463b529..5b4af78 100644
  											storyMessage.alpha(uiAlpha);
  											btnHideStory.icon().alpha(uiAlpha);
  											loadingText.alpha(uiAlpha);
-@@ -352,7 +391,7 @@ public class InterlevelScene extends PixelScene {
+@@ -352,7 +398,7 @@ public class InterlevelScene extends PixelScene {
  									protected void updateValues(float progress) {
  										float uiAlpha = 1 - progress;
  										btnContinue.alpha(uiAlpha);
@@ -913,7 +920,7 @@ index 463b529..5b4af78 100644
  										storyMessage.alpha(uiAlpha);
  										icon.alpha(uiAlpha);
  										loadingText.alpha(uiAlpha);
-@@ -376,7 +415,7 @@ public class InterlevelScene extends PixelScene {
+@@ -376,7 +422,7 @@ public class InterlevelScene extends PixelScene {
  									protected void updateValues(float progress) {
  										float uiAlpha = progress;
  										btnContinue.alpha(uiAlpha);
@@ -922,7 +929,7 @@ index 463b529..5b4af78 100644
  										storyMessage.alpha(uiAlpha);
  										icon.alpha(uiAlpha);
  										loadingText.alpha(uiAlpha);
-@@ -399,6 +438,8 @@ public class InterlevelScene extends PixelScene {
+@@ -399,6 +445,8 @@ public class InterlevelScene extends PixelScene {
  					align(btnHideStory);
  					btnHideStory.enable(false);
  					add(btnHideStory);
@@ -931,7 +938,7 @@ index 463b529..5b4af78 100644
  
  					btnContinue.alpha(0);
  					storyBG.alpha(0);
-@@ -515,7 +556,7 @@ public class InterlevelScene extends PixelScene {
+@@ -515,7 +563,7 @@ public class InterlevelScene extends PixelScene {
  			if (btnContinue != null){
  				btnContinue.alpha((timeLeft/fadeTime));
  				storyMessage.alpha(btnContinue.alpha());
@@ -940,7 +947,7 @@ index 463b529..5b4af78 100644
  				btnHideStory.icon().alpha(btnContinue.alpha());
  			}
  			
-@@ -530,9 +571,9 @@ public class InterlevelScene extends PixelScene {
+@@ -530,9 +578,9 @@ public class InterlevelScene extends PixelScene {
  		case STATIC:
  
  			if (btnContinue != null && textFadingIn) {
@@ -952,7 +959,7 @@ index 463b529..5b4af78 100644
  				btnHideStory.icon().alpha(btnContinue.alpha());
  
  				if (btnContinue.alpha() == 1){
-@@ -593,7 +634,7 @@ public class InterlevelScene extends PixelScene {
+@@ -593,7 +641,7 @@ public class InterlevelScene extends PixelScene {
  			break;
  		}
  
@@ -961,7 +968,7 @@ index 463b529..5b4af78 100644
  			loadingText.setPos(
  					//the randomization is effectively -2 to +2
  					// we don't use the generator stack as levelgen may be occurring
-@@ -608,6 +649,8 @@ public class InterlevelScene extends PixelScene {
+@@ -608,6 +656,8 @@ public class InterlevelScene extends PixelScene {
  	private void afterLoading(){
  		if (btnContinue != null){
  			btnContinue.visible = true;
@@ -970,7 +977,7 @@ index 463b529..5b4af78 100644
  			float alpha = btnContinue.alpha();
  			btnContinue.enable(true);
  			btnContinue.alpha(alpha);
-@@ -615,6 +658,7 @@ public class InterlevelScene extends PixelScene {
+@@ -615,6 +665,7 @@ public class InterlevelScene extends PixelScene {
  		} else {
  			phase = Phase.FADE_OUT;
  			timeLeft = fadeTime;
