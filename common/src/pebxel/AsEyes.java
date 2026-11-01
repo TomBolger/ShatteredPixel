@@ -91,6 +91,7 @@ final class AsEyes {
 		boolean[] f = fovs.get(key);
 		if (f != null) return f;
 		int N = L.length(), W = L.width();
+		if (p < 0 || p >= N) { boolean[] all = new boolean[N]; Arrays.fill(all, true); return all; }   // (an eye off the map, pos -1: ShadowCaster would run off the array)
 		boolean[] b = new boolean[N];
 		for (int i = 0; i < N; i++) b[i] = (known[i] || L.heroFOV[i]) && L.losBlocking[i];
 		if (door >= 0) b[door] = true;
