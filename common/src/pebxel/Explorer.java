@@ -18,7 +18,7 @@ public final class Explorer {
 		for (int c = 0; c < dist.length; c++) {
 			if (dist[c] <= 1 || !L.passable[c]) continue;
 			boolean edge = false;
-			for (int d : PathFinder.NEIGHBOURS8) { int n = c + d; if (n >= 0 && n < dist.length && !L.visited[n] && !L.mapped[n]) { edge = true; break; } }
+			for (int d : PathFinder.NEIGHBOURS8) { int n = c + d; if (n >= 0 && n < dist.length && !L.visited[n]) { edge = true; break; } }
 			if (edge && (best < 0 || dist[c] < dist[best])) best = c;
 		}
 		return best;
@@ -38,7 +38,7 @@ public final class Explorer {
 			int c = q.poll();
 			if (c != h && !bad.contains(c)) {
 				if (L.heaps.get(c) != null) return c;
-				for (int d : PathFinder.NEIGHBOURS8) { int n = c + d; if (n >= 0 && n < known.length && !known[n]) return c; }
+				for (int d : PathFinder.NEIGHBOURS8) { int n = c + d; if (n >= 0 && n < known.length && !L.visited[n] && !L.heroFOV[n]) return c; }
 			}
 			for (int d : PathFinder.NEIGHBOURS8) {
 				int n = c + d;

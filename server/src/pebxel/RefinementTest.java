@@ -403,9 +403,14 @@ public final class RefinementTest {
         Assist.reset(); L.visited[near] = L.mapped[near] = false;
         first(); Assist.tapped(far);   // (after a list: a new floor forgets the player's way)
         a = first(); check(objOf(a) == far, "a tap on the map: its way is plan A: " + a);
+        // 6. magic-mapped, not visited: the layout is known, the rooms still to explore (not the stairs)
+        Arrays.fill(L.mapped, true); Arrays.fill(L.visited, false);
+        for (int c = 0; c < L.length(); c++) if (d[c] >= 0 && d[c] <= 4) L.visited[c] = true;
+        Assist.reset(); a = first();
+        check(a != null && objOf(a) != L.exit() && objOf(a) != L.entrance(), "a magic-mapped floor is still explored, not left by the stairs: " + a);
         Arrays.fill(L.visited, true); Arrays.fill(L.mapped, true); Assist.reset(); WatchSettings.itemAssist(true);
         h.pos = pos0;
-        System.out.println("places: near ground before a far door, the held key's door before the stairs, keys before the stairs and kept, no stairs with ground left, a tap steers: ok");
+        System.out.println("places: near ground before a far door, the held key's door before the stairs, keys before the stairs and kept, no stairs with ground left, a tap steers, a mapped floor explored: ok");
     }
     // ---- several options at all times: a room with doors and grass offers them all (owner: "only 2 tiles") ----
     static java.util.List<Assist.Target> screenPlan() throws Exception {

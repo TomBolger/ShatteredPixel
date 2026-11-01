@@ -411,7 +411,7 @@ static int isqrt(int v) { int r = 0; while ((r + 1) * (r + 1) <= v) r++; return 
 static int fog_at(const DynTex *d, int x, int y) {                  // 0 in sight, 8 remembered, 16 never seen
   if (x < 0 || y < 0 || x >= d->w || y >= d->h) return 16;
   int a = dyn_px(d, y * d->w + x) >> 6;
-  return a == 3 ? 16 : a ? 8 : 0;
+  return a == 3 ? 16 : a == 2 ? 9 : a ? 8 : 0;   // (9: mapped, not visited)
 }
 static void draw_fog(int tex, int tx, int ty, int tw, int th, int32_t L, int32_t T, int32_t R, int32_t B) {
   const DynTex *d = scene_dyntex(tex);
@@ -447,7 +447,7 @@ static void draw_fog(int tex, int tx, int ty, int tw, int th, int32_t L, int32_t
           }
           // (remembered: Pebble PD's fine checker, which at the watch's pixel size reads as the same colours darker;
           // darker colours themselves, a step of the watch's four per channel, came out murky)
-          if (own == 16 || B16[(y & 3) * 4 + (x & 3)] * w < own * w + 8 * (w - dd)) row[x] = GColorBlackARGB8;
+          if (own == 16 || B16[(y & 3) * 4 + (x & 3)] * w < own * w + 8 * (w - dd)) row[x] = own == 9 ? 0xC6 : GColorBlackARGB8;   // (mapped: 0x0055AA)
         }
       }
     }

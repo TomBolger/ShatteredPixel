@@ -8,7 +8,7 @@
 #include "predict.h"
 
 enum { KEY_DATA = 1, KEY_HELLO = 2, KEY_BUTTON = 3, KEY_STATS = 4, KEY_VERSION = 5, KEY_TOUCH = 6, KEY_SCREEN = 7 };
-#define PROTOCOL 16  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
+#define PROTOCOL 17  // must match Link.PROTOCOL on the phone (GAME_SPEED: scene.h)
 enum { B_UP = 1, B_DOWN, B_SELECT, B_BACK, B_LONG = 16, B_WALKING = 32 };   // B_WALKING: pressed while a walk shows (Controls.WALKING)
 
 static Window *s_win;

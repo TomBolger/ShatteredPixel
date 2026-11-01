@@ -321,7 +321,7 @@ static void read_dtex(void) {
   art_forget(id);
 }
 
-// the fog of war's texel states where they changed, cell by cell (Link.fog): 0 in sight, 1 remembered, 2 never
+// the fog of war's texel states where they changed, cell by cell (Link.fog): 0 in sight, 1 remembered, 2 never, 3 mapped but not visited
 // seen, as the palette indices of a 2-bit run-time picture whose alpha draw.c reads
 static int varint(void) { int v = 0, sh = 0, c; do { c = u8(); v |= (c & 127) << sh; sh += 7; } while ((c & 128) && sh < 28); return v; }
 static void SMALL read_fog(bool known) {
@@ -341,7 +341,7 @@ static void SMALL read_fog(bool known) {
     d = salloc(sizeof(DynTex) + bytes);
     if (!d) { g_lost = true; p = stop; return; }
     d->w = w; d->h = h; d->bits = 2; d->ncol = 3;
-    memset(d->pal, 0, 16); d->pal[1] = 0x40; d->pal[2] = 0xC0; d->pal[3] = 0xC0;
+    memset(d->pal, 0, 16); d->pal[1] = 0x40; d->pal[2] = 0xC0; d->pal[3] = 0x86;   // (3: mapped, alpha 2 and blue)
     memset(d->px, 0xAA, bytes);   // (all never seen)
     s_dyn[id - 200] = d;
   }

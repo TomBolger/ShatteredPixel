@@ -59,6 +59,8 @@ public class Gallery {
 		st("heroes", 6, "heroes", "");
 		st("bossbar", 2, "boss", "Goo");
 		st("windows", 1, "windows", "");
+		st("magicmap", 3, "magicmap", "");   // part visited, the rest only magic-mapped (zoomed out too)
+		st("lamps", 7, "lamps", "");   // the hero beside wall torches
 		st("lostinv", 1, "lostinv", "");   // an ankh's lost backpack: most items lost (greyed), a few kept
 		// the Cracked Spyglass's hidden heaps (drawn at 10% by Shattered), every other one hidden, on each region's floors
 		st("ghosts-sewers", 2, "ghosts", ""); st("ghosts-prison", 7, "ghosts", ""); st("ghosts-caves", 12, "ghosts", "");
@@ -117,6 +119,8 @@ public class Gallery {
 			case "boss": steps.add(() -> lineup(arg.split(" "), 2));
 				steps.add(() -> { for (Mob m : Dungeon.level.mobs) if (m.properties().contains(com.shatteredpixel.shatteredpixeldungeon.actors.Char.Property.BOSS)) com.shatteredpixel.shatteredpixeldungeon.ui.BossHealthBar.assignBoss(m); }); break;
 			case "items": steps.add(Gallery::items); break;
+			case "magicmap": steps.add(Gallery::magicmap); break;
+			case "lamps": steps.add(Gallery::lamps); break;
 			case "ghosts": steps.add(Gallery::ghosts); break;
 			case "gas": steps.add(Gallery::gas); break;
 			case "plants": steps.add(Gallery::plants); break;
@@ -262,6 +266,29 @@ public class Gallery {
 	}
 
 	/** Items round the hero, every other one a hidden heap as the Cracked Spyglass makes (Heap.hidden: 10% alpha). */
+	/** The hero's surroundings (a box round him) as visited, every other discoverable cell as mapped only. */
+	static void magicmap() {
+		Level L = Dungeon.level; int w = L.width(), h = Dungeon.hero.pos;
+		for (int c = 0; c < L.length(); c++) {
+			boolean near = Math.abs(c % w - h % w) <= 9 && Math.abs(c / w - h / w) <= 7;
+			L.visited[c] = near && L.discoverable[c]; L.mapped[c] = !near && L.discoverable[c];
+		}
+		Dungeon.observe(); GameScene.updateFog();
+	}
+
+	/** The hero put beside a wall torch (a WALL_DECO cell), the torch in view. */
+	static void lamps() {
+		Level L = Dungeon.level; int w = L.width(), best = -1, bd = Integer.MAX_VALUE, hp = Dungeon.hero.pos;
+		for (int c = 0; c < L.length(); c++) if (L.map[c] == com.shatteredpixel.shatteredpixeldungeon.levels.Terrain.WALL_DECO) {
+			int p = c + w; if (p >= L.length() || !L.passable[p] || Actor.findChar(p) != null) continue;
+			int d = Math.abs(c % w - hp % w) + Math.abs(c / w - hp / w); if (d < bd) { bd = d; best = p; }
+		}
+		if (best < 0) { System.out.println("lamps: no torch found"); return; }
+		Dungeon.hero.pos = best; Dungeon.hero.sprite.place(best); Dungeon.observe();
+		Camera.main.snapTo(Dungeon.hero.sprite.center());
+		System.out.println("lamps: hero at " + best);
+	}
+
 	static void ghosts() {
 		List<Integer> cells = spots(0, 12);
 		for (int i = 0; i < 12 && i < cells.size(); i++) {
@@ -392,6 +419,11 @@ public class Gallery {
 			else if (kind.equals("windows")) windows();
 			else {
 				shot(name);
+				if (kind.equals("magicmap") || kind.equals("lamps")) {   // zoomed out all the way, then back
+					for (int k = 0; k < 3 && Camera.main.zoom >= 1.5f; k++) { controls.button(Controls.UP); frames(40); }
+					frames(30); shot(name + "-z0");
+					for (int k = 0; k < 3 && Camera.main.zoom < 1.5f; k++) { controls.button(Controls.UP); frames(40); }
+				}
 				if (kind.equals("mobs") || kind.equals("boss") || kind.equals("plants")) {
 					// zoomed in a step, as Up does (then back to the default)
 					controls.button(Controls.UP); frames(30); shot(name + "-z32");
