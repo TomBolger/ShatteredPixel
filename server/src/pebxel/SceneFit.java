@@ -154,6 +154,63 @@ public final class SceneFit {
 		for (Item i : its) { i.identify(); i.collect(); }
 	}
 
+	/** A player's way to the alchemy pot with the seeds and stones in the pouch: slot, bag tab, item, by the watch's buttons. */
+	static void alchemyPouch(Runnable frame, Controls oc) {
+		run("alchemypouch", frame, oc, () -> {
+			com.shatteredpixel.shatteredpixeldungeon.actors.hero.Hero h = Dungeon.hero;
+			h.belongings.backpack.items.clear();
+			new com.shatteredpixel.shatteredpixeldungeon.items.bags.VelvetPouch().collect();
+			new com.shatteredpixel.shatteredpixeldungeon.plants.Sungrass.Seed().identify().collect();
+			new com.shatteredpixel.shatteredpixeldungeon.plants.Firebloom.Seed().identify().collect();
+			new com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfIntuition().identify().collect();
+			new com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfDetectMagic().identify().collect();
+			Dungeon.energy = 60; Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class);
+		}, () -> {
+			Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
+			Class<?>[] want = {com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfIntuition.class, com.shatteredpixel.shatteredpixeldungeon.plants.Sungrass.Seed.class, com.shatteredpixel.shatteredpixeldungeon.items.stones.StoneOfDetectMagic.class};
+			for (int n = 0; n < 3; n++) {
+				Object slot = null;
+				for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") == null) { slot = WatchDriver.get(in, "slot"); break; }
+				check(slot != null, "alchemy pouch: an empty slot " + n);
+				Ui.press((com.watabou.noosa.Gizmo) slot); for (int i = 0; i < 6; i++) frame.run();
+				Window top = Ui.topWindow();
+				check(top instanceof pebxel.ui.WndWatchBag, "alchemy pouch: the bag opens (" + top + ")");
+				// by the buttons: Down/Select until the wanted item's cell is framed and chosen (the pouch's tab first)
+				Item it = null;
+				for (Item x : allItems()) if (want[n].isInstance(x)) it = x;
+				check(it != null, "alchemy pouch: item " + want[n].getSimpleName() + " carried");
+				boolean done = false;
+				for (int step = 0; step < 80 && !done; step++) {
+					Window w = Ui.topWindow();
+					if (!(w instanceof pebxel.ui.WndWatchBag)) { done = true; break; }
+					pebxel.ui.WndWatchBag wb = (pebxel.ui.WndWatchBag) w;
+					com.watabou.noosa.ui.Component f = wb.focused();
+					List<com.watabou.noosa.ui.Component> areas = field(wb, "rowAreas"); List<List<com.watabou.noosa.ui.Component>> rows = field(wb, "rowCells");
+					Map<Object, Item> ci = field(wb, "cellItem");
+					boolean has = false; for (Object k : ci.keySet()) if (ci.get(k) == it) has = true;
+					int ri = areas.indexOf(f);   // (>= 0: in the rows, choosing one)
+					if (ci.get(f) == it) { oc.button(Controls.SELECT); for (int i = 0; i < 8; i++) frame.run(); done = true; break; }
+					if (ri >= 0) {
+						int target = -1;
+						for (int r = 0; r < rows.size(); r++) for (Object c : rows.get(r)) if (has ? ci.get(c) == it : false) target = r;
+						if (!has) target = areas.size() - 1;   // (the bags' tabs)
+						oc.button(ri == target ? Controls.SELECT : Controls.DOWN);
+					} else if (!has) {   // on a tab: the next one, then it
+						boolean second = f != rows.get(rows.size() - 1).get(0);
+						oc.button(second ? Controls.SELECT : Controls.DOWN);
+					} else oc.button(Controls.DOWN);
+					for (int i = 0; i < 4; i++) frame.run();
+				}
+				check(done && Ui.topWindow() == null, "alchemy pouch: item " + want[n].getSimpleName() + " chosen by the buttons (" + Ui.topWindow() + ")");
+				int filled = 0; for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
+				check(filled == n + 1, "alchemy pouch: slot filled after pick " + n + " (" + filled + ")");
+				System.out.println("    alchemy pouch: " + want[n].getSimpleName() + " put in by the buttons, " + filled + " slots filled");
+			}
+		});
+	}
+	@SuppressWarnings("unchecked") static <T> T field(Object o, String n) { try { java.lang.reflect.Field f = o.getClass().getDeclaredField(n); f.setAccessible(true); return (T) f.get(o); } catch (Exception e) { throw new RuntimeException(e); } }
+	static List<Item> allItems() { List<Item> l = new ArrayList<>(); for (Item i : Dungeon.hero.belongings) l.add(i); return l; }
+
 	static void alchemy(Runnable frame, Controls oc) {
 		run("alchemy", frame, oc, () -> { stock(); Dungeon.energy = 60; Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class); }, () -> {
 			Scene sc = Game.scene();
@@ -300,6 +357,7 @@ public final class SceneFit {
 
 	public static void check(Runnable frame, Controls oc) {
 		alchemy(frame, oc);
+		alchemyPouch(frame, oc);
 		amulet(frame, oc);
 		others(frame, oc);
 		gameOver(frame, oc);
