@@ -295,6 +295,7 @@ final class AsFire {
 		if (DBGF) System.out.println("    FIRE engage " + c.m.getClass().getSimpleName() + "@" + c.pos + " walk " + cw + " here " + Math.round(here) + " hide " + hide + " cost " + Math.round(hc) + " charge " + Math.round(cc) + " seen " + fc.size());
 		boolean charge = hide < 0 || cc < hc;
 		if (engId == c.m.id() && now - engAt <= 3 && engCharge != charge) charge = engCharge ? !(hc < cc * 0.6) : !(cc < hc * 0.6);   // (kept unless the other way is much cheaper)
+		if (hide < 0) charge = true;   // (nowhere to hide: the flip above must not leave it on hide -1, an index error)
 		if (charge && cw > 12) return null;
 		engId = c.m.id(); engCharge = charge; engAt = now;
 		if (charge) return new Target(c.pos, ENEMY, "caster: at it (" + Math.round(cc) + " to take on the way, hiding " + (hide < 0 ? "nowhere" : Math.round(hc)) + ")");
