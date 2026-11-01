@@ -61,7 +61,7 @@ public final class BotAlchemy {
 	/** In the dungeon: go to the pot? (once a floor, while there's something to make) */
 	static Assist.Target pick() {
 		Hero h = Dungeon.hero; Level L = Dungeon.level;
-		if (h == null || !h.ready || lastVisitDepth == Dungeon.depth) return null;
+		if (h == null || !h.ready || lastVisitDepth == Dungeon.depth || System.getenv("NOALCH") != null) return null;
 		int pot = -1;
 		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.ALCHEMY && (L.visited[c] || L.mapped[c])) pot = c;
 		if (pot < 0) return null;
@@ -73,6 +73,7 @@ public final class BotAlchemy {
 	/** In the alchemy screen: the button to press (or null: leave). */
 	static BotWindows.Answer scene(com.watabou.noosa.Scene sc) {
 		lastVisitDepth = Dungeon.depth;
+		if (System.getenv("NOALCH") != null) return new BotWindows.Answer(null, null, "alchemy: skipped (NOALCH)");
 		if (!Cheat.ON) { AsWindows.Pick p = AsWindows.decideScene(sc); if (AsWindows.made.size() > made.size()) made.addAll(AsWindows.made); visits = AsWindows.alchemyVisits; return new BotWindows.Answer(p.g, p.item, p.why); }   // (honest games: the Assistant's steps, as the watch frames them)
 		AsAlchemy.used();
 		Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
