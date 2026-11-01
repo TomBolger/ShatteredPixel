@@ -276,7 +276,7 @@ public final class WatchSim {
 					int end = p + len, cw = w / 2, cells = cw * (h / 2);
 					int[] px = dyn.get(id);
 					if (px == null || px[0] != w || px[1] != h) { px = new int[2 + w * h]; px[0] = w; px[1] = h; Arrays.fill(px, 2, px.length, 0xC0); }
-					final int[] FS = {0x00, 0x40, 0xC0, 0xC0};
+					final int[] FS = {0x00, 0x40, 0xC0, 0x86};   // (3: mapped, not visited)
 					int cell = -1, prev = 0;
 					while (p < end) {
 						int v = varint(), s4 = v & 3, run = 1, t = 0;
@@ -741,7 +741,7 @@ public final class WatchSim {
 	private static int fogAt(BufferedImage t, int x, int y) {
 		if (x < 0 || y < 0 || x >= t.getWidth() || y >= t.getHeight()) return 16;
 		int a = (t.getRGB(x, y) >>> 24) / 85;
-		return a >= 3 ? 16 : a > 0 ? 8 : 0;
+		return a >= 3 ? 16 : a == 2 ? 9 : a > 0 ? 8 : 0;
 	}
 	private void fog(BufferedImage t, int tx, int ty, int tw, int th, float L, float T, float R, float B) {
 		if (R <= L || B <= T || tw <= 0 || th <= 0) return;
@@ -771,7 +771,7 @@ public final class WatchSim {
 								if (fx < w && fy < w && (m & (tp ? (l ? 16 : 32) : (l ? 64 : 128))) != 0) { int c = (int) Math.sqrt(fx * fx + fy * fy); if (c < dd) dd = c; }
 							}
 						}
-						if (own == 16 || B16[(y & 3) * 4 + (x & 3)] * w < own * w + 8 * (w - dd)) fb[y * W + x] = 0xFF000000;
+						if (own == 16 || B16[(y & 3) * 4 + (x & 3)] * w < own * w + 8 * (w - dd)) fb[y * W + x] = own == 9 ? 0xFF0055AA : 0xFF000000;
 					}
 				}
 			}

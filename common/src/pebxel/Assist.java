@@ -173,6 +173,7 @@ public final class Assist {
 	static Level L; private static Hero H; private static int W, LEN, hp, ENT, EXIT;
 	static int[] dist, wlk, N8;
 	static boolean[] known, open, pass, danger;
+	static boolean[] seen;   // actually seen (visited, or in sight); known adds the magic-mapped, whose rooms are still to explore
 	static boolean inDanger, anyDanger;
 	static IntPredicate screen;
 	static int head, od;
@@ -559,7 +560,7 @@ public final class Assist {
 		ensureFloor(L);
 		screen = mode() == 2 ? null : onScreen;
 		N8 = new int[] { -W, 1, W, -1, -W - 1, -W + 1, W + 1, W - 1 };
-		if (dist == null || dist.length != LEN) { dist = new int[LEN]; wlk = new int[LEN]; known = new boolean[LEN]; open = new boolean[LEN]; pass = new boolean[LEN]; danger = new boolean[LEN]; }
+		if (dist == null || dist.length != LEN) { dist = new int[LEN]; wlk = new int[LEN]; known = new boolean[LEN]; seen = new boolean[LEN]; open = new boolean[LEN]; pass = new boolean[LEN]; danger = new boolean[LEN]; }
 		// the way the hero last went
 		if (lastPos >= 0 && lastPos != hp) from = lastPos;
 		lastPos = hp;
@@ -572,7 +573,7 @@ public final class Assist {
 		}
 		float now0 = Actor.now();
 		for (int c = 0; c < LEN; c++) {
-			known[c] = L.visited[c] || L.mapped[c];
+			known[c] = L.visited[c] || L.mapped[c]; seen[c] = L.visited[c] || L.heroFOV[c];
 			if (L.heroFOV[c]) { hazMem[c] = blobAt(c); fireMem[c] = hazMem[c] && plainFire(c) ? now0 : -1; }
 			else if (hazMem[c] && fireMem[c] >= 0 && now0 - fireMem[c] > FIREMEM) hazMem[c] = false;   // (plain fire out of sight burns out: K8, a barricade burnt and its room behind never gone into, the flames remembered)
 		}
@@ -1181,7 +1182,7 @@ public final class Assist {
 	static boolean unseenBy(int c) {   // c is beside the unknown (not just beside the hero)
 		if (!known[c] || !open[c] || L.map[c] == Terrain.ALCHEMY || c == ENT || c == EXIT || (fish && water(c))) return false;
 		for (int k = 0; k < 8; k++) {
-			int n = c + N8[k]; if (!nb(c, n) || known[n] || distance(n, hp) <= 1) continue;
+			int n = c + N8[k]; if (!nb(c, n) || seen[n] || distance(n, hp) <= 1) continue;
 			if (k >= 4) { int a = x(n) + y(c) * W, b = x(c) + y(n) * W;   // a diagonal unknown between two known walls: a room's corner
 				if (known[a] && !L.passable[a] && !L.avoid[a] && known[b] && !L.passable[b] && !L.avoid[b]) continue; }
 			return true;
@@ -1190,7 +1191,7 @@ public final class Assist {
 	}
 	static boolean opening(int c) {
 		if (!unseenBy(c)) return false;
-		for (int k = 0; k < 4; k++) { int n = c + N8[k]; if (nb(c, n) && !known[n]) return true; }
+		for (int k = 0; k < 4; k++) { int n = c + N8[k]; if (nb(c, n) && !seen[n]) return true; }
 		return false;
 	}
 	static boolean wall(int c) { int t = L.map[c]; return t == Terrain.WALL || t == Terrain.WALL_DECO || t == Terrain.SECRET_DOOR; }

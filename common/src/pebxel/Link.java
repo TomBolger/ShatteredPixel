@@ -33,7 +33,7 @@ public final class Link {
 	public static final int F_FLIPH = 1, F_FLIPV = 2, F_ANIM = 16, F_FOG = 32, F_FAINT = 64;   // F_FOG: the fog of war (the watch draws it as Pebble PD does); F_FAINT: an item, which the watch draws faint (a nudge of the floor under it) when nearly see-through, as the Cracked Spyglass's hidden heaps at 10%
 	public static final int NONE = 0xFFFF;
 	/** The command format's version; the watch app sends its own in its hello. */
-	public static final int PROTOCOL = 16;   // 16: C_ANSWER names the press it answers (the watch's number for it, sent with a button too); 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
+	public static final int PROTOCOL = 17;   // 17: the fog's texel state 3, mapped and not visited (blue); 16: C_ANSWER names the press it answers (the watch's number for it, sent with a button too); 15: the answer to a press played as it comes (C_ANSWER), a blow shown at the press (the plan's blows and the hero's attack animation), the plan as before in 2 bytes, a creature's flash when hurt (C_FLASH), a damage number as one picture (K_FLOAT), a move without its place when that stays; 14: a tap's walk shown at once (C_PASS, the plan's tap part), a step in 5 bytes (C_STEP), the fog's changes without its size (C_FOGD); 10: tile maps in runs (C_TILES2), animation changes (C_ANIMTO); 11: particles made on the watch (K_EMIT, C_RECIPE); 12: walks worked out ahead (C_AHEAD); 13: buzz and backlight (C_EVENT), the game clock at real time
 
 	/** What to show on a watch whose app speaks another version of the commands. */
 	public static byte[] wrongVersion(int watch) {
@@ -652,6 +652,10 @@ public final class Link {
 
 	private void walk(Group grp, List<Gizmo> order) { walk(grp, order, null); }
 
+	/** A halo that is a torch's (a plain Halo: PrisonLevel.Torch's is the only one made). */
+	private static boolean lampHalo(Gizmo g) {
+		return g.getClass() == com.watabou.noosa.Halo.class;
+	}
 	private void walk(Group grp, List<Gizmo> order, Class<?> except) {
 		for (Gizmo g : GroupAccess.members(grp)) {
 			if (g == null || !g.exists) continue;
@@ -671,6 +675,7 @@ public final class Link {
 				}
 			}
 			if (!g.visible) continue;
+			if (lampHalo(g)) continue;   // (a wall torch's glow: left off, it didn't look good)
 			// an emitter done and empty draws nothing. (Shattered never kills a magic missile once it lands: reset()
 			// ends with revive(), which clears "started", so autoKill never fires. On Yog's floor a fight left 2000
 			// of them in the scene; sent as pictures they filled the watch's 1024 ids and 150 KB of its heap.)
@@ -1244,7 +1249,7 @@ public final class Link {
 		byte[] px = Assets.pebble(p);
 		int n = px.length, w = p.getWidth(), h = p.getHeight(), cw = w / 2, ch = h / 2;
 		byte[] st = new byte[n];
-		for (int i = 0; i < n; i++) { int a = (px[i] & 255) >> 6; st[i] = (byte) (a == 3 ? 2 : a > 0 ? 1 : 0); }
+		for (int i = 0; i < n; i++) { int a = (px[i] & 255) >> 6; st[i] = (byte) (a == 3 ? 2 : a > 0 ? ((px[i] & 3) > 0 ? 3 : 1) : 0); }   // 3: mapped, not visited (blue in its colour)
 		byte[] old = fogStates.get(d);
 		if (old == null || old.length != n) { old = new byte[n]; Arrays.fill(old, (byte) 2); dynPixels.remove(d); }
 		if (Arrays.equals(st, old)) { fogStates.put(d, st); return; }
@@ -1256,7 +1261,7 @@ public final class Link {
 			boolean changed = false; for (int q : t) if (st[q] != old[q]) changed = true;
 			if (!changed) continue;
 			boolean one = st[t[0]] == st[t[1]] && st[t[0]] == st[t[2]] && st[t[0]] == st[t[3]];
-			if (one && c == last + 1 && st[t[0]] == lastState) {
+			if (one && st[t[0]] != 3 && c == last + 1 && st[t[0]] == lastState) {
 				// a run of cells alike, each changed, one after another
 				int r = 1;
 				while (c + r < cw * ch) {
@@ -1269,9 +1274,9 @@ public final class Link {
 				}
 				if (r >= 2) { varint(b, 1 << 2 | 3); varint(b, r << 1 | 1); last = c + r - 1; c += r - 1; continue; }
 			}
-			if (one) varint(b, (c - last) << 2 | st[t[0]]);
+			if (one && st[t[0]] != 3) varint(b, (c - last) << 2 | st[t[0]]);
 			else { varint(b, (c - last) << 2 | 3); varint(b, (st[t[0]] << 6 | st[t[1]] << 4 | st[t[2]] << 2 | st[t[3]]) << 1); }
-			last = c; lastState = one ? st[t[0]] : -1;
+			last = c; lastState = one && st[t[0]] != 3 ? st[t[0]] : -1;
 		}
 		byte[] bb = b.toByteArray();
 		if (FOG_CHECK) {   // (tests: the watch's reading of it gives the states)
