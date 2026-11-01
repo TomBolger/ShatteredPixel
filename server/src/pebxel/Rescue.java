@@ -99,6 +99,12 @@ public final class Rescue {
 			if (c >= 0 && c != h.pos) return walkOrPut(h, L, c, "rescue: lead them away from the boss");
 		}
 		if (near == null && other != null) return walkOrPut(h, L, other.pos, "rescue: the boss can't be hurt: " + other.getClass().getSimpleName());
+		// a Spectral Necromancer raising a one-hit wraith every turn: striking the wraiths for ever (each new one is the weakest beside him) is no way out; to the necromancer (seed 7005 on depth 8, frozen for 6000 decisions)
+		if (near instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.Wraith) {
+			Mob necro = null;
+			for (Mob m : L.mobs) if (m.isAlive() && m.alignment == Char.Alignment.ENEMY && m instanceof com.shatteredpixel.shatteredpixeldungeon.actors.mobs.SpectralNecromancer && L.distance(m.pos, h.pos) <= 10 && (necro == null || L.distance(m.pos, h.pos) < L.distance(necro.pos, h.pos))) necro = m;
+			if (necro != null) { if (L.adjacent(necro.pos, h.pos)) near = necro; else return walkOrPut(h, L, necro.pos, "rescue: past the wraiths to the necromancer"); }
+		}
 		// climbing: no fights, unless the last step went nowhere (webbed, rooted, blocked)
 		boolean stuckUp = up && h.pos == upPos && Actor.now() == upNow;
 		upPos = h.pos; upNow = Actor.now();

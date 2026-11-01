@@ -23,6 +23,7 @@ public final class BotAlchemy {
 	static final Set<String> made = new TreeSet<>();
 	static List<Item> plan; static int planDepth = -1, visits, lastVisitDepth = -1;
 	static Object lastScene;   // what the selector that's open should be answered with
+	static int putTries;
 	static String planOut; static int makes, planIdx, energizes;
 
 	static void newGame() { made.clear(); plan = null; AsWindows.newGame(); visits = 0; lastVisitDepth = -1; AsEconomy.newGame(); }
@@ -61,7 +62,7 @@ public final class BotAlchemy {
 	/** In the dungeon: go to the pot? (once a floor, while there's something to make) */
 	static Assist.Target pick() {
 		Hero h = Dungeon.hero; Level L = Dungeon.level;
-		if (h == null || !h.ready || lastVisitDepth == Dungeon.depth) return null;
+		if (h == null || !h.ready || lastVisitDepth == Dungeon.depth || System.getenv("NOALCH") != null) return null;
 		int pot = -1;
 		for (int c = 0; c < L.length(); c++) if (L.map[c] == Terrain.ALCHEMY && (L.visited[c] || L.mapped[c])) pot = c;
 		if (pot < 0) return null;
@@ -73,12 +74,13 @@ public final class BotAlchemy {
 	/** In the alchemy screen: the button to press (or null: leave). */
 	static BotWindows.Answer scene(com.watabou.noosa.Scene sc) {
 		lastVisitDepth = Dungeon.depth;
+		if (System.getenv("NOALCH") != null) return new BotWindows.Answer(null, null, "alchemy: skipped (NOALCH)");
 		if (!Cheat.ON) { AsWindows.Pick p = AsWindows.decideScene(sc); if (AsWindows.made.size() > made.size()) made.addAll(AsWindows.made); visits = AsWindows.alchemyVisits; return new BotWindows.Answer(p.g, p.item, p.why); }   // (honest games: the Assistant's steps, as the watch frames them)
 		AsAlchemy.used();
 		Object[] inputs = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "inputs");
 		Object[] combines = (Object[]) WatchDriver.getStatic(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class, "combines");
 		if (inputs == null || combines == null) return new BotWindows.Answer(null, null, "alchemy: can't see its slots");
-		if (sc != lastScene) { lastScene = sc; makes = 0; plan = null; planDepth = -1; energizes = 0; }
+		if (sc != lastScene) { lastScene = sc; putTries = 0; makes = 0; plan = null; planDepth = -1; energizes = 0; }
 		// honest games: known junk energized first (the "+" by the energy: a bag, the item's window, then the bag again: BotWindows)
 		if (!Cheat.ON && energizes < 8 && plan == null && filledInputs(inputs) == 0 && AsAlchemy.energizePick() != null) {
 			Object add = WatchDriver.get(sc, "energyAdd");
@@ -90,6 +92,8 @@ public final class BotAlchemy {
 		for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") != null) filled++;
 		if (filled < plan.size()) {
 			for (Object in : inputs) if (in != null && WatchDriver.get(in, "item") == null) {
+				if (++putTries > 12) { putTries = 0; plan = null; planDepth = Dungeon.depth; return new BotWindows.Answer(null, null, "alchemy: can't put it in: leave"); }   // (a guard: never round and round)
+				BotWindows.sinceTurn = 0; BotWindows.sameKind = 0;   // (each ingredient is a new bag window with no turn between: not "the same window again and again")
 				AsWindows.want(plan.get(filled));
 				Object slot = WatchDriver.get(in, "slot");
 				if (slot instanceof Gizmo) return new BotWindows.Answer((Gizmo) slot, null, "alchemy: put in " + BotItems.kind(AsWindows.want));
@@ -97,7 +101,8 @@ public final class BotAlchemy {
 		}
 		Object b = WatchDriver.get(combines[Math.max(0, Math.min(planIdx, combines.length - 1))], "button");
 		if (b instanceof com.shatteredpixel.shatteredpixeldungeon.ui.RedButton && ((com.shatteredpixel.shatteredpixeldungeon.ui.RedButton) b).active) {
-			made.add(planOut); AsEconomy.brewed(planOut); plan = null; planDepth = -2;   // (made: next time, a new plan from what's left)
+			BotWindows.sinceTurn = 0; BotWindows.sameKind = 0;   // (no game turn passes in the pot: BotWindows' "window after window, no turn: back" cut every bag short after about seven brews, round and round on "put in")
+			putTries = 0; made.add(planOut); AsEconomy.brewed(planOut); plan = null; planDepth = -2;   // (made: next time, a new plan from what's left)
 			if (++makes >= 8) planDepth = Dungeon.depth;   // (eight a visit at most: a trinket and its upgrades, stones)
 			return new BotWindows.Answer((Gizmo) b, null, "alchemy: make " + planOut);
 		}

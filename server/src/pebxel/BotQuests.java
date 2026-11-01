@@ -193,6 +193,10 @@ public final class BotQuests {
 		if (!L.heroFOV[bar] || L.distance(h.pos, bar) > 4) {
 			int best = -1, bb = 1 << 30;
 			for (int k : com.watabou.utils.PathFinder.NEIGHBOURS8) { int n = bar + k; if (n >= 0 && n < L.length() && d[n] < bb && L.passable[n]) { bb = d[n]; best = n; } }
+			if (best >= 0 && best != h.pos) {   // (the game's own walk only crosses cells seen or mapped: this one's middle was neither, and the hero stood still for ever. The cheat: that way mapped)
+				com.watabou.utils.PathFinder.Path way = com.shatteredpixel.shatteredpixeldungeon.Dungeon.findPath(h, best, L.passable, L.visited, false);
+				if (way != null) for (int c : way) L.mapped[c] = true;
+			}
 			return best >= 0 && best != h.pos ? new Assist.Target(best, Assist.GO, "quest: to the barricade") : null;
 		}
 		Item fire = null;
