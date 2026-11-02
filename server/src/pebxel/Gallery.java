@@ -107,6 +107,7 @@ public class Gallery {
 		// fx:bolt a fire bolt to a cell 3 away every 40 frames; fx:status damage and heal numbers over the hero every 30
 		if (name.equals("fx:bolt")) { steps.add(() -> { loopEvery = 10; loop = () -> { int to = Dungeon.hero.pos + 3; com.shatteredpixel.shatteredpixeldungeon.effects.MagicMissile.boltFromChar(Dungeon.hero.sprite.parent, com.shatteredpixel.shatteredpixeldungeon.effects.MagicMissile.FIRE, Dungeon.hero.sprite, to, () -> { }); }; }); return; }
 		if (name.equals("fx:status")) { steps.add(() -> { loopEvery = 30; loop = () -> { Dungeon.hero.sprite.showStatus(com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.NEGATIVE, "-" + (3 + loopN % 7)); }; }); return; }
+		if (name.equals("fx:searchreal")) { steps.add(() -> { loopEvery = 45; loop = () -> { if (Dungeon.hero.ready) Dungeon.hero.search(true); }; }); return; }
 		if (name.equals("fx:stop")) { steps.add(() -> loop = null); return; }
 		if (name.equals("duelist")) { steps.add(() -> { try { dress(HeroClass.DUELIST, 1); } catch (Exception e) { e.printStackTrace(); } }); return; }
 		if (name.equals("alchemy")) { steps.add(() -> { SceneFit.stock(); Dungeon.energy = 60; Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class); }); return; }
