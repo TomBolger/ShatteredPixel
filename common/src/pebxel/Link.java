@@ -716,7 +716,8 @@ public final class Link {
 		Camera c = v.camera() != null ? v.camera() : Camera.main;
 		if (c == null) return true;
 		com.watabou.utils.PointF p = v.center();
-		float m = 16, l = c.scroll.x - m, t = c.scroll.y - m, r = c.scroll.x + c.width / c.zoom + m, b = c.scroll.y + c.height / c.zoom + m;
+		// (a camera's width and height are already in world pixels: Camera.zoom is not divided out again, or the view shrinks to a zoom-th of it)
+		float m = 16, l = c.scroll.x - m, t = c.scroll.y - m, r = c.scroll.x + c.width + m, b = c.scroll.y + c.height + m;
 		return p.x >= l && p.x <= r && p.y >= t && p.y <= b;
 	}
 
