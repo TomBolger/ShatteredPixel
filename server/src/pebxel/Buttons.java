@@ -66,6 +66,7 @@ public class Buttons {
 				System.out.println("flashes " + made);
 				flashProbe = true; wait = 1;
 			}
+			else if (p.equals("@search")) { Dungeon.hero.search(true); flashProbe = true; wait = 1; }   // (tests: a search as the Search button's hold does it)
 			else if (p.equals("@mine")) { wantMine = true; wantDepth = 99; wait = 8000; }   // (tests: down to the Blacksmith, his quest taken, a pickaxe, into his mine)
 			else if (p.startsWith("@depth")) { wantDepth = Integer.parseInt(p.substring(6)); wait = 4000; }   // (tests: down to that depth, story pages and all)
 			else if (p.equals("@fire")) {   // (tests: particles: a fire beside the hero, and the hero alight)

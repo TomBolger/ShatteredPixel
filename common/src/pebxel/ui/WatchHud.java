@@ -79,7 +79,7 @@ public class WatchHud extends Group {
 		int aimSlot();
 	}
 
-	private Image avatar; private int avatarClass = -1, avatarTier = -1;
+	private Image avatar; private int avatarClass = -1, avatarTier = -1, lastLvl = -1;
 	private Image hpBar;
 	private ColorBlock xpBar;
 	private WatchText level, hp, depth, keys;
@@ -376,6 +376,12 @@ public class WatchHud extends Group {
 			com.watabou.noosa.GroupAccess.addAfter(this, avatar, avatarAnchor);
 			avatarTier = tier; avatarClass = cls;
 		}
+		// a level gained: Shattered's burst of stars round the portrait (StatusPane.showStarParticles, whose pane is unseen here)
+		if (lastLvl != -1 && h.lvl > lastLvl) {
+			com.watabou.noosa.particles.Emitter em = (com.watabou.noosa.particles.Emitter) recycle(com.watabou.noosa.particles.Emitter.class);
+			em.revive(); em.pos(avatar.center()); em.burst(com.shatteredpixel.shatteredpixeldungeon.effects.Speck.factory(com.shatteredpixel.shatteredpixeldungeon.effects.Speck.STAR), 12);
+		}
+		lastLvl = h.lvl;
 		int hpNow = Math.max(0, h.HP);
 		if (round) {
 			refreshBars(h);

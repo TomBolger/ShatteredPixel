@@ -153,6 +153,7 @@ public final class Link {
 		if (scene != null) {
 			List<Gizmo> order = new ArrayList<>();
 			tweens.clear(); emitDescs.clear(); particles.round();
+			flashesSent = 0;
 			walk(scene, order);
 			// removed pictures
 			Set<Gizmo> present = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -693,7 +694,8 @@ public final class Link {
 			// a searched or mapped cell's flash (CheckedCell): only those showing and on the map's screen. A Scroll of
 			// Magic Mapping makes one for every cell of the floor at once, waiting their turns see-through: sent as
 			// pictures they were 1,100 to 1,250 at a time, past the watch's 1024 ids and 130 KB of its heap
-			if (g instanceof com.shatteredpixel.shatteredpixeldungeon.effects.CheckedCell && !flashShown((Visual) g)) continue;
+			// (and at most FLASH_MAX at once: a Scroll of Magic Mapping makes 280 in view, 34 KB of the watch's heap for a moment)
+			if (g instanceof com.shatteredpixel.shatteredpixeldungeon.effects.CheckedCell && (!flashShown((Visual) g) || ++flashesSent > FLASH_MAX)) continue;
 			if (g instanceof Visual) order.add(g);
 			else if (g instanceof com.watabou.noosa.tweeners.Tweener) {
 				com.watabou.noosa.tweeners.Tweener t = (com.watabou.noosa.tweeners.Tweener) g;
@@ -710,13 +712,16 @@ public final class Link {
 		}
 	}
 
+	private int flashesSent; private static final int FLASH_MAX = 120;
+
 	/** A cell's flash that's showing (not waiting its turn) and on the map camera's view. */
 	private static boolean flashShown(Visual v) {
 		if (v.alpha() <= 0.01f) return false;
 		Camera c = v.camera() != null ? v.camera() : Camera.main;
 		if (c == null) return true;
 		com.watabou.utils.PointF p = v.center();
-		float m = 16, l = c.scroll.x - m, t = c.scroll.y - m, r = c.scroll.x + c.width / c.zoom + m, b = c.scroll.y + c.height / c.zoom + m;
+		// (a camera's width and height are already in world pixels: Camera.zoom is not divided out again, or the view shrinks to a zoom-th of it)
+		float m = 16, l = c.scroll.x - m, t = c.scroll.y - m, r = c.scroll.x + c.width + m, b = c.scroll.y + c.height + m;
 		return p.x >= l && p.x <= r && p.y >= t && p.y <= b;
 	}
 
