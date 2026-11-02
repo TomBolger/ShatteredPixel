@@ -101,6 +101,13 @@ public class Gallery {
 		}
 		// talents:N the hero at level N (talent points to spend), the talent page open
 		if (name.startsWith("talents:")) { int lv = Integer.parseInt(name.substring(8)); steps.add(() -> { Dungeon.hero.lvl = lv; Dungeon.hero.exp = 0; pebxel.ui.WndWatchHero.openTalents(); }); return; }
+		// fx:searchloop the search's blue flash round the hero again every 20 frames (what the emulator's screenshots catch)
+		if (name.equals("fx:searchloop")) { steps.add(() -> loop = () -> { System.out.println("fx loop " + loopN + " scene " + Game.scene().getClass().getSimpleName()); for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) GameScene.checkedCell(Dungeon.hero.pos + d, Dungeon.hero.pos); }); return; }
+		if (name.equals("fx:searchhold")) { steps.add(() -> { loopEvery = 1; loop = () -> { for (int d : com.watabou.utils.PathFinder.NEIGHBOURS8) GameScene.checkedCell(Dungeon.hero.pos + d, Dungeon.hero.pos); }; }); return; }
+		// fx:bolt a fire bolt to a cell 3 away every 40 frames; fx:status damage and heal numbers over the hero every 30
+		if (name.equals("fx:bolt")) { steps.add(() -> { loopEvery = 10; loop = () -> { int to = Dungeon.hero.pos + 3; com.shatteredpixel.shatteredpixeldungeon.effects.MagicMissile.boltFromChar(Dungeon.hero.sprite.parent, com.shatteredpixel.shatteredpixeldungeon.effects.MagicMissile.FIRE, Dungeon.hero.sprite, to, () -> { }); }; }); return; }
+		if (name.equals("fx:status")) { steps.add(() -> { loopEvery = 30; loop = () -> { Dungeon.hero.sprite.showStatus(com.shatteredpixel.shatteredpixeldungeon.sprites.CharSprite.NEGATIVE, "-" + (3 + loopN % 7)); }; }); return; }
+		if (name.equals("fx:stop")) { steps.add(() -> loop = null); return; }
 		if (name.equals("duelist")) { steps.add(() -> { try { dress(HeroClass.DUELIST, 1); } catch (Exception e) { e.printStackTrace(); } }); return; }
 		if (name.equals("alchemy")) { steps.add(() -> { SceneFit.stock(); Dungeon.energy = 60; Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.AlchemyScene.class); }); return; }
 		if (name.equals("rankings")) { steps.add(() -> { SceneFit.records(); Game.switchScene(com.shatteredpixel.shatteredpixeldungeon.scenes.RankingsScene.class); }); return; }
@@ -137,8 +144,12 @@ public class Gallery {
 	static final java.util.Set<Runnable> anyScreen = new java.util.HashSet<>();
 	static void free(Runnable r) { anyScreen.add(r); steps.add(r); }
 
+	/** An effect made again every loopEvery frames (so a slow screenshot on the emulator is likely to catch it). */
+	static Runnable loop; static int loopN, loopEvery = 20;
+
 	/** Call every frame: true while steps remain. */
 	public static boolean tick() {
+		if (loop != null && ++loopN % loopEvery == 0 && Dungeon.hero != null && Game.scene() instanceof GameScene) { try { loop.run(); } catch (Exception e) { e.printStackTrace(); } }
 		if (CTL != null && steps.isEmpty()) {
 			if (ctlStage != null) {
 				try { java.nio.file.Files.write(new File(CTL + ".done").toPath(), ctlStage.getBytes()); } catch (Exception e) { }
